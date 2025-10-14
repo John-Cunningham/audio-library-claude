@@ -322,13 +322,8 @@
                 });
             });
 
-            // Sync seeking - convert time to progress ratio
-            wavesurfer.on('seeking', (currentTime) => {
-                // The 'seeking' event passes currentTime in seconds, not progress (0-1)
-                // We need to convert to progress ratio for stems
-                const duration = wavesurfer.getDuration();
-                const progress = duration > 0 ? currentTime / duration : 0;
-
+            // Sync seeking - simple approach, let play/pause events handle resume
+            wavesurfer.on('seeking', (progress) => {
                 Object.keys(stemWavesurfers).forEach(stemType => {
                     const stemWS = stemWavesurfers[stemType];
                     if (stemWS) {

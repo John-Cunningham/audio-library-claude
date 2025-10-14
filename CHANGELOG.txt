@@ -373,6 +373,42 @@ Testing Results:
 - All 4 stems should follow the seek position
 - Playback should resume automatically if was playing
 
+Git Commits: 4c7f7f7
+Result: ❌ FAILED - Still broken, stems seek to time not progress (fixed in Version 13)
+
+=== Version 13 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix seeking - convert currentTime (seconds) to progress (0-1) for stemWS.seekTo()"
+
+Changes (Phase 4 Step 2B - Seeking Fix v3 - FINAL):
+- Modified syncStemsWithMain() seeking event handler (lines 325-338):
+  - **Root cause identified**: WaveSurfer 'seeking' event passes currentTime in SECONDS
+  - **stemWS.seekTo()** expects progress as a RATIO (0-1), not seconds
+  - Added conversion: `progress = currentTime / duration`
+  - Now correctly converts time to progress before seeking
+- Removed debug logging after confirming fix works
+- Created backup: app_v19.js
+
+Bug Analysis:
+- User debug output showed: seekTo(38.96) → current time: 0
+- 38.96 seconds was being passed directly to seekTo()
+- seekTo() expects 0-1 range (e.g., 0.974 for 97.4% through file)
+- Values >1 get clamped or reset to 0
+
+Solution:
+```javascript
+const duration = wavesurfer.getDuration();
+const progress = duration > 0 ? currentTime / duration : 0;
+stemWS.seekTo(progress); // Now correct!
+```
+
+Testing Results:
+✅ User confirmed: "Okay, that fixed it. Thank you."
+- Stems now seek to correct position
+- All 4 stems stay in sync
+- Playback resumes correctly
+
 Git Commits: [pending]
-Result: ⏳ Ready for testing - Seeking should work correctly now
+Result: ✅ SUCCESS - Seeking finally working correctly!
 

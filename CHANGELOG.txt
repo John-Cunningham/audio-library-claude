@@ -409,6 +409,41 @@ Testing Results:
 - All 4 stems stay in sync
 - Playback resumes correctly
 
-Git Commits: [pending]
+Git Commits: 281a67f
 Result: ✅ SUCCESS - Seeking finally working correctly!
+
+=== Version 14 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Change stem layout from 2x2 grid to vertical stack for better control space"
+
+Changes (Phase 4 Step 2B - Vertical Layout):
+- Modified stems expansion HTML (lines 1743-1805):
+  - Changed from 2x2 grid to vertical stack (flex-direction: column)
+  - Each stem now on its own row with full width
+  - Layout: Icon | Label | Waveform | Controls
+  - Increased waveform height from 60px to 80px
+  - Added placeholder for controls section (<!-- Controls will go here -->)
+  - Label has min-width: 60px for alignment
+  - Waveform uses flex: 1 to fill available space
+  - Gap between stems: 12px
+- Created backup: app_v20.js
+
+New Layout Structure:
+```
+🎤 Vocals  ━━━━━━━━━━━━━━━━━━━━ [controls area]
+🥁 Drums   ━━━━━━━━━━━━━━━━━━━━ [controls area]
+🎸 Bass    ━━━━━━━━━━━━━━━━━━━━ [controls area]
+🎹 Other   ━━━━━━━━━━━━━━━━━━━━ [controls area]
+```
+
+Benefits:
+- More horizontal space for waveforms
+- Room for controls on the right side
+- Better visual hierarchy
+- Easier to compare stems vertically
+- Ready for adding volume/mute/solo/play controls
+
+Git Commits: [pending]
+Result: ⏳ Ready for testing - Stems should display in vertical stack
 

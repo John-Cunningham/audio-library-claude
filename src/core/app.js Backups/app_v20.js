@@ -1740,65 +1740,45 @@
             };
 
             const fileRows = sortedFiles.map(file => {
-                // Build stem expansion UI (Phase 4 Step 2B) - Vertical stack layout
+                // Build stem expansion UI (Phase 4 Step 2B)
                 const stemsExpanded = expandedStems.has(file.id);
                 const stemsHTML = stemsExpanded && file.has_stems ? `
                     <div class="stems-expansion" style="background: #0f0f0f; border: 1px solid #2a2a2a; border-top: none; border-radius: 0 0 6px 6px; padding: 15px; margin-top: -6px;">
-                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
                             <!-- Vocals Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                                     <span style="font-size: 18px;">🎤</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Vocals</span>
-                                    <div style="flex: 1;">
-                                        <div id="stem-waveform-vocals-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
-                                    </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <!-- Controls will go here -->
-                                    </div>
+                                    <span style="color: #fff; font-weight: 600; font-size: 13px;">Vocals</span>
                                 </div>
+                                <div id="stem-waveform-vocals-${file.id}" style="height: 60px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
                             </div>
 
                             <!-- Drums Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                                     <span style="font-size: 18px;">🥁</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Drums</span>
-                                    <div style="flex: 1;">
-                                        <div id="stem-waveform-drums-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
-                                    </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <!-- Controls will go here -->
-                                    </div>
+                                    <span style="color: #fff; font-weight: 600; font-size: 13px;">Drums</span>
                                 </div>
+                                <div id="stem-waveform-drums-${file.id}" style="height: 60px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
                             </div>
 
                             <!-- Bass Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                                     <span style="font-size: 18px;">🎸</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Bass</span>
-                                    <div style="flex: 1;">
-                                        <div id="stem-waveform-bass-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
-                                    </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <!-- Controls will go here -->
-                                    </div>
+                                    <span style="color: #fff; font-weight: 600; font-size: 13px;">Bass</span>
                                 </div>
+                                <div id="stem-waveform-bass-${file.id}" style="height: 60px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
                             </div>
 
                             <!-- Other Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                                     <span style="font-size: 18px;">🎹</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Other</span>
-                                    <div style="flex: 1;">
-                                        <div id="stem-waveform-other-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
-                                    </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <!-- Controls will go here -->
-                                    </div>
+                                    <span style="color: #fff; font-weight: 600; font-size: 13px;">Other</span>
                                 </div>
+                                <div id="stem-waveform-other-${file.id}" style="height: 60px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
                             </div>
                         </div>
                     </div>

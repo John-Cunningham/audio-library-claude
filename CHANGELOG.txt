@@ -345,6 +345,34 @@ Testing Results:
 - All stems should stay in sync after seek
 - No audio glitches during seek
 
+Git Commits: 3d46bec
+Result: ❌ FAILED - Broke seeking, stems reset to beginning (fixed in Version 12)
+
+=== Version 12 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix seeking regression - clicking waveform resets all stems to beginning instead of seeking to clicked position"
+
+Changes (Phase 4 Step 2B - Seeking Fix v2):
+- Simplified syncStemsWithMain() seeking logic (lines 297-333):
+  - Removed complex pause/resume logic that was breaking seeks
+  - Added stemsWerePlaying variable tracked by play/pause events
+  - Seeking event now just applies seekTo() to all stems
+  - Let WaveSurfer's own play/pause events handle resume
+  - Much simpler and more reliable approach
+- Created backup: app_v18.js
+
+Bug Details:
+- Version 11 broke seeking - stems were resetting to beginning
+- Root cause: Over-complicated pause/resume logic in seeking event
+- Solution: Simple seekTo() call, let play/pause events handle the rest
+
+Testing Results:
+[Pending user testing]
+- Seek to any position should work correctly
+- All 4 stems should follow the seek position
+- Playback should resume automatically if was playing
+
 Git Commits: [pending]
-Result: ⏳ Ready for testing - All stems should play after seeking
+Result: ⏳ Ready for testing - Seeking should work correctly now
 

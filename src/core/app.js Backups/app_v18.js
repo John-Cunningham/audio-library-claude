@@ -298,12 +298,8 @@
         function syncStemsWithMain(autoplay = true) {
             if (!wavesurfer) return;
 
-            // Track whether stems were playing before seek (fixes seek resume bug)
-            let stemsWerePlaying = false;
-
             // Sync play/pause
             wavesurfer.on('play', () => {
-                stemsWerePlaying = true;
                 Object.keys(stemWavesurfers).forEach(stemType => {
                     const stemWS = stemWavesurfers[stemType];
                     if (stemWS && !stemWS.isPlaying()) {
@@ -313,7 +309,6 @@
             });
 
             wavesurfer.on('pause', () => {
-                stemsWerePlaying = false;
                 Object.keys(stemWavesurfers).forEach(stemType => {
                     const stemWS = stemWavesurfers[stemType];
                     if (stemWS && stemWS.isPlaying()) {
@@ -322,12 +317,27 @@
                 });
             });
 
-            // Sync seeking - simple approach, let play/pause events handle resume
+            // Sync seeking
             wavesurfer.on('seeking', (progress) => {
+                const wasPlaying = wavesurfer.isPlaying();
+
                 Object.keys(stemWavesurfers).forEach(stemType => {
                     const stemWS = stemWavesurfers[stemType];
                     if (stemWS) {
+                        // Pause stem before seeking to prevent audio glitches
+                        if (stemWS.isPlaying()) {
+                            stemWS.pause();
+                        }
                         stemWS.seekTo(progress);
+
+                        // Resume playback if main was playing
+                        if (wasPlaying) {
+                            setTimeout(() => {
+                                if (!stemWS.isPlaying()) {
+                                    stemWS.play();
+                                }
+                            }, 50); // Small delay to ensure seek completes
+                        }
                     }
                 });
             });

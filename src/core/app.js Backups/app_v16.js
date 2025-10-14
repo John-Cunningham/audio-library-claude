@@ -1731,7 +1731,7 @@
             };
 
             const fileRows = sortedFiles.map(file => {
-                // Build stem expansion UI (Phase 4 Step 2B)
+                // Build stem expansion UI (Phase 4 Step 1)
                 const stemsExpanded = expandedStems.has(file.id);
                 const stemsHTML = stemsExpanded && file.has_stems ? `
                     <div class="stems-expansion" style="background: #0f0f0f; border: 1px solid #2a2a2a; border-top: none; border-radius: 0 0 6px 6px; padding: 15px; margin-top: -6px;">
@@ -1742,7 +1742,9 @@
                                     <span style="font-size: 18px;">🎤</span>
                                     <span style="color: #fff; font-weight: 600; font-size: 13px;">Vocals</span>
                                 </div>
-                                <div id="stem-waveform-vocals-${file.id}" style="height: 60px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
+                                <div style="height: 40px; background: #0f0f0f; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
+                                    Waveform placeholder
+                                </div>
                             </div>
 
                             <!-- Drums Stem -->
@@ -1751,7 +1753,9 @@
                                     <span style="font-size: 18px;">🥁</span>
                                     <span style="color: #fff; font-weight: 600; font-size: 13px;">Drums</span>
                                 </div>
-                                <div id="stem-waveform-drums-${file.id}" style="height: 60px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
+                                <div style="height: 40px; background: #0f0f0f; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
+                                    Waveform placeholder
+                                </div>
                             </div>
 
                             <!-- Bass Stem -->
@@ -1760,7 +1764,9 @@
                                     <span style="font-size: 18px;">🎸</span>
                                     <span style="color: #fff; font-weight: 600; font-size: 13px;">Bass</span>
                                 </div>
-                                <div id="stem-waveform-bass-${file.id}" style="height: 60px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
+                                <div style="height: 40px; background: #0f0f0f; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
+                                    Waveform placeholder
+                                </div>
                             </div>
 
                             <!-- Other Stem -->
@@ -1769,7 +1775,9 @@
                                     <span style="font-size: 18px;">🎹</span>
                                     <span style="color: #fff; font-weight: 600; font-size: 13px;">Other</span>
                                 </div>
-                                <div id="stem-waveform-other-${file.id}" style="height: 60px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
+                                <div style="height: 40px; background: #0f0f0f; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
+                                    Waveform placeholder
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1990,60 +1998,6 @@
 
             // Re-render to show/hide stems
             renderFiles();
-
-            // Phase 4 Step 2B: Render waveforms in expansion containers if stems are loaded
-            if (expandedStems.has(fileId) && Object.keys(stemWavesurfers).length > 0 && currentFileId === fileId) {
-                setTimeout(() => renderStemWaveforms(fileId), 100); // Small delay to ensure DOM is ready
-            }
-        }
-
-        // Phase 4 Step 2B: Render visual waveforms in expansion containers
-        function renderStemWaveforms(fileId) {
-            if (!stemFiles || Object.keys(stemFiles).length === 0) {
-                console.log('No stem files loaded, skipping waveform render');
-                return;
-            }
-
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-
-            stemTypes.forEach(stemType => {
-                const containerId = `stem-waveform-${stemType}-${fileId}`;
-                const container = document.getElementById(containerId);
-
-                if (!container) {
-                    console.warn(`Container ${containerId} not found`);
-                    return;
-                }
-
-                // Clear any existing content
-                container.innerHTML = '';
-
-                // Create a visual-only WaveSurfer instance for this stem
-                const visualWS = WaveSurfer.create({
-                    container: `#${containerId}`,
-                    waveColor: '#666666',
-                    progressColor: '#4a9eff',
-                    cursorColor: 'transparent', // No cursor for visual-only
-                    barWidth: 2,
-                    barRadius: 3,
-                    cursorWidth: 0,
-                    height: 60,
-                    barGap: 2,
-                    responsive: true,
-                    normalize: true,
-                    backend: 'WebAudio',
-                    autoScroll: false,
-                    interact: false // Visual only, no interaction
-                });
-
-                // Load the stem audio file (visual only, no playback)
-                if (stemFiles[stemType] && stemFiles[stemType].file_url) {
-                    visualWS.load(stemFiles[stemType].file_url);
-                    console.log(`Rendered visual waveform for ${stemType} stem`);
-                } else {
-                    console.warn(`No stem file found for ${stemType}`);
-                }
-            });
         }
 
         // Generate stems for a file

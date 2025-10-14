@@ -279,6 +279,42 @@ Testing Results:
 - Returning to 1.0x should sound identical to original
 - Stems should stay perfectly in phase at all rates
 
+Git Commits: b7d6cd7
+Result: ⚠️ PARTIAL - Somewhat improved, on-the-fly changes still have drift (deferred)
+
+=== Version 10 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Phase 4 Step 2B: Replace placeholder waveforms with real stem waveforms"
+
+Changes (Phase 4 Step 2B - Real Stem Waveforms):
+- Modified stems expansion HTML (lines 1734-1776):
+  - Replaced "Waveform placeholder" divs with real container divs
+  - Container IDs: stem-waveform-{vocals|drums|bass|other}-{fileId}
+  - Increased height from 40px to 60px for better visibility
+  - Added overflow:hidden for clean appearance
+- Created renderStemWaveforms() function (lines 2000-2047):
+  - Renders visual-only WaveSurfer instances in expansion containers
+  - Loads actual stem audio files for waveform visualization
+  - No interaction or playback (visual only)
+  - Separate from hidden playback WaveSurfers
+- Modified openStemsViewer() function (lines 1994-1997):
+  - Calls renderStemWaveforms() after expansion with 100ms delay
+  - Only renders if stems are loaded and expansion is for current file
+- Created backup: app_v16.js
+
+Implementation Notes:
+- Audio playback: Hidden WaveSurfer instances (Step 2A)
+- Visual waveforms: Visible WaveSurfer instances (Step 2B)
+- 4 stem types: vocals, drums, bass, other
+- Waveforms load asynchronously when expansion opens
+
+Testing Results:
+[Pending user testing]
+- Expand stems on a playing file with stems
+- Should see real waveforms instead of placeholders
+- Waveforms should load within 1-2 seconds
+
 Git Commits: [pending]
-Result: ⏳ Ready for testing - Phase drift should be eliminated
+Result: ⏳ Ready for testing - Real stem waveforms should appear
 

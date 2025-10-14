@@ -5,10 +5,6 @@
         // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
 
-        // Import modules (Phase 1 - View Manager)
-        import * as ViewManager from './viewManager.js';
-        import * as LibraryView from '../views/libraryView.js';
-
         // Note: Modules provide:
         // - config.js: supabase client, PREF_KEYS constants
         // - utils.js: extractTagsFromFilename(), getAudioDuration(), etc.
@@ -133,21 +129,8 @@
 
                 audioFiles = data || [];
 
-                // Initialize view manager on first load
-                if (!ViewManager.getCurrentViewName()) {
-                    // Register library view
-                    ViewManager.registerView('library', LibraryView);
-
-                    // Switch to library view with render functions
-                    await ViewManager.switchView('library', {
-                        renderFunction: renderFiles,
-                        renderTagsFunction: renderTags
-                    });
-                } else {
-                    // Just render if view already initialized
-                    renderTags();
-                    renderFiles();
-                }
+                renderTags();
+                renderFiles();
             } catch (error) {
                 console.error('Error loading data:', error);
                 alert('Error loading files from Supabase. Check console for details.');

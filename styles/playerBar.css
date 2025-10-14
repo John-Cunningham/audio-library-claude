@@ -1,191 +1,268 @@
-/* Player Bar Styles */
-.player-bar {
+/* Player Bar Styles - Extracted from index-v3-loop-markers-v31.html */
+
+/* Bottom Audio Player - Fixed position */
+.bottom-player {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
+    height: auto;
     background: #0f0f0f;
-    border-top: 2px solid #f59e0b;
-    padding: 20px;
-    z-index: 900;
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
+    border-top: 1px solid #2a2a2a;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
 }
 
-.player-main {
-    max-width: 1400px;
-    margin: 0 auto;
-    display: grid;
-    grid-template-columns: 200px auto 1fr auto auto 80px;
-    gap: 20px;
+.bottom-player.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Row 1: Waveform */
+.waveform-row {
+    width: 100%;
+    padding: 8px 12px;
+    background: #0f0f0f;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.player-waveform {
+    width: 100%;
+    height: 80px;
+    background: #1a1a1a;
+    border-radius: 4px;
+    overflow-x: hidden;
+    overflow-y: visible;
+    position: relative;
+    cursor: pointer;
+}
+
+/* Beat/Bar Markers */
+.bar-marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(255, 0, 0, 0.6);
+    pointer-events: none;
+    z-index: 11;
+}
+
+.beat-marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255, 100, 0, 0.3);
+    pointer-events: none;
+    z-index: 10;
+}
+
+.marker-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Loop Region */
+.loop-region {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(100, 200, 255, 0.15);
+    border-left: 2px solid rgba(100, 200, 255, 0.7);
+    border-right: 2px solid rgba(100, 200, 255, 0.7);
+    pointer-events: none;
+    z-index: 9;
+}
+
+.loop-progress-mask {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background: rgba(102, 102, 102, 0.9);
+    pointer-events: none;
+    z-index: 12;
+    mix-blend-mode: darken;
+}
+
+.loop-preview {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(100, 200, 255, 0.25);
+    border-left: 2px dashed rgba(100, 200, 255, 0.8);
+    border-right: 2px dashed rgba(100, 200, 255, 0.8);
+    pointer-events: none;
+    z-index: 8;
+}
+
+/* Row 2: Controls */
+.controls-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 12px;
+    background: #0f0f0f;
+    flex-wrap: wrap;
+}
+
+/* Control Sections */
+.control-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     align-items: center;
 }
 
-/* File Info */
-.file-info {
-    min-width: 0;
+.section-label {
+    color: #999;
+    font-size: 11px;
+    text-align: center;
 }
 
-.file-name {
-    font-weight: 600;
-    font-size: 14px;
+/* Player Info */
+.player-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 200px;
+    max-width: 300px;
+    flex-shrink: 0;
+}
+
+.player-filename {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.file-metadata {
-    font-size: 11px;
+.player-time {
     color: #999;
-}
-
-/* Transport Controls */
-.transport-controls {
-    display: flex;
-    gap: 8px;
-}
-
-.control-btn {
-    padding: 8px 16px;
-    background: #2a2a2a;
-    color: #fff;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
-    transition: all 0.2s;
-    min-width: 50px;
-}
-
-.control-btn:hover {
-    background: #3a3a3a;
-}
-
-.control-btn.active {
-    background: #f59e0b;
-    color: #000;
-    border-color: #f59e0b;
-}
-
-.play-btn {
-    font-size: 16px;
-    min-width: 60px;
-}
-
-/* Waveform */
-.waveform-container {
-    position: relative;
-    min-height: 80px;
-}
-
-.waveform {
-    height: 80px;
-    background: #0a0a0a;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.time-display {
-    position: absolute;
-    bottom: 4px;
-    right: 8px;
     font-size: 11px;
-    color: #999;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 2px 6px;
-    border-radius: 3px;
 }
 
-/* Playback Controls */
-.playback-controls {
+/* Player Controls */
+.player-controls {
     display: flex;
     gap: 8px;
     align-items: center;
 }
 
-.marker-select {
-    padding: 6px 8px;
-    background: #2a2a2a;
-    color: #fff;
+.player-btn {
+    min-width: 36px;
+    height: 36px;
+    padding: 0 8px;
+    background: transparent;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
-    font-size: 11px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #999;
+    transition: all 0.2s;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.player-btn:hover {
+    background: #2a2a2a;
+    border-color: #4a4a4a;
+    color: #fff;
+}
+
+.player-btn.play-pause {
+    width: 44px;
+    height: 44px;
+    background: #4a9eff;
+    border: none;
+    border-radius: 50%;
+    font-size: 20px;
+    color: #fff;
+}
+
+.player-btn.play-pause:hover {
+    background: #3a8eef;
+}
+
+.player-btn.active {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: #fff;
+}
+
+.marker-select {
+    padding: 6px 8px;
+    background: transparent;
+    color: #999;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.marker-select:hover {
+    background: #2a2a2a;
+    border-color: #4a4a4a;
+    color: #fff;
 }
 
 .loop-status {
     font-size: 11px;
     color: #999;
     min-width: 60px;
+    text-align: center;
 }
 
 .loop-status.active {
     color: #3b82f6;
 }
 
-/* Rate/Pitch Controls */
-.rate-pitch-controls {
+/* Rate Controls */
+.rate-controls {
     display: flex;
-    gap: 20px;
-}
-
-.rate-section, .pitch-section {
-    display: flex;
-    flex-direction: column;
     gap: 6px;
+    align-items: center;
 }
 
-.rate-section label, .pitch-section label {
-    font-size: 11px;
-    color: #999;
-    text-align: center;
-}
-
-.preset-buttons {
-    display: flex;
-    gap: 4px;
-}
-
-.preset-btn {
-    flex: 1;
+.rate-preset-btn {
     padding: 4px 8px;
-    background: #2a2a2a;
-    color: #fff;
+    background: transparent;
+    color: #999;
     border: 1px solid #3a3a3a;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 10px;
+    font-size: 11px;
+    font-weight: 600;
     transition: all 0.2s;
+    min-width: 40px;
 }
 
-.preset-btn:hover {
-    background: #3a3a3a;
-}
-
-.preset-btn.active {
-    background: #f59e0b;
-    color: #000;
-}
-
-.semitone-buttons {
-    display: flex;
-    gap: 4px;
-    margin-top: 4px;
-}
-
-.semitone-btn {
-    flex: 1;
-    padding: 4px;
+.rate-preset-btn:hover {
     background: #2a2a2a;
+    border-color: #4a4a4a;
     color: #fff;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
 }
 
-input[type="range"] {
-    width: 100%;
+.rate-preset-btn.active {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: #fff;
+}
+
+.rate-controls input[type="range"] {
+    width: 120px;
     height: 4px;
     background: #444;
     border-radius: 2px;
@@ -193,53 +270,138 @@ input[type="range"] {
     cursor: pointer;
 }
 
-input[type="range"]::-webkit-slider-thumb {
+.rate-controls input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: #f59e0b;
+    background: #4a9eff;
     cursor: pointer;
 }
 
-input[type="range"]::-moz-range-thumb {
+.rate-controls input[type="range"]::-moz-range-thumb {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: #f59e0b;
+    background: #4a9eff;
     cursor: pointer;
     border: none;
 }
 
-/* Volume Control */
-.volume-control {
+#rateValue {
+    color: #999;
+    font-size: 11px;
+    min-width: 50px;
+    text-align: center;
+}
+
+/* Volume Controls */
+.volume-controls {
     display: flex;
+    gap: 6px;
     align-items: center;
-    gap: 8px;
 }
 
 .volume-icon {
-    font-size: 16px;
+    font-size: 14px;
+}
+
+.volume-controls input[type="range"] {
+    width: 100px;
+    height: 4px;
+    background: #444;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.volume-controls input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #4a9eff;
+    cursor: pointer;
+}
+
+.volume-controls input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #4a9eff;
+    cursor: pointer;
+    border: none;
+}
+
+#volumePercent {
+    color: #999;
+    font-size: 11px;
+    min-width: 45px;
+    text-align: center;
 }
 
 /* Stems Button */
 .stems-btn {
-    padding: 10px 20px;
-    background: #2a2a2a;
-    color: #fff;
+    padding: 8px 16px;
+    background: transparent;
+    color: #999;
     border: 1px solid #3a3a3a;
     border-radius: 6px;
     cursor: pointer;
     font-size: 12px;
     font-weight: 600;
     transition: all 0.2s;
+    margin-left: auto;
 }
 
 .stems-btn:hover {
-    background: #3a3a3a;
+    background: #2a2a2a;
+    border-color: #4a4a4a;
+    color: #fff;
 }
 
 .stems-btn.active {
-    background: #f59e0b;
-    color: #000;
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: #fff;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .bottom-player {
+        padding: 6px;
+    }
+
+    .waveform-row {
+        padding: 6px;
+    }
+
+    .player-waveform {
+        height: 60px;
+    }
+
+    .controls-row {
+        gap: 6px;
+        padding: 6px;
+    }
+
+    .player-btn {
+        min-width: 32px;
+        height: 32px;
+        font-size: 11px;
+    }
+
+    .player-btn.play-pause {
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+    }
+
+    .player-info {
+        display: none;
+    }
+
+    .control-section:nth-child(4) {
+        display: none; /* Hide speed controls on mobile */
+    }
 }

@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Library</title>
-    <link rel="icon" href="data:,">
+    <title>Audio Library Manager</title>
 
     <!-- External Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -25,128 +24,134 @@
     <link rel="stylesheet" href="./styles/views.css">
 </head>
 <body>
-    <!-- View Switcher -->
-    <div id="viewSwitcher" class="view-switcher">
-        <button id="viewSwitcherBtn" class="view-switcher-btn">VIEWS</button>
-        <div id="viewMenu" class="view-menu hidden">
-            <button data-view="library" class="view-option active">Library View</button>
-            <button data-view="galaxy" class="view-option">Galaxy View</button>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎵 Audio Library Manager</h1>
+            <p>Upload, tag, and organize your audio files</p>
         </div>
-    </div>
 
-    <!-- Main Content Area -->
-    <div id="mainContent" class="main-content">
-        <!-- Views will be dynamically loaded here -->
-        <div id="libraryView" class="view active">
-            <div class="library-header">
-                <h1>Audio Library</h1>
-                <div class="library-controls">
-                    <input type="text" id="searchInput" placeholder="Search files..." class="search-input">
-                    <select id="filterSelect" class="filter-select">
-                        <option value="all">All Files</option>
-                        <option value="stems">With Stems</option>
-                        <option value="recent">Recently Added</option>
-                    </select>
+        <!-- Tag Filter Section -->
+        <div class="tag-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">Filter by Tags</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button id="selectAllTagsBtn" class="tag-action-btn">Select All Tags</button>
+                    <button id="deselectAllTagsBtn" class="tag-action-btn secondary">Deselect All Tags</button>
                 </div>
             </div>
-            <div id="fileGrid" class="file-grid">
-                <div class="loading">Loading audio files...</div>
+            <input type="text" id="searchBar" class="search-input" placeholder="Search files and tags...">
+            <div class="tags-container" id="tagsContainer">
+                <div class="empty-state">No tags yet. Upload audio files with tags to get started.</div>
             </div>
+            <div class="active-filters" id="activeFilters">No active filters</div>
         </div>
 
-        <div id="galaxyView" class="view hidden">
-            <div class="galaxy-container">
-                <h2>Galaxy View</h2>
-                <p>3D visualizer coming soon...</p>
+        <!-- Files Section -->
+        <div class="files-section">
+            <div class="files-header">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <h2 style="margin: 0;">Audio Files <span id="fileCount">(0)</span></h2>
+                        <button id="uploadBtn" class="action-btn">Upload Files</button>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="selectAllBtn" class="action-btn">Select All</button>
+                        <button id="deselectAllBtn" class="action-btn secondary">Deselect All</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="files-scroll-container">
+                <div class="file-list" id="fileList">
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                        </svg>
+                        <div>No audio files yet. Upload your first audio file to get started!</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Stems Interface (Expandable) -->
-    <div id="stemsInterface" class="stems-interface hidden">
+    <!-- Stems Interface (Expandable from bottom) -->
+    <div id="stemsInterface" class="stems-interface">
         <div class="stems-container" id="stemsContainer">
             <!-- Stem players will be dynamically created here -->
         </div>
     </div>
 
-    <!-- Player Bar (Fixed Bottom) -->
-    <div id="playerBar" class="player-bar">
-        <div class="player-main">
+    <!-- Fixed Bottom Audio Player -->
+    <div class="bottom-player" id="bottomPlayer">
+        <!-- Row 1: Full-width Waveform -->
+        <div class="waveform-row">
+            <div class="player-waveform" id="waveform"></div>
+        </div>
+
+        <!-- Row 2: All Controls -->
+        <div class="controls-row">
             <!-- File Info -->
-            <div class="file-info">
-                <div id="fileName" class="file-name">No file loaded</div>
-                <div id="fileMetadata" class="file-metadata"></div>
+            <div class="player-info">
+                <div class="player-filename" id="playerFilename">No file loaded</div>
+                <div class="player-time" id="playerTime">0:00 / 0:00</div>
             </div>
 
             <!-- Transport Controls -->
-            <div class="transport-controls">
-                <button id="prevBtn" class="control-btn" title="Previous">⏮</button>
-                <button id="playPauseBtn" class="control-btn play-btn" title="Play/Pause">▶</button>
-                <button id="nextBtn" class="control-btn" title="Next">⏭</button>
-                <button id="restartBtn" class="control-btn" title="Restart">⏮</button>
-            </div>
-
-            <!-- Waveform Container -->
-            <div class="waveform-container">
-                <div id="waveform" class="waveform"></div>
-                <div id="timeDisplay" class="time-display">0:00 / 0:00</div>
+            <div class="control-section">
+                <div class="section-label">Transport:</div>
+                <div class="player-controls">
+                    <button class="player-btn" id="prevBtn" title="Previous">◄◄</button>
+                    <button class="player-btn play-pause" id="playPauseBtn" title="Play/Pause">▶</button>
+                    <button class="player-btn" id="nextBtn" title="Next">►►</button>
+                    <button class="player-btn" id="restartBtn" title="Restart">⏮</button>
+                </div>
             </div>
 
             <!-- Playback Controls -->
-            <div class="playback-controls">
-                <button id="loopBtn" class="control-btn">LOOP</button>
-                <button id="markersBtn" class="control-btn active">MARKS</button>
-                <select id="markerFrequency" class="marker-select">
-                    <option value="bar8">8 bars</option>
-                    <option value="bar4">4 bars</option>
-                    <option value="bar2">2 bars</option>
-                    <option value="bar" selected>1 bar</option>
-                    <option value="halfbar">½ bar</option>
-                    <option value="beat">Beat</option>
-                </select>
-                <button id="editLoopBtn" class="control-btn">EDIT LOOP</button>
-                <button id="seekBtn" class="control-btn hidden">SEEK</button>
-                <span id="loopStatus" class="loop-status">Off</span>
+            <div class="control-section">
+                <div class="section-label">Playback:</div>
+                <div class="player-controls">
+                    <button class="player-btn" id="loopBtn" title="Loop">LOOP</button>
+                    <button class="player-btn active" id="markersBtn" title="Show Markers">MARKS</button>
+                    <select id="markerFrequency" class="marker-select">
+                        <option value="bar8">8 bars</option>
+                        <option value="bar4">4 bars</option>
+                        <option value="bar2">2 bars</option>
+                        <option value="bar" selected>1 bar</option>
+                        <option value="halfbar">½ bar</option>
+                        <option value="beat">Beat</option>
+                    </select>
+                    <button class="player-btn" id="editLoopBtn" title="Edit Loop">EDIT LOOP</button>
+                    <button class="player-btn" id="seekBtn" title="Seek Mode" style="display: none;">SEEK</button>
+                    <span id="loopStatus" class="loop-status">Off</span>
+                </div>
             </div>
 
-            <!-- Rate/Pitch Controls -->
-            <div class="rate-pitch-controls">
-                <div class="rate-section">
-                    <label>Speed</label>
-                    <div class="preset-buttons">
-                        <button data-rate="0.5" class="preset-btn">0.5x</button>
-                        <button data-rate="1.0" class="preset-btn active">1x</button>
-                        <button data-rate="2.0" class="preset-btn">2x</button>
-                    </div>
-                    <input type="range" id="rateSlider" min="0.025" max="4.0" step="0.025" value="1.0">
+            <!-- Speed Controls -->
+            <div class="control-section">
+                <div class="section-label">Speed:</div>
+                <div class="rate-controls">
+                    <button class="rate-preset-btn" data-rate="0.5">0.5x</button>
+                    <button class="rate-preset-btn active" data-rate="1.0">1x</button>
+                    <button class="rate-preset-btn" data-rate="2.0">2x</button>
+                    <input type="range" id="rateSlider" min="0.5" max="2.0" step="0.05" value="1.0">
                     <span id="rateValue">1.00x</span>
-                    <div class="semitone-buttons">
-                        <button id="rateMinus" class="semitone-btn">♭</button>
-                        <button id="ratePlus" class="semitone-btn">♯</button>
-                    </div>
-                </div>
-
-                <div class="pitch-section">
-                    <label>Pitch</label>
-                    <div class="preset-buttons">
-                        <button data-pitch="-12" class="preset-btn">-12</button>
-                        <button data-pitch="0" class="preset-btn active">0</button>
-                        <button data-pitch="12" class="preset-btn">+12</button>
-                    </div>
-                    <input type="range" id="pitchSlider" min="-12" max="12" step="1" value="0">
-                    <span id="pitchValue">0</span>
                 </div>
             </div>
 
-            <!-- Volume Control -->
-            <div class="volume-control">
-                <span class="volume-icon">🔊</span>
-                <input type="range" id="volumeSlider" min="0" max="100" value="100">
-                <span id="volumeValue">100%</span>
+            <!-- Volume Controls -->
+            <div class="control-section">
+                <div class="section-label">Vol:</div>
+                <div class="volume-controls">
+                    <span class="volume-icon">🔊</span>
+                    <input type="range" id="volumeSlider" min="0" max="100" value="100">
+                    <span id="volumePercent">100%</span>
+                </div>
             </div>
 
             <!-- Stems Button -->
-            <button id="stemsBtn" class="stems-btn hidden" title="Toggle Stems">STEMS</button>
+            <button id="stemsBtn" class="stems-btn" title="Toggle Stems" style="display: none;">STEMS</button>
         </div>
     </div>
 

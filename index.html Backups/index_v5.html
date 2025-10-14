@@ -714,31 +714,6 @@
             background: #059669;
         }
 
-        /* View Tab Styling */
-        .view-tab {
-            flex: 1;
-            padding: 12px 24px;
-            background: transparent;
-            border: none;
-            border-bottom: 3px solid transparent;
-            color: #999;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .view-tab:hover {
-            background: rgba(74, 158, 255, 0.05);
-            color: #ccc;
-        }
-
-        .view-tab.active {
-            border-bottom-color: #4a9eff;
-            color: #4a9eff;
-            background: rgba(74, 158, 255, 0.08);
-        }
-
         /* Mobile responsiveness */
         @media (max-width: 768px) {
             .header {
@@ -930,21 +905,6 @@
             <p>Upload, tag, and organize your audio files</p>
         </div>
 
-        <!-- View Selector Tabs -->
-        <div style="display: flex; justify-content: center; gap: 0; background: #0f0f0f; border-bottom: 1px solid #2a2a2a; padding: 0;">
-            <button class="view-tab active" data-view="library">
-                📚 Library
-            </button>
-            <button class="view-tab" data-view="galaxy">
-                🌌 Galaxy
-            </button>
-            <button class="view-tab" data-view="sphere">
-                🔮 Sphere
-            </button>
-        </div>
-
-        <!-- Library View Container -->
-        <div id="libraryViewContainer">
         <div class="tag-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <div style="display: flex; gap: 12px; align-items: center;">
@@ -1001,24 +961,6 @@
                         <div>No audio files yet. Upload your first audio file to get started!</div>
                     </div>
                 </div>
-            </div>
-        </div>
-        </div>
-        <!-- End Library View Container -->
-
-        <!-- Galaxy View Container (placeholder) -->
-        <div id="galaxyViewContainer" style="display: none;">
-            <div style="padding: 40px; text-align: center; color: #999;">
-                <h2 style="font-size: 2em; margin-bottom: 20px;">🌌 Galaxy View</h2>
-                <p>Coming soon...</p>
-            </div>
-        </div>
-
-        <!-- Sphere View Container (placeholder) -->
-        <div id="sphereViewContainer" style="display: none;">
-            <div style="padding: 40px; text-align: center; color: #999;">
-                <h2 style="font-size: 2em; margin-bottom: 20px;">🔮 Sphere View</h2>
-                <p>Coming soon...</p>
             </div>
         </div>
     </div>

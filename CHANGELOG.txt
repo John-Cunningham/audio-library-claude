@@ -218,6 +218,34 @@ Implementation Notes:
 - Stems stay perfectly synced with main playback position
 - Solo/mute logic ready (not yet exposed in UI)
 
+Git Commits: 82712f5
+Result: ✅ SUCCESS - Background stem playback working (play/pause/seek synced)
+Known Issues: Rate and volume sliders only affecting main WaveSurfer (fixed in Version 8)
+
+=== Version 8 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix rate and volume sliders to affect all stem WaveSurfers"
+
+Changes (Phase 4 Step 2A - Rate and Volume Fix):
+- Modified setVolume() function (lines 3531-3567):
+  - Now iterates over all stem WaveSurfers and applies master volume
+  - Respects per-stem volume and solo/mute state
+  - Multi-solo support: if any stems are soloed, only soloed stems get volume
+  - Otherwise, respects individual mute states
+  - Final volume calculation: masterVolume * stemVolume * (solo/mute logic)
+- Modified setPlaybackRate() function (lines 3596-3633):
+  - Now iterates over all stem WaveSurfers and applies playback rate
+  - All 4 stems change speed/pitch together with main WaveSurfer
+  - Metronome sync still works correctly
+- Created backup: app_v14.js
+
+Testing Results:
+[Pending user testing]
+- Rate slider should affect all 4 stems
+- Volume slider should affect all 4 stems
+- Solo/mute logic should work correctly (ready for UI controls)
+
 Git Commits: [pending]
-Result: ✅ Ready for testing - Should hear stems playing instead of main file
+Result: ⏳ Ready for testing - Rate and volume should now affect all stems
 

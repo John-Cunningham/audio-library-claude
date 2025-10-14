@@ -3534,26 +3534,6 @@
                 wavesurfer.setVolume(volume);
             }
 
-            // Phase 4 Step 2A: Also set volume for all stem WaveSurfers
-            Object.keys(stemWavesurfers).forEach(stemType => {
-                const stemWS = stemWavesurfers[stemType];
-                if (stemWS) {
-                    // Apply master volume to stem, respecting per-stem volume and solo/mute state
-                    const anySoloed = Object.values(stemSoloed).some(s => s);
-                    let finalVolume = 0;
-
-                    if (anySoloed) {
-                        // If any stems are soloed, only soloed stems get volume
-                        finalVolume = stemSoloed[stemType] ? volume * stemVolumes[stemType] : 0;
-                    } else {
-                        // Otherwise, respect individual mute states
-                        finalVolume = stemMuted[stemType] ? 0 : volume * stemVolumes[stemType];
-                    }
-
-                    stemWS.setVolume(finalVolume);
-                }
-            });
-
             // Calculate decibels (relative to 100% = 0dB)
             let db;
             if (value === 0) {
@@ -3599,14 +3579,6 @@
             if (wavesurfer) {
                 wavesurfer.setPlaybackRate(rate, false); // false = natural analog (speed+pitch)
             }
-
-            // Phase 4 Step 2A: Also set playback rate for all stem WaveSurfers
-            Object.keys(stemWavesurfers).forEach(stemType => {
-                const stemWS = stemWavesurfers[stemType];
-                if (stemWS) {
-                    stemWS.setPlaybackRate(rate, false);
-                }
-            });
 
             // Clear any scheduled metronome notes when rate changes
             // This prevents "copies" of metronome sounds at different rates

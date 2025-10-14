@@ -21,7 +21,6 @@
         let currentFileId = null;
         let selectedFiles = new Set();
         let processingFiles = new Set(); // Track files currently being processed
-        let expandedStems = new Set(); // Track files with expanded stems view (Phase 4 Step 1)
         let searchQuery = '';
         let currentTagMode = null; // Default mode for tag clicks (null = no mode, normal click behavior)
         let showAllTags = false; // Toggle for showing low-count tags
@@ -1521,61 +1520,8 @@
                 return `${mins}:${String(secs).padStart(2, '0')}`;
             };
 
-            const fileRows = sortedFiles.map(file => {
-                // Build stem expansion UI (Phase 4 Step 1)
-                const stemsExpanded = expandedStems.has(file.id);
-                const stemsHTML = stemsExpanded && file.has_stems ? `
-                    <div class="stems-expansion" style="background: #0f0f0f; border: 1px solid #2a2a2a; border-top: none; border-radius: 0 0 6px 6px; padding: 15px; margin-top: -6px;">
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-                            <!-- Vocals Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px;">
-                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                    <span style="font-size: 18px;">🎤</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 13px;">Vocals</span>
-                                </div>
-                                <div style="height: 40px; background: #0f0f0f; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
-                                    Waveform placeholder
-                                </div>
-                            </div>
-
-                            <!-- Drums Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px;">
-                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                    <span style="font-size: 18px;">🥁</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 13px;">Drums</span>
-                                </div>
-                                <div style="height: 40px; background: #0f0f0f; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
-                                    Waveform placeholder
-                                </div>
-                            </div>
-
-                            <!-- Bass Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px;">
-                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                    <span style="font-size: 18px;">🎸</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 13px;">Bass</span>
-                                </div>
-                                <div style="height: 40px; background: #0f0f0f; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
-                                    Waveform placeholder
-                                </div>
-                            </div>
-
-                            <!-- Other Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px;">
-                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                    <span style="font-size: 18px;">🎹</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 13px;">Other</span>
-                                </div>
-                                <div style="height: 40px; background: #0f0f0f; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
-                                    Waveform placeholder
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ` : '';
-
-                return `
-                <div class="file-item ${currentFileId === file.id ? 'active' : ''}" style="display: grid; grid-template-columns: 16px 1fr 80px 110px 55px 60px 60px 40px 30px; gap: 8px; align-items: center; ${stemsExpanded ? 'border-radius: 6px 6px 0 0;' : ''}">
+            const fileRows = sortedFiles.map(file => `
+                <div class="file-item ${currentFileId === file.id ? 'active' : ''}" style="display: grid; grid-template-columns: 16px 1fr 80px 110px 55px 60px 60px 40px 30px; gap: 8px; align-items: center;">
                     <input type="checkbox" id="checkbox-${file.id}" ${selectedFiles.has(file.id) ? 'checked' : ''}
                            onclick="toggleFileSelection(${file.id}, event)"
                            style="width: 16px; height: 16px; cursor: pointer;">
@@ -1600,7 +1546,7 @@
                     </div>
                     <div style="text-align: center;">
                         ${file.has_stems ?
-                            `<span class="stems-icon active ${stemsExpanded ? 'expanded' : ''}" onclick="openStemsViewer(${file.id}, event)" title="${stemsExpanded ? 'Hide' : 'View'} stems">🎛️</span>` :
+                            `<span class="stems-icon active" onclick="openStemsViewer(${file.id}, event)" title="View stems">🎛️</span>` :
                             `<span class="stems-icon" onclick="generateStems(${file.id}, event)" title="Generate stems">⚙️</span>`
                         }
                     </div>
@@ -1608,9 +1554,7 @@
                         ⋮
                     </button>
                 </div>
-                ${stemsHTML}
-            `;
-            }).join('');
+            `).join('');
 
             // Put headers in sticky section, fileRows in scrollable container
             document.getElementById('columnHeaders').innerHTML = headers;
@@ -1775,20 +1719,10 @@
         }
 
         // Open stems viewer in new window
-        // Toggle stems expansion for a file (Phase 4 Step 1)
         function openStemsViewer(fileId, event) {
             event.preventDefault();
             event.stopPropagation();
-
-            // Toggle expansion state
-            if (expandedStems.has(fileId)) {
-                expandedStems.delete(fileId);
-            } else {
-                expandedStems.add(fileId);
-            }
-
-            // Re-render to show/hide stems
-            renderFiles();
+            window.open(`stems-viewer.html?fileId=${fileId}`, '_blank');
         }
 
         // Generate stems for a file

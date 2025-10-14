@@ -147,6 +147,36 @@ Changes (Phase 1 - View Manager Foundation):
   - Added placeholder containers for Galaxy and Sphere views (hidden by default)
 - Created backups: app_v9.js, app_v10.js, index_v5.html, index_v6.html
 
-Git Commits: aab9b7f
+Git Commits: aab9b7f, 8a6901c, 4965f88
+Result: ✅ SUCCESS - Phase 1 complete, view switching working
+
+=== Version 6 ===
+Date: 2025-10-14
+Files: src/core/app.js, index.html
+Prompt: "Phase 4 Step 1: Implement basic stems expansion UI (no playback yet)"
+
+Changes (Phase 4 Step 1 - Stems Expansion UI):
+- Added expandedStems Set to track which files have expanded stems
+- Modified openStemsViewer() to toggle inline expansion instead of opening new window
+- Modified renderFiles() to include stems expansion container below each file
+- Stems expansion shows 4 cards in 2x2 grid:
+  - 🎤 Vocals - placeholder waveform
+  - 🥁 Drums - placeholder waveform
+  - 🎸 Bass - placeholder waveform
+  - 🎹 Other - placeholder waveform
+- Added CSS animations for stems expansion (.stems-expansion slideDown animation)
+- Added CSS for expanded stems icon (.stems-icon.expanded rotates 180deg)
+- Stems icon title changes to "Hide stems" when expanded
+- File row border-radius adjusts when stems are expanded
+- Created backups: app_v12.js, index_v7.html
+
+Implementation Notes:
+- Only files with has_stems=true can expand
+- Click 🎛️ icon to toggle expansion
+- UI only - no audio playback yet (Step 2)
+- Smooth animations with proper styling
+- Expansion re-renders file list (preserves selection state)
+
+Git Commits: [pending]
 Result: ✅ Ready for testing
 

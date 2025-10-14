@@ -1,0 +1,95 @@
+/* Stems Interface Styles */
+.stems-interface {
+    position: fixed;
+    bottom: 200px;
+    left: 0;
+    right: 0;
+    background: #0f0f0f;
+    border-top: 1px solid #2a2a2a;
+    z-index: 850;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.stems-interface.visible {
+    max-height: 500px;
+    padding: 20px;
+}
+
+.stems-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* Individual Stem Bar */
+.stem-bar {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stem-header {
+    font-weight: 600;
+    color: #f59e0b;
+    font-size: 12px;
+    min-width: 80px;
+}
+
+.stem-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.stem-btn {
+    padding: 6px 12px;
+    background: #2a2a2a;
+    color: #fff;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+}
+
+.stem-btn:hover {
+    background: #3a3a3a;
+}
+
+.stem-btn.active {
+    background: #f59e0b;
+    color: #000;
+}
+
+.stem-waveform {
+    flex: 1;
+    min-width: 300px;
+    height: 60px;
+    background: #0a0a0a;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.stem-volume {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 120px;
+}
+
+.stem-time {
+    color: #999;
+    font-size: 11px;
+    min-width: 80px;
+    text-align: right;
+}

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Library</title>
+    <link rel="icon" href="data:,">
+
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+
+    <!-- Signalsmith Stretch -->
+    <script type="module">
+        import SignalsmithStretch from './lib/signalsmith-stretch/SignalsmithStretch.mjs';
+        window.SignalsmithStretch = SignalsmithStretch;
+        window.signalsmithReady = true;
+        if (window.onSignalsmithReady) window.onSignalsmithReady();
+    </script>
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="./styles/main.css">
+    <link rel="stylesheet" href="./styles/playerBar.css">
+    <link rel="stylesheet" href="./styles/stems.css">
+    <link rel="stylesheet" href="./styles/views.css">
+</head>
+<body>
+    <!-- View Switcher -->
+    <div id="viewSwitcher" class="view-switcher">
+        <button id="viewSwitcherBtn" class="view-switcher-btn">VIEWS</button>
+        <div id="viewMenu" class="view-menu hidden">
+            <button data-view="library" class="view-option active">Library View</button>
+            <button data-view="galaxy" class="view-option">Galaxy View</button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div id="mainContent" class="main-content">
+        <!-- Views will be dynamically loaded here -->
+        <div id="libraryView" class="view active">
+            <div class="library-header">
+                <h1>Audio Library</h1>
+                <div class="library-controls">
+                    <input type="text" id="searchInput" placeholder="Search files..." class="search-input">
+                    <select id="filterSelect" class="filter-select">
+                        <option value="all">All Files</option>
+                        <option value="stems">With Stems</option>
+                        <option value="recent">Recently Added</option>
+                    </select>
+                </div>
+            </div>
+            <div id="fileGrid" class="file-grid">
+                <div class="loading">Loading audio files...</div>
+            </div>
+        </div>
+
+        <div id="galaxyView" class="view hidden">
+            <div class="galaxy-container">
+                <h2>Galaxy View</h2>
+                <p>3D visualizer coming soon...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stems Interface (Expandable) -->
+    <div id="stemsInterface" class="stems-interface hidden">
+        <div class="stems-container" id="stemsContainer">
+            <!-- Stem players will be dynamically created here -->
+        </div>
+    </div>
+
+    <!-- Player Bar (Fixed Bottom) -->
+    <div id="playerBar" class="player-bar">
+        <div class="player-main">
+            <!-- File Info -->
+            <div class="file-info">
+                <div id="fileName" class="file-name">No file loaded</div>
+                <div id="fileMetadata" class="file-metadata"></div>
+            </div>
+
+            <!-- Transport Controls -->
+            <div class="transport-controls">
+                <button id="prevBtn" class="control-btn" title="Previous">⏮</button>
+                <button id="playPauseBtn" class="control-btn play-btn" title="Play/Pause">▶</button>
+                <button id="nextBtn" class="control-btn" title="Next">⏭</button>
+                <button id="restartBtn" class="control-btn" title="Restart">⏮</button>
+            </div>
+
+            <!-- Waveform Container -->
+            <div class="waveform-container">
+                <div id="waveform" class="waveform"></div>
+                <div id="timeDisplay" class="time-display">0:00 / 0:00</div>
+            </div>
+
+            <!-- Playback Controls -->
+            <div class="playback-controls">
+                <button id="loopBtn" class="control-btn">LOOP</button>
+                <button id="markersBtn" class="control-btn active">MARKS</button>
+                <select id="markerFrequency" class="marker-select">
+                    <option value="bar8">8 bars</option>
+                    <option value="bar4">4 bars</option>
+                    <option value="bar2">2 bars</option>
+                    <option value="bar" selected>1 bar</option>
+                    <option value="halfbar">½ bar</option>
+                    <option value="beat">Beat</option>
+                </select>
+                <button id="editLoopBtn" class="control-btn">EDIT LOOP</button>
+                <button id="seekBtn" class="control-btn hidden">SEEK</button>
+                <span id="loopStatus" class="loop-status">Off</span>
+            </div>
+
+            <!-- Rate/Pitch Controls -->
+            <div class="rate-pitch-controls">
+                <div class="rate-section">
+                    <label>Speed</label>
+                    <div class="preset-buttons">
+                        <button data-rate="0.5" class="preset-btn">0.5x</button>
+                        <button data-rate="1.0" class="preset-btn active">1x</button>
+                        <button data-rate="2.0" class="preset-btn">2x</button>
+                    </div>
+                    <input type="range" id="rateSlider" min="0.025" max="4.0" step="0.025" value="1.0">
+                    <span id="rateValue">1.00x</span>
+                    <div class="semitone-buttons">
+                        <button id="rateMinus" class="semitone-btn">♭</button>
+                        <button id="ratePlus" class="semitone-btn">♯</button>
+                    </div>
+                </div>
+
+                <div class="pitch-section">
+                    <label>Pitch</label>
+                    <div class="preset-buttons">
+                        <button data-pitch="-12" class="preset-btn">-12</button>
+                        <button data-pitch="0" class="preset-btn active">0</button>
+                        <button data-pitch="12" class="preset-btn">+12</button>
+                    </div>
+                    <input type="range" id="pitchSlider" min="-12" max="12" step="1" value="0">
+                    <span id="pitchValue">0</span>
+                </div>
+            </div>
+
+            <!-- Volume Control -->
+            <div class="volume-control">
+                <span class="volume-icon">🔊</span>
+                <input type="range" id="volumeSlider" min="0" max="100" value="100">
+                <span id="volumeValue">100%</span>
+            </div>
+
+            <!-- Stems Button -->
+            <button id="stemsBtn" class="stems-btn hidden" title="Toggle Stems">STEMS</button>
+        </div>
+    </div>
+
+    <!-- Main Application Script -->
+    <script type="module" src="./src/core/app.js"></script>
+</body>
+</html>

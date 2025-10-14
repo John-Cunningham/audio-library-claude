@@ -1,0 +1,120 @@
+/* View-Specific Styles */
+
+/* Library View */
+.library-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #1a1a1a;
+    border-radius: 8px;
+    border: 1px solid #2a2a2a;
+}
+
+.library-header h1 {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.library-controls {
+    display: flex;
+    gap: 12px;
+}
+
+.search-input {
+    padding: 10px 16px;
+    background: #0a0a0a;
+    color: #fff;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    font-size: 14px;
+    min-width: 300px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.search-input:focus {
+    border-color: #f59e0b;
+}
+
+.filter-select {
+    padding: 10px 16px;
+    background: #0a0a0a;
+    color: #fff;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    outline: none;
+}
+
+/* File Grid */
+.file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.file-card {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.file-card:hover {
+    background: #2a2a2a;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+}
+
+.file-card.active {
+    border-color: #f59e0b;
+    background: #2a2a2a;
+}
+
+.file-card-name {
+    font-weight: 600;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-card-meta {
+    font-size: 12px;
+    color: #999;
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+}
+
+.file-card-icon {
+    font-size: 12px;
+    margin-top: 8px;
+}
+
+/* Galaxy View */
+.galaxy-container {
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 40px;
+}
+
+.galaxy-container h2 {
+    font-size: 32px;
+    margin-bottom: 16px;
+}
+
+.galaxy-container p {
+    font-size: 16px;
+    color: #999;
+}

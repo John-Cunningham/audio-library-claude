@@ -108,12 +108,11 @@
                 </div>
             </div>
 
-            <!-- Playback Controls -->
+            <!-- Marker Controls -->
             <div class="control-section">
-                <div class="section-label">Playback:</div>
+                <div class="section-label">Markers:</div>
                 <div class="player-controls">
-                    <button class="player-btn" id="loopBtn" title="Loop">LOOP</button>
-                    <button class="player-btn active" id="markersBtn" title="Show Markers">MARKS</button>
+                    <button class="player-btn active" id="markersBtn" title="Show Markers (M)">MARKS</button>
                     <select id="markerFrequency" class="marker-select">
                         <option value="bar8">8 bars</option>
                         <option value="bar4">4 bars</option>
@@ -122,10 +121,29 @@
                         <option value="halfbar">½ bar</option>
                         <option value="beat">Beat</option>
                     </select>
-                    <button class="player-btn" id="editLoopBtn" title="Edit Loop">EDIT LOOP</button>
-                    <button class="player-btn" id="seekBtn" title="Seek Mode" style="display: none;">SEEK</button>
-                    <span id="loopStatus" class="loop-status">Off</span>
                 </div>
+            </div>
+
+            <!-- Loop/Cycle Controls -->
+            <div class="control-section">
+                <div class="section-label">Loop:</div>
+                <div class="player-controls">
+                    <button class="player-btn" id="cycleBtn" title="Toggle cycle mode - Sets and plays loop (C)">CYCLE</button>
+                    <button class="player-btn" id="seekBtn" title="Toggle seek when clicking" style="display: none;">SEEK</button>
+                    <button class="player-btn" id="clearLoopBtn" title="Clear loop points (keep cycle mode on)" style="display: none;">CLEAR</button>
+                    <span id="loopStatus" class="loop-status">Off</span>
+                    <button class="player-btn" id="expandLoopBtn" title="Show/hide loop controls" style="display: none;">
+                        <span>▼</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loop Manipulation Buttons (Collapsible) -->
+            <div id="loopControlsContainer" class="loop-controls-container" style="display: none;">
+                <button class="player-btn" id="shiftLeftBtn" title="Shift loop left (←)">◄</button>
+                <button class="player-btn" id="shiftRightBtn" title="Shift loop right (→)">►</button>
+                <button class="player-btn" id="halfLengthBtn" title="Half loop length (↓)">½</button>
+                <button class="player-btn" id="doubleLengthBtn" title="Double loop length (↑)">2×</button>
             </div>
 
             <!-- Speed Controls -->

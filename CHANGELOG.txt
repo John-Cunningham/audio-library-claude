@@ -177,6 +177,47 @@ Implementation Notes:
 - Smooth animations with proper styling
 - Expansion re-renders file list (preserves selection state)
 
+Git Commits: 07b5ef7
+Result: ✅ SUCCESS - Step 1 complete, stems expansion UI working
+Known Issue: Audio glitches during expansion (full re-render) - will fix in Step 2
+
+=== Version 7 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Phase 4 Step 2A: Load stems in background and play them instead of main file"
+
+Changes (Phase 4 Step 2A - Background Stem Playback):
+- Added stem state variables:
+  - stemWavesurfers {} - WaveSurfer instance per stem type
+  - stemFiles {} - Cached stem file data from audio_files_stems
+  - stemMuted, stemSoloed, stemVolumes - Per-stem control state
+- Created stem playback functions:
+  - fetchStemFiles() - Query audio_files_stems table by parent file ID
+  - destroyAllStems() - Clean up all stem WaveSurfer instances
+  - createStemWaveSurfer() - Create hidden WaveSurfer for each stem
+  - loadStems() - Load all 4 stems and wait for ready state
+  - syncStemsWithMain() - Sync stem play/pause/seek with main WaveSurfer
+  - updateStemAudioState() - Apply solo/mute logic to stems
+- Modified loadAudio():
+  - Check if file has_stems=true
+  - If yes: fetch stem files, create 4 WaveSurfer instances, sync with main
+  - Mute main WaveSurfer (volume=0) since stems are playing instead
+  - If stems load fails: fallback to playing main file
+  - Destroy stems when changing files
+- Stem sync behavior:
+  - Main play → all stems play
+  - Main pause → all stems pause
+  - Main seek → all stems seek to same position
+  - Main finish → all stems seek to 0
+- Created backup: app_v13.js
+
+Implementation Notes:
+- Stems load in hidden containers (display:none)
+- Main WaveSurfer shows visual waveform but plays at volume=0
+- All 4 stems play simultaneously (you hear the mixed stems, not main file)
+- Stems stay perfectly synced with main playback position
+- Solo/mute logic ready (not yet exposed in UI)
+
 Git Commits: [pending]
-Result: ✅ Ready for testing
+Result: ✅ Ready for testing - Should hear stems playing instead of main file
 

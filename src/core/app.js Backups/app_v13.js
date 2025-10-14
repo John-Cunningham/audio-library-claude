@@ -22,14 +22,6 @@
         let selectedFiles = new Set();
         let processingFiles = new Set(); // Track files currently being processed
         let expandedStems = new Set(); // Track files with expanded stems view (Phase 4 Step 1)
-
-        // Stem playback state (Phase 4 Step 2A)
-        let stemWavesurfers = {}; // { vocals: WaveSurfer, drums: WaveSurfer, bass: WaveSurfer, other: WaveSurfer }
-        let stemFiles = {}; // Cached stem file data from audio_files_stems table
-        let stemMuted = { vocals: false, drums: false, bass: false, other: false };
-        let stemSoloed = { vocals: false, drums: false, bass: false, other: false };
-        let stemVolumes = { vocals: 1.0, drums: 1.0, bass: 1.0, other: 1.0 };
-
         let searchQuery = '';
         let currentTagMode = null; // Default mode for tag clicks (null = no mode, normal click behavior)
         let showAllTags = false; // Toggle for showing low-count tags
@@ -168,207 +160,6 @@
         }
 
         // Polling removed - data refreshes immediately after processing completes
-
-        // ========================================
-        // STEM PLAYBACK FUNCTIONS (Phase 4 Step 2A)
-        // ========================================
-
-        // Fetch stem files for a parent audio file from audio_files_stems table
-        async function fetchStemFiles(parentFileId) {
-            try {
-                const { data, error } = await supabase
-                    .from('audio_files_stems')
-                    .select('*')
-                    .eq('audio_file_id', parentFileId);
-
-                if (error) throw error;
-
-                // Organize stems by type
-                const stems = {};
-                if (data) {
-                    data.forEach(stem => {
-                        stems[stem.stem_type] = stem;
-                    });
-                }
-
-                console.log(`Fetched ${data?.length || 0} stems for file ${parentFileId}:`, stems);
-                return stems;
-            } catch (error) {
-                console.error('Error fetching stem files:', error);
-                return {};
-            }
-        }
-
-        // Destroy all stem WaveSurfer instances
-        function destroyAllStems() {
-            Object.keys(stemWavesurfers).forEach(stemType => {
-                if (stemWavesurfers[stemType]) {
-                    stemWavesurfers[stemType].destroy();
-                }
-            });
-            stemWavesurfers = {};
-            stemFiles = {};
-            console.log('All stem WaveSurfers destroyed');
-        }
-
-        // Create WaveSurfer instance for a single stem (hidden, no container)
-        function createStemWaveSurfer(stemType) {
-            // Create a hidden container for this stem
-            const containerId = `stem-waveform-${stemType}`;
-            let container = document.getElementById(containerId);
-
-            if (!container) {
-                container = document.createElement('div');
-                container.id = containerId;
-                container.style.display = 'none'; // Hidden for now (Step 2A)
-                document.body.appendChild(container);
-            }
-
-            const stemWS = WaveSurfer.create({
-                container: `#${containerId}`,
-                waveColor: '#666666',
-                progressColor: '#4a9eff',
-                cursorColor: '#ffffff',
-                barWidth: 3,
-                barRadius: 3,
-                cursorWidth: 2,
-                height: 40,
-                barGap: 2,
-                responsive: true,
-                normalize: true,
-                backend: 'WebAudio',
-                autoScroll: false
-            });
-
-            // Set initial volume
-            stemWS.setVolume(stemVolumes[stemType]);
-
-            console.log(`Created WaveSurfer for ${stemType} stem`);
-            return stemWS;
-        }
-
-        // Load and sync all stems for a file
-        async function loadStems(parentFileId, autoplay = true) {
-            console.log(`Loading stems for file ${parentFileId}...`);
-
-            // Destroy any existing stems
-            destroyAllStems();
-
-            // Fetch stem files from database
-            const stems = await fetchStemFiles(parentFileId);
-            stemFiles = stems;
-
-            // Check if we have all 4 stems
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-            const missingStems = stemTypes.filter(type => !stems[type]);
-
-            if (missingStems.length > 0) {
-                console.warn(`Missing stems: ${missingStems.join(', ')}`);
-                return false; // Don't load stems if any are missing
-            }
-
-            // Create WaveSurfer instance for each stem
-            stemTypes.forEach(stemType => {
-                stemWavesurfers[stemType] = createStemWaveSurfer(stemType);
-            });
-
-            // Load audio for each stem
-            const loadPromises = stemTypes.map(stemType => {
-                return new Promise((resolve) => {
-                    const stemWS = stemWavesurfers[stemType];
-                    stemWS.on('ready', () => {
-                        console.log(`${stemType} stem ready`);
-                        resolve();
-                    });
-                    stemWS.load(stems[stemType].file_url);
-                });
-            });
-
-            // Wait for all stems to be ready
-            await Promise.all(loadPromises);
-            console.log('All stems loaded and ready');
-
-            // Sync stems with main WaveSurfer events
-            syncStemsWithMain(autoplay);
-
-            return true;
-        }
-
-        // Sync all stem WaveSurfers with main WaveSurfer
-        function syncStemsWithMain(autoplay = true) {
-            if (!wavesurfer) return;
-
-            // Sync play/pause
-            wavesurfer.on('play', () => {
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS && !stemWS.isPlaying()) {
-                        stemWS.play();
-                    }
-                });
-            });
-
-            wavesurfer.on('pause', () => {
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS && stemWS.isPlaying()) {
-                        stemWS.pause();
-                    }
-                });
-            });
-
-            // Sync seeking
-            wavesurfer.on('seeking', (progress) => {
-                const seekTime = progress * wavesurfer.getDuration();
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS) {
-                        stemWS.seekTo(progress);
-                    }
-                });
-            });
-
-            // Sync finish
-            wavesurfer.on('finish', () => {
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS) {
-                        stemWS.seekTo(0);
-                    }
-                });
-            });
-
-            console.log('Stems synced with main WaveSurfer');
-
-            // Auto-play if requested
-            if (autoplay) {
-                setTimeout(() => {
-                    wavesurfer.play();
-                }, 100); // Small delay to ensure everything is ready
-            }
-        }
-
-        // Apply solo/mute logic to stems
-        function updateStemAudioState() {
-            const anySoloed = Object.values(stemSoloed).some(s => s);
-
-            Object.keys(stemWavesurfers).forEach(stemType => {
-                const stemWS = stemWavesurfers[stemType];
-                if (!stemWS) return;
-
-                // If any stems are soloed, only play soloed stems
-                // Otherwise, respect individual mute states
-                if (anySoloed) {
-                    stemWS.setVolume(stemSoloed[stemType] ? stemVolumes[stemType] : 0);
-                } else {
-                    stemWS.setVolume(stemMuted[stemType] ? 0 : stemVolumes[stemType]);
-                }
-            });
-        }
-
-        // ========================================
-        // END STEM PLAYBACK FUNCTIONS
-        // ========================================
 
         // Initialize WaveSurfer
         function initWaveSurfer() {
@@ -3359,9 +3150,6 @@
                 wavesurfer = null;
             }
 
-            // Destroy any existing stems (Phase 4 Step 2A)
-            destroyAllStems();
-
             initWaveSurfer();
 
             // Apply current volume to new wavesurfer instance
@@ -3379,7 +3167,7 @@
             document.getElementById('playPauseIcon').textContent = '▶';
 
             // Add bar markers when waveform is ready
-            wavesurfer.once('ready', async () => {
+            wavesurfer.once('ready', () => {
                 addBarMarkers(file);
 
                 // BPM Lock: Auto-adjust playback rate to match locked BPM
@@ -3417,35 +3205,10 @@
                     }
                 }
 
-                // Phase 4 Step 2A: Load stems if file has stems
-                if (file.has_stems) {
-                    console.log(`File has stems - loading stem files in background...`);
-                    const stemsLoaded = await loadStems(fileId, false); // Don't autoplay stems yet
-
-                    if (stemsLoaded) {
-                        console.log('✅ Stems loaded successfully - muting main WaveSurfer');
-                        // Mute main WaveSurfer since we're playing stems instead
-                        wavesurfer.setVolume(0);
-
-                        // Auto-play stems if requested (this will trigger all stems to play)
-                        if (autoplay) {
-                            wavesurfer.play(); // This will trigger stem sync via event handlers
-                            document.getElementById('playPauseIcon').textContent = '⏸';
-                        }
-                    } else {
-                        console.warn('⚠️ Failed to load stems - playing main file instead');
-                        // Auto-play main file if requested
-                        if (autoplay) {
-                            wavesurfer.play();
-                            document.getElementById('playPauseIcon').textContent = '⏸';
-                        }
-                    }
-                } else {
-                    // No stems - play main file normally
-                    if (autoplay) {
-                        wavesurfer.play();
-                        document.getElementById('playPauseIcon').textContent = '⏸';
-                    }
+                // Auto-play if requested
+                if (autoplay) {
+                    wavesurfer.play();
+                    document.getElementById('playPauseIcon').textContent = '⏸';
                 }
             });
 

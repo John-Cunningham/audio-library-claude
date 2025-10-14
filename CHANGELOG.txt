@@ -315,6 +315,36 @@ Testing Results:
 - Should see real waveforms instead of placeholders
 - Waveforms should load within 1-2 seconds
 
+Git Commits: 96283e5
+Result: ✅ SUCCESS - Real stem waveforms rendering correctly
+Known Issue: Seeking causes only 'other' stem to play (fixed in Version 11)
+
+=== Version 11 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix seeking bug - after seeking, only 'other' stem plays instead of all 4 stems"
+
+Changes (Phase 4 Step 2B - Seeking Fix):
+- Modified syncStemsWithMain() seeking event handler (lines 320-343):
+  - Added pause-before-seek logic to prevent audio glitches
+  - Track if main WaveSurfer was playing before seek
+  - Pause all stem WaveSurfers before seeking
+  - Apply seek to all stems
+  - Resume playback with 50ms delay if was playing
+  - Ensures all 4 stems resume after seek, not just one
+- Created backup: app_v17.js
+
+Bug Details:
+- User reported: "if I click on the waveform to seek, I then am only hearing the 'other' stem"
+- Root cause: Stems not resuming playback after seek operation
+- Only last stem in forEach loop was resuming correctly
+
+Testing Results:
+[Pending user testing]
+- Seek while playing should resume all 4 stems
+- All stems should stay in sync after seek
+- No audio glitches during seek
+
 Git Commits: [pending]
-Result: ⏳ Ready for testing - Real stem waveforms should appear
+Result: ⏳ Ready for testing - All stems should play after seeking
 

@@ -319,25 +319,11 @@
 
             // Sync seeking
             wavesurfer.on('seeking', (progress) => {
-                const wasPlaying = wavesurfer.isPlaying();
-
+                const seekTime = progress * wavesurfer.getDuration();
                 Object.keys(stemWavesurfers).forEach(stemType => {
                     const stemWS = stemWavesurfers[stemType];
                     if (stemWS) {
-                        // Pause stem before seeking to prevent audio glitches
-                        if (stemWS.isPlaying()) {
-                            stemWS.pause();
-                        }
                         stemWS.seekTo(progress);
-
-                        // Resume playback if main was playing
-                        if (wasPlaying) {
-                            setTimeout(() => {
-                                if (!stemWS.isPlaying()) {
-                                    stemWS.play();
-                                }
-                            }, 50); // Small delay to ensure seek completes
-                        }
                     }
                 });
             });

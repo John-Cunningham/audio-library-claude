@@ -146,4 +146,96 @@ NEXT STEPS:
 - Maintain functionality while modularizing
 
 ================================================================================
+================================================================================
+SESSION: 2025-10-14 - Modularization ROUND 1 (Foundation Modules)
+================================================================================
+USER PROMPT:
+"We're continuing development of the Audio Library Claude project... Next Mission: Break down the monolithic 4394-line app.js into proper ES6 modules while maintaining ALL working functionality. The goal is to create a clean, modular architecture that will support adding new views (Galaxy visualizer, Sphere visualizer, etc.)."
+
+User wants:
+- Multiple views (Library, Galaxy visualizer, Sphere visualizer)
+- Shared components across all views (player bar, waveform display, options menus)
+- Consistency - same controls work the same way everywhere
+- Stems expansion feature (like mobile visualizer)
+
+SNAPSHOT COMMIT: 9b92369 (before starting ROUND 1)
+
+CHANGES PLANNED (ROUND 1 - Foundation):
+- Extract config.js (Supabase client, constants)
+- Extract state.js (all state variables)
+- Extract utils.js (pure utility functions)
+- Update app.js to import these modules
+- Test to ensure nothing breaks
+
+---
+
+CHANGES MADE:
+
+1. Created src/core/config.js:
+   - Exported supabase client (SUPABASE_URL, SUPABASE_ANON_KEY, supabase)
+   - Exported PREF_KEYS for localStorage preferences
+
+2. Created src/core/utils.js:
+   - extractTagsFromFilename(filename) - Parse tags, BPM, key from filename
+   - getAudioDuration(file) - Get audio duration from file
+   - calculateBPMFromOnsets(onsets, duration) - Calculate BPM from onset data
+   - getAllTags(audioFiles) - Get all unique tags with counts
+   - getTagCount(tag, files) - Count files with specific tag
+   - getAllBPMs(audioFiles) - Get all unique BPMs
+   - getAllKeys(audioFiles) - Get all unique keys
+   - getShiftIncrement(markerFrequency) - Get shift increment
+   - findNearestMarkerToLeft(clickTime, currentMarkers) - Find nearest marker
+   - getBarIndexAtTime(time, file) - Get bar index at time
+   - getTimeForBarIndex(barIndex, file) - Get time for bar index
+   - formatTime(seconds) - Format seconds to MM:SS
+
+3. Modified src/core/app.js:
+   - Added ES6 imports: import { supabase, PREF_KEYS } from './config.js'
+   - Added ES6 imports: import * as Utils from './utils.js'
+   - Removed duplicate PREF_KEYS declaration (line 450)
+   - Kept utility function definitions in place for now (will be removed in future rounds)
+   - Note: index.html already had type="module" on script tag
+
+4. Created backups:
+   - app_v2.js (before ROUND 1)
+   - app_v3.js (after ROUND 1 working)
+   - app_v4.js (pre-ROUND 2)
+   - index_v2.html, index_v3.html
+
+FILES MODIFIED:
+- src/core/config.js (created)
+- src/core/utils.js (created)
+- src/core/state.js (created but not used yet)
+- src/core/app.js (modified - added imports, removed duplicates)
+
+TESTING PERFORMED:
+Initial test showed: "Uncaught SyntaxError: Identifier 'PREF_KEYS' has already been declared"
+- Fixed by removing duplicate const PREF_KEYS declaration
+- Refreshed browser
+
+Post-fix testing:
+✅ Page loads without errors (only harmless favicon.ico 404)
+✅ Files load from Supabase (90 files displayed)
+✅ Tag filtering works (CAN/MUST/EXCLUDE modes)
+✅ File playback works (click file → audio loads and plays)
+✅ Bar markers toggle on/off (MARKS button)
+✅ Shift controls work (marker adjustment arrows)
+✅ Player controls work (play/pause/volume/rate)
+
+FINAL COMMIT: 9b92369
+COMMIT MESSAGE: "ROUND 1: Modularize config and utils - WORKING"
+RESULT: ✅ SUCCESS
+
+BRANCH: main
+STATUS: 4 commits ahead of origin/main (not pushed yet)
+
+NEXT STEPS:
+- Update CHANGELOG.txt and SESSION_LOG.txt (this entry)
+- Commit documentation updates
+- Push to GitHub
+- Continue with ROUND 2: Extract waveform.js, audioEngine.js, playerBar.js
+- Then ROUND 3: Extract libraryView.js, dataManager.js
+- Then ROUND 4: Final cleanup and preparation for new views
+
+================================================================================
 

@@ -21,3 +21,44 @@ Changes:
 Git Commits: 42394cf, b1b9752
 Result: ✅ SUCCESS - All functionality working
 
+=== Version 2 ===
+Date: 2025-10-14
+Files: src/core/config.js, src/core/utils.js, src/core/app.js
+Prompt: "We're continuing development of the Audio Library Claude project... Next Mission: Break down the monolithic 4394-line app.js into proper ES6 modules while maintaining ALL working functionality."
+
+Changes (ROUND 1 - Foundation Modules):
+- Created src/core/config.js:
+  - Supabase client initialization (SUPABASE_URL, SUPABASE_ANON_KEY, supabase)
+  - PREF_KEYS constants for localStorage preferences
+- Created src/core/utils.js:
+  - extractTagsFromFilename() - Parse filename for tags, BPM, key
+  - getAudioDuration() - Get audio file duration
+  - calculateBPMFromOnsets() - Calculate BPM from onset positions
+  - getAllTags() - Get all unique tags with counts
+  - getTagCount() - Count files with specific tag
+  - getAllBPMs() - Get all unique BPMs with counts
+  - getAllKeys() - Get all unique keys with counts
+  - getShiftIncrement() - Get shift increment based on marker frequency
+  - findNearestMarkerToLeft() - Find nearest marker to left of time
+  - getBarIndexAtTime() - Get bar index at given time
+  - getTimeForBarIndex() - Get time for given bar index
+  - formatTime() - Format seconds to MM:SS
+- Modified src/core/app.js:
+  - Added ES6 imports for config.js and utils.js
+  - Removed duplicate PREF_KEYS declaration
+  - Removed duplicate pendingUploadFiles declaration
+  - Kept utility function definitions in place (will be removed in later rounds)
+- Created backups: app_v2.js, app_v3.js, app_v4.js, index_v2.html, index_v3.html
+
+Testing Results:
+✅ Page loads without errors (only harmless favicon.ico 404)
+✅ Files load from Supabase (90 files displayed)
+✅ Tag filtering works (CAN/MUST/EXCLUDE modes)
+✅ File playback works (audio loads and plays)
+✅ Bar markers toggle on/off correctly
+✅ Shift controls work (marker adjustment)
+✅ Player controls work (play/pause/volume/rate)
+
+Git Commit: 9b92369
+Result: ✅ SUCCESS - All functionality working with modular config and utils
+

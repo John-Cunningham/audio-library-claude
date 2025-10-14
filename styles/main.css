@@ -106,6 +106,69 @@ body {
     border-width: 2px;
 }
 
+.tag-button.can-have {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.2);
+    color: #6ba3ff;
+    border-width: 2px;
+}
+
+.tag-button.must-have {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.2);
+    color: #4ade80;
+    border-width: 2px;
+}
+
+.tag-button.exclude {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border-width: 2px;
+}
+
+/* Tag Mode Buttons */
+.tag-mode-btn {
+    padding: 8px 14px;
+    background: transparent;
+    border: 2px solid;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+    font-size: 12px;
+}
+
+.tag-mode-btn.can-have {
+    color: #3b82f6;
+    border-color: #3b82f6;
+}
+
+.tag-mode-btn.can-have.active,
+.tag-mode-btn.can-have:hover {
+    background: rgba(59, 130, 246, 0.2);
+}
+
+.tag-mode-btn.must-have {
+    color: #10b981;
+    border-color: #10b981;
+}
+
+.tag-mode-btn.must-have.active,
+.tag-mode-btn.must-have:hover {
+    background: rgba(16, 185, 129, 0.2);
+}
+
+.tag-mode-btn.exclude {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+.tag-mode-btn.exclude.active,
+.tag-mode-btn.exclude:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
 .active-filters {
     margin-top: 12px;
     padding: 12px;

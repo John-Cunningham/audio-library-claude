@@ -246,6 +246,39 @@ Testing Results:
 - Volume slider should affect all 4 stems
 - Solo/mute logic should work correctly (ready for UI controls)
 
+Git Commits: 57a3157
+Result: ✅ SUCCESS - Rate and volume sliders working
+Known Issues: Phase drift causing weird audio quality (fixed in Version 9)
+
+=== Version 9 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix phase drift when changing rate - stems getting out of sync causing weird audio quality"
+
+Changes (Phase 4 Step 2A - Phase Drift Fix):
+- Modified setPlaybackRate() function (lines 3596-3669):
+  - Added phase drift prevention logic when stems are loaded and playing
+  - Algorithm:
+    1. Pause all stems before rate change (prevents drift during change)
+    2. Apply rate change to main + all stem WaveSurfers
+    3. Re-sync all stems to main WaveSurfer position (seekTo same progress)
+    4. Resume playback with 50ms delay (ensures rate changes are applied)
+  - Only applies sync logic when stems are loaded AND playing
+  - Non-stem files unaffected (no extra processing)
+- Created backup: app_v15.js
+
+Technical Details:
+- Phase drift occurs when rate changes happen sequentially on multiple WaveSurfers
+- Small timing differences accumulate, causing phase cancellation
+- Solution: Pause → Change → Sync → Resume (all stems stay perfectly aligned)
+- 50ms delay ensures Web Audio API has time to process rate changes
+
+Testing Results:
+[Pending user testing]
+- Rate changes should not cause weird audio quality
+- Returning to 1.0x should sound identical to original
+- Stems should stay perfectly in phase at all rates
+
 Git Commits: [pending]
-Result: ⏳ Ready for testing - Rate and volume should now affect all stems
+Result: ⏳ Ready for testing - Phase drift should be eliminated
 

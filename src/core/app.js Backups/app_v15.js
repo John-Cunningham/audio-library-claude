@@ -3596,21 +3596,6 @@
         function setPlaybackRate(rate) {
             currentRate = rate;
 
-            // Phase 4 Step 2A: Prevent phase drift when changing rate
-            // If stems are loaded, we need to synchronize them during rate change
-            const hasStemWavesurfers = Object.keys(stemWavesurfers).length > 0;
-            const wasPlaying = wavesurfer && wavesurfer.isPlaying();
-
-            if (hasStemWavesurfers && wasPlaying) {
-                // 1. Pause all stems to prevent drift
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS && stemWS.isPlaying()) {
-                        stemWS.pause();
-                    }
-                });
-            }
-
             if (wavesurfer) {
                 wavesurfer.setPlaybackRate(rate, false); // false = natural analog (speed+pitch)
             }
@@ -3622,27 +3607,6 @@
                     stemWS.setPlaybackRate(rate, false);
                 }
             });
-
-            if (hasStemWavesurfers && wasPlaying) {
-                // 2. Re-sync all stems to main WaveSurfer position
-                const currentProgress = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS) {
-                        stemWS.seekTo(currentProgress);
-                    }
-                });
-
-                // 3. Resume playback on all stems
-                setTimeout(() => {
-                    Object.keys(stemWavesurfers).forEach(stemType => {
-                        const stemWS = stemWavesurfers[stemType];
-                        if (stemWS && !stemWS.isPlaying()) {
-                            stemWS.play();
-                        }
-                    });
-                }, 50); // Small delay to ensure all rate changes are applied
-            }
 
             // Clear any scheduled metronome notes when rate changes
             // This prevents "copies" of metronome sounds at different rates

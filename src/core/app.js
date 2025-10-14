@@ -10,6 +10,13 @@ let wavesurfer = null;
 let allFiles = [];
 let currentBeatmap = null;
 
+// Loop state
+let loopStart = null;
+let loopEnd = null;
+let editLoopMode = false;
+let nextClickSets = 'start';
+let seekOnClick = false;
+
 // Initialize application
 async function init() {
     try {
@@ -229,6 +236,17 @@ async function loadWaveform(url) {
             state.setPlaying(false);
         });
 
+        // Loop enforcement during playback
+        wavesurfer.on('audioprocess', () => {
+            if (loopStart !== null && loopEnd !== null) {
+                const currentTime = wavesurfer.getCurrentTime();
+                if (currentTime >= loopEnd) {
+                    wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
+                    console.log(`Loop: seeking back to ${loopStart.toFixed(2)}s`);
+                }
+            }
+        });
+
     } catch (error) {
         console.error('Failed to load waveform:', error);
     }
@@ -389,23 +407,59 @@ function setupPlayerBar() {
         });
     }
 
-    // Loop button (placeholder)
+    // Loop button - toggle loop on/off (doesn't enable editing)
     if (loopBtn) {
         loopBtn.addEventListener('click', () => {
-            loopBtn.classList.toggle('active');
-            const loopStatus = document.getElementById('loopStatus');
-            if (loopStatus) {
-                loopStatus.textContent = loopBtn.classList.contains('active') ? 'On' : 'Off';
+            if (loopStart !== null && loopEnd !== null) {
+                // If loop is fully set, toggle it
+                const isActive = loopBtn.classList.contains('active');
+                if (isActive) {
+                    // Disable loop but keep points
+                    loopBtn.classList.remove('active');
+                    updateLoopVisuals();
+                } else {
+                    // Re-enable loop with existing points
+                    loopBtn.classList.add('active');
+                    updateLoopVisuals();
+                }
+            } else {
+                // No loop set - just show message
+                console.log('Set loop points first (use EDIT LOOP button)');
             }
-            console.log('TODO: Implement looping');
+            updateLoopStatus();
         });
     }
 
-    // Edit Loop button (placeholder)
+    // Edit Loop button - enable/disable loop editing mode
     if (editLoopBtn) {
         editLoopBtn.addEventListener('click', () => {
-            editLoopBtn.classList.toggle('active');
-            console.log('TODO: Implement edit loop mode');
+            editLoopMode = !editLoopMode;
+            editLoopBtn.classList.toggle('active', editLoopMode);
+
+            const seekBtn = document.getElementById('seekBtn');
+            if (seekBtn) {
+                seekBtn.style.display = editLoopMode ? 'inline-block' : 'none';
+            }
+
+            if (editLoopMode) {
+                console.log('Edit Loop mode ON - click waveform to set loop points');
+                setupWaveformClickHandler();
+            } else {
+                console.log('Edit Loop mode OFF');
+                removeWaveformClickHandler();
+            }
+
+            updateLoopStatus();
+        });
+    }
+
+    // Seek toggle button (shows when edit loop is active)
+    const seekBtn = document.getElementById('seekBtn');
+    if (seekBtn) {
+        seekBtn.addEventListener('click', () => {
+            seekOnClick = !seekOnClick;
+            seekBtn.classList.toggle('active', seekOnClick);
+            console.log(`Seek on click: ${seekOnClick ? 'ON' : 'OFF'}`);
         });
     }
 
@@ -436,6 +490,162 @@ function setupFileList() {
             console.log('TODO: Implement deselect all');
         });
     }
+}
+
+// Loop functionality
+function updateLoopVisuals() {
+    updateLoopRegion();
+    updateLoopStatus();
+}
+
+function updateLoopRegion() {
+    const waveformContainer = document.getElementById('waveform');
+    if (!waveformContainer || !wavesurfer) return;
+
+    // Remove existing loop region
+    const existingRegion = waveformContainer.querySelector('.loop-region');
+    if (existingRegion) {
+        existingRegion.remove();
+    }
+
+    // Don't draw if loop not set or loop button not active
+    const loopBtn = document.getElementById('loopBtn');
+    const loopActive = loopBtn?.classList.contains('active');
+
+    if (loopStart === null || loopEnd === null || !loopActive) return;
+
+    const duration = wavesurfer.getDuration();
+    if (duration === 0) return;
+
+    const startPercent = (loopStart / duration) * 100;
+    const endPercent = (loopEnd / duration) * 100;
+    const widthPercent = endPercent - startPercent;
+
+    const loopRegion = document.createElement('div');
+    loopRegion.className = 'loop-region';
+    loopRegion.style.left = `${startPercent}%`;
+    loopRegion.style.width = `${widthPercent}%`;
+
+    waveformContainer.appendChild(loopRegion);
+}
+
+function updateLoopStatus() {
+    const loopStatus = document.getElementById('loopStatus');
+    if (!loopStatus) return;
+
+    if (!editLoopMode && (loopStart === null || loopEnd === null)) {
+        loopStatus.textContent = 'Off';
+        loopStatus.classList.remove('active');
+    } else if (editLoopMode && loopStart === null) {
+        loopStatus.textContent = 'Click start';
+        loopStatus.classList.add('active');
+    } else if (editLoopMode && loopEnd === null) {
+        loopStatus.textContent = 'Click end →';
+        loopStatus.classList.add('active');
+    } else if (loopStart !== null && loopEnd !== null) {
+        const duration = loopEnd - loopStart;
+        loopStatus.textContent = `${duration.toFixed(1)}s`;
+        loopStatus.classList.add('active');
+    }
+}
+
+function setupWaveformClickHandler() {
+    const waveformContainer = document.getElementById('waveform');
+    if (!waveformContainer) return;
+
+    const clickHandler = (e) => {
+        if (!wavesurfer || !editLoopMode) return;
+
+        const bounds = waveformContainer.getBoundingClientRect();
+        const x = e.clientX - bounds.left;
+        const percent = x / bounds.width;
+        const duration = wavesurfer.getDuration();
+        let clickTime = percent * duration;
+
+        // Snap to nearest marker if markers are enabled
+        const markersEnabled = document.getElementById('markersBtn')?.classList.contains('active');
+        if (markersEnabled && currentBeatmap && currentBeatmap.length > 0) {
+            clickTime = findNearestBeatToLeft(clickTime);
+        }
+
+        // Check if we're resetting existing points
+        if (loopStart !== null && loopEnd !== null) {
+            if (clickTime < loopStart) {
+                // Click left of start - reset start
+                loopStart = clickTime;
+                console.log(`Loop start moved to ${clickTime.toFixed(2)}s`);
+                updateLoopVisuals();
+                if (seekOnClick) {
+                    wavesurfer.seekTo(clickTime / duration);
+                }
+                return;
+            } else if (clickTime > loopEnd) {
+                // Click right of end - reset end
+                loopEnd = clickTime;
+                console.log(`Loop end moved to ${clickTime.toFixed(2)}s`);
+                updateLoopVisuals();
+                if (seekOnClick) {
+                    wavesurfer.seekTo(clickTime / duration);
+                }
+                return;
+            }
+        }
+
+        // Normal loop setting flow
+        if (nextClickSets === 'start') {
+            loopStart = clickTime;
+            loopEnd = null;
+            nextClickSets = 'end';
+            console.log(`Loop start set to ${clickTime.toFixed(2)}s`);
+
+            // Enable loop button automatically
+            const loopBtn = document.getElementById('loopBtn');
+            if (loopBtn) {
+                loopBtn.classList.add('active');
+            }
+        } else if (nextClickSets === 'end') {
+            if (clickTime <= loopStart) {
+                console.log('Loop end must be after loop start - ignoring click');
+                return;
+            }
+            loopEnd = clickTime;
+            nextClickSets = 'start'; // Reset for next loop
+            console.log(`Loop end set to ${clickTime.toFixed(2)}s - Loop active!`);
+        }
+
+        updateLoopVisuals();
+
+        if (seekOnClick) {
+            wavesurfer.seekTo(clickTime / duration);
+        }
+    };
+
+    waveformContainer.addEventListener('click', clickHandler);
+    waveformContainer._clickHandler = clickHandler;
+}
+
+function removeWaveformClickHandler() {
+    const waveformContainer = document.getElementById('waveform');
+    if (waveformContainer && waveformContainer._clickHandler) {
+        waveformContainer.removeEventListener('click', waveformContainer._clickHandler);
+        waveformContainer._clickHandler = null;
+    }
+}
+
+function findNearestBeatToLeft(time) {
+    if (!currentBeatmap || currentBeatmap.length === 0) return time;
+
+    let nearestBeat = null;
+
+    for (let i = 0; i < currentBeatmap.length; i++) {
+        if (currentBeatmap[i].time <= time) {
+            nearestBeat = currentBeatmap[i];
+        } else {
+            break;
+        }
+    }
+
+    return nearestBeat ? nearestBeat.time : time;
 }
 
 // Start application

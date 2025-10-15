@@ -1,0 +1,160 @@
+/* Multi-Stem Player - Stacked Player Bars (Galaxy View Style from V37) */
+.multi-stem-player {
+    position: fixed;
+    bottom: 100px; /* Above the main player bar */
+    left: 0;
+    right: 0;
+    background: transparent; /* Transparent so individual bars show through */
+    backdrop-filter: none;
+    border-top: none;
+    border-bottom: none;
+    z-index: 998;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    margin: 0;
+    padding: 0;
+    gap: 0; /* No gap between stem bars */
+}
+
+.multi-stem-player.collapsed {
+    transform: translateY(calc(100% + 100px)); /* Move down by its own height PLUS bottom player height */
+    opacity: 0;
+    pointer-events: none;
+}
+
+@media (max-width: 768px) {
+    .multi-stem-player {
+        bottom: 100px;
+    }
+}
+
+/* First stem player bar - seamless attachment to bottom player */
+.stem-player-bar:first-child {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Each stem player bar - same height as bottom-player */
+.stem-player-bar {
+    height: 100px;
+    background: rgba(15, 15, 15, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    gap: 15px;
+    margin: 0;
+}
+
+.stem-player-bar:last-child {
+    border-bottom: none;
+}
+
+/* Stem-specific player controls */
+.stem-player-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.stem-player-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 6px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    transition: all 0.2s;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.stem-player-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #aaa;
+}
+
+.stem-player-btn.active {
+    background: rgba(102, 126, 234, 0.2);
+    border-color: #667eea;
+    color: #667eea;
+}
+
+.stem-player-btn.play-pause {
+    width: 38px;
+    height: 38px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.7) 0%, rgba(118, 75, 162, 0.7) 100%);
+    border: none;
+    border-radius: 50%;
+    font-size: 16px;
+    color: #fff;
+}
+
+.stem-player-btn.play-pause:hover {
+    transform: scale(1.05);
+    box-shadow: 0 3px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Stem waveform container */
+.stem-player-waveform {
+    flex: 1;
+    height: 50px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    overflow: visible;
+    position: relative;
+}
+
+/* Stem player info (filename and time) */
+.stem-player-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 200px;
+    max-width: 280px;
+    flex-shrink: 0;
+}
+
+.stem-player-filename {
+    color: #ddd;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stem-player-time {
+    color: #888;
+    font-size: 10px;
+}
+
+/* Stem volume controls */
+.stem-player-volume {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+}
+
+.stem-player-volume span {
+    color: #888;
+    font-size: 11px;
+}
+
+.stem-player-volume input[type="range"] {
+    flex: 1;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}

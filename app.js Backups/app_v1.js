@@ -2191,8 +2191,6 @@
         // Multi-Stem Player Functions (Galaxy View Style)
         let multiStemPlayerExpanded = false;
         let stemPlayerWavesurfers = {}; // Separate WaveSurfer instances for multi-stem player
-        let multiStemReadyCount = 0; // Track how many stems are loaded and ready
-        let multiStemAutoPlayOnReady = false; // Whether to auto-play stems when all are ready
 
         function toggleMultiStemPlayer() {
             console.log('toggleMultiStemPlayer called, currentFileId:', currentFileId);
@@ -2323,30 +2321,17 @@
         }
 
         async function initializeMultiStemPlayerWavesurfers() {
-            console.log('=== Initializing Multi-Stem Player Wavesurfers ===');
             const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-            multiStemReadyCount = 0;
-
-            // Check if parent player is playing - we'll sync to it
-            const parentWasPlaying = wavesurfer && wavesurfer.isPlaying();
-            multiStemAutoPlayOnReady = parentWasPlaying;
 
             for (const stemType of stemTypes) {
                 const stemFile = stemFiles[stemType];
-                if (!stemFile) {
-                    console.log(`No stem file for ${stemType}, skipping`);
-                    continue;
-                }
+                if (!stemFile) continue;
 
                 const containerId = `multi-stem-waveform-${stemType}`;
                 const container = document.getElementById(containerId);
-                if (!container) {
-                    console.log(`No container found for ${stemType}`);
-                    continue;
-                }
+                if (!container) continue;
 
                 try {
-                    console.log(`Creating WaveSurfer for ${stemType}: ${stemFile.stem_file_name}`);
                     const ws = WaveSurfer.create({
                         container: `#${containerId}`,
                         waveColor: '#555',
@@ -2364,43 +2349,13 @@
                         hideScrollbar: true
                     });
 
-                    // Store reference to stem data
-                    ws._stemFile = stemFile;
-                    ws._stemType = stemType;
+                    // Use file_url directly (already a public URL)
+                    await ws.load(stemFile.file_url);
 
-                    // Load the stem file
-                    ws.load(stemFile.file_url);
-
-                    // Store instance BEFORE ready event
+                    // Store instance
                     stemPlayerWavesurfers[stemType] = ws;
 
-                    // Handle ready event
-                    ws.once('ready', () => {
-                        multiStemReadyCount++;
-                        console.log(`Stem ${multiStemReadyCount}/${stemTypes.length} ready: ${stemType}`);
-
-                        // When all stems are ready
-                        if (multiStemReadyCount === stemTypes.length) {
-                            console.log('All stems ready - setting up synchronization');
-
-                            // Mute the parent player (we only want to hear stems)
-                            if (wavesurfer) {
-                                console.log('Muting parent player, switching to stems');
-                                wavesurfer.setVolume(0);
-                            }
-
-                            // If parent was playing, start all stems
-                            if (multiStemAutoPlayOnReady) {
-                                console.log('Parent was playing, starting all stems in sync');
-                                playAllStems();
-                            }
-
-                            // Set up sync between parent and stems
-                            setupParentStemSync();
-                        }
-                    });
-
-                    // Update time display
+                    // Update time display on timeupdate
                     ws.on('timeupdate', (currentTime) => {
                         const duration = ws.getDuration();
                         const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
@@ -2415,176 +2370,45 @@
             }
         }
 
-        // Play all stems in sync
-        function playAllStems() {
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-            stemTypes.forEach(stemType => {
-                const ws = stemPlayerWavesurfers[stemType];
-                if (ws) {
-                    ws.play();
-                    // Update play button icon
-                    const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                    if (icon) icon.textContent = '||';
-                }
-            });
-        }
-
-        // Pause all stems
-        function pauseAllStems() {
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-            stemTypes.forEach(stemType => {
-                const ws = stemPlayerWavesurfers[stemType];
-                if (ws) {
-                    ws.pause();
-                    // Update play button icon
-                    const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                    if (icon) icon.textContent = '▶';
-                }
-            });
-        }
-
-        // Set up synchronization between parent player and stems
-        function setupParentStemSync() {
-            if (!wavesurfer) return;
-
-            console.log('Setting up parent-stem synchronization');
-
-            // When parent plays, play all stems
-            wavesurfer.on('play', () => {
-                if (multiStemPlayerExpanded) {
-                    console.log('Parent play event - syncing stems');
-                    playAllStems();
-                }
-            });
-
-            // When parent pauses, pause all stems
-            wavesurfer.on('pause', () => {
-                if (multiStemPlayerExpanded) {
-                    console.log('Parent pause event - syncing stems');
-                    pauseAllStems();
-                }
-            });
-
-            // When parent seeks, seek all stems
-            wavesurfer.on('seeking', (currentTime) => {
-                if (multiStemPlayerExpanded) {
-                    const seekPosition = currentTime / wavesurfer.getDuration();
-                    console.log('Parent seek event - syncing stems to:', seekPosition);
-
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                    stemTypes.forEach(stemType => {
-                        const ws = stemPlayerWavesurfers[stemType];
-                        if (ws) {
-                            ws.seekTo(seekPosition);
-                        }
-                    });
-                }
-            });
-
-            // Keep stems in sync during playback (use first stem as reference)
-            const firstStem = stemPlayerWavesurfers['vocals'] || stemPlayerWavesurfers['drums'] ||
-                             stemPlayerWavesurfers['bass'] || stemPlayerWavesurfers['other'];
-
-            if (firstStem) {
-                firstStem.on('audioprocess', () => {
-                    if (!multiStemPlayerExpanded || !wavesurfer) return;
-
-                    const stemPosition = firstStem.getCurrentTime() / firstStem.getDuration();
-                    const parentPosition = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
-
-                    // If parent and stems drift more than 0.1 seconds apart, resync
-                    if (Math.abs(stemPosition - parentPosition) > 0.01) {
-                        wavesurfer.seekTo(stemPosition);
-                    }
-                });
-            }
-        }
-
         function destroyMultiStemPlayerWavesurfers() {
-            console.log('Destroying multi-stem player wavesurfers');
-
-            // Clean up event listeners before destroying
-            if (wavesurfer) {
-                wavesurfer.un('play');
-                wavesurfer.un('pause');
-                wavesurfer.un('seeking');
-            }
-
-            // Destroy all stem wavesurfers
             Object.values(stemPlayerWavesurfers).forEach(ws => {
                 if (ws) {
                     ws.destroy();
                 }
             });
             stemPlayerWavesurfers = {};
-            multiStemReadyCount = 0;
-
-            // Restore parent player volume if it was muted
-            if (wavesurfer && wavesurfer.getVolume() === 0) {
-                const volumeSlider = document.getElementById('volumeSlider');
-                const volume = volumeSlider ? volumeSlider.value / 100 : 1;
-                wavesurfer.setVolume(volume);
-                console.log('Restored parent player volume to:', volume);
-            }
         }
 
         function toggleMultiStemPlay(stemType) {
             const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) {
-                console.log(`No WaveSurfer instance for ${stemType}`);
-                return;
-            }
+            if (!ws) return;
 
-            const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
+            const playBtn = document.getElementById(`stem-play-${stemType}`);
 
             if (ws.isPlaying()) {
                 ws.pause();
-                if (icon) icon.textContent = '▶';
-                console.log(`Paused ${stemType} stem`);
+                if (playBtn) playBtn.textContent = '▶';
             } else {
                 ws.play();
-                if (icon) icon.textContent = '||';
-                console.log(`Playing ${stemType} stem`);
+                if (playBtn) playBtn.textContent = '⏸';
             }
         }
 
         function toggleMultiStemMute(stemType) {
             const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) {
-                console.log(`No WaveSurfer instance for ${stemType}`);
-                return;
-            }
+            if (!ws) return;
 
             const muteBtn = document.getElementById(`stem-mute-${stemType}`);
-            const volumeSlider = document.getElementById(`stem-volume-${stemType}`);
             const currentVolume = ws.getVolume();
 
             if (currentVolume > 0) {
-                // Mute - save current volume first
-                ws._savedVolume = currentVolume;
                 ws.setVolume(0);
-                if (muteBtn) {
-                    muteBtn.classList.add('active');
-                    const icon = muteBtn.querySelector('span');
-                    if (icon) icon.textContent = '🔇';
-                }
-                if (volumeSlider) volumeSlider.value = 0;
-                const percentDisplay = document.getElementById(`stem-volume-percent-${stemType}`);
-                if (percentDisplay) percentDisplay.textContent = '0%';
-                console.log(`Muted ${stemType} stem`);
+                if (muteBtn) muteBtn.classList.add('active');
             } else {
-                // Unmute - restore previous volume
-                const restoredVolume = ws._savedVolume || 1.0;
-                ws.setVolume(restoredVolume);
-                if (muteBtn) {
-                    muteBtn.classList.remove('active');
-                    const icon = muteBtn.querySelector('span');
-                    if (icon) icon.textContent = '🔊';
-                }
-                if (volumeSlider) volumeSlider.value = restoredVolume * 100;
-                const percentDisplay = document.getElementById(`stem-volume-percent-${stemType}`);
-                if (percentDisplay) percentDisplay.textContent = `${Math.round(restoredVolume * 100)}%`;
-                console.log(`Unmuted ${stemType} stem to ${Math.round(restoredVolume * 100)}%`);
+                const slider = document.querySelector(`#stem-player-${stemType} input[type="range"]`);
+                const sliderValue = slider ? slider.value / 100 : 1.0;
+                ws.setVolume(sliderValue);
+                if (muteBtn) muteBtn.classList.remove('active');
             }
         }
 
@@ -2612,35 +2436,15 @@
 
         function handleMultiStemVolumeChange(stemType, value) {
             const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) {
-                console.log(`No WaveSurfer instance for ${stemType}`);
-                return;
-            }
+            if (!ws) return;
 
             const volume = value / 100;
             ws.setVolume(volume);
 
-            // Update percentage display
-            const percentDisplay = document.getElementById(`stem-volume-percent-${stemType}`);
-            if (percentDisplay) {
-                percentDisplay.textContent = `${value}%`;
+            const valueDisplay = document.getElementById(`multi-stem-volume-value-${stemType}`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${value}%`;
             }
-
-            // Update mute button icon based on volume
-            const muteBtn = document.getElementById(`stem-mute-${stemType}`);
-            if (muteBtn) {
-                const icon = muteBtn.querySelector('span');
-                if (icon) {
-                    icon.textContent = volume === 0 ? '🔇' : '🔊';
-                }
-                if (volume === 0) {
-                    muteBtn.classList.add('active');
-                } else {
-                    muteBtn.classList.remove('active');
-                }
-            }
-
-            console.log(`Set ${stemType} volume to ${value}%`);
         }
 
         // Phase 4 Step 2B: Render visual waveforms in expansion containers

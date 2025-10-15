@@ -2673,11 +2673,15 @@
                         }
                     });
 
-                    // Add click-to-set-loop functionality (Shift+click)
-                    ws.on('interaction', () => {
-                        // This fires when user clicks on waveform
-                        // For now, just allow normal seeking
-                        // TODO: Add Shift+click to set loop points
+                    // Handle stem reaching end of file - loop if enabled
+                    ws.on('finish', () => {
+                        const loopState = stemLoopStates[stemType];
+                        if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
+                            // Loop is enabled - seek back to loop start and continue playing
+                            ws.seekTo(loopState.start / ws.getDuration());
+                            ws.play();
+                            console.log(`${stemType} finished - looping back to ${loopState.start}s`);
+                        }
                     });
 
                 } catch (error) {

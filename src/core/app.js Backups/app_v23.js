@@ -2208,17 +2208,9 @@
             multiStemPlayerExpanded = !multiStemPlayerExpanded;
             console.log('multiStemPlayerExpanded:', multiStemPlayerExpanded);
 
-            // Get bottom player rows
-            const bottomPlayer = document.getElementById('bottomPlayer');
-            const controlsRow = bottomPlayer?.children[1]; // Row 2: All controls
-
             if (multiStemPlayerExpanded) {
                 console.log('Expanding multi-stem player');
                 generateMultiStemPlayerBars();
-                // Hide bottom player controls row to make room for stem bars
-                if (controlsRow) {
-                    controlsRow.style.display = 'none';
-                }
                 // Small delay to ensure DOM is ready before removing collapsed class for smooth animation
                 setTimeout(() => {
                     multiStemPlayer.classList.remove('collapsed');
@@ -2226,10 +2218,6 @@
             } else {
                 console.log('Collapsing multi-stem player');
                 multiStemPlayer.classList.add('collapsed');
-                // Show bottom player controls row again
-                if (controlsRow) {
-                    controlsRow.style.display = 'flex';
-                }
                 // Destroy waveforms after animation completes
                 setTimeout(() => {
                     destroyMultiStemPlayerWavesurfers();

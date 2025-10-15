@@ -560,6 +560,42 @@ Implementation Notes:
   2. STEMS Button: toggleMultiStemPlayer() → fixed player at bottom
 - Both systems use different variables and WaveSurfer instances
 
+Git Commits: 59665dc
+Result: ✅ SUCCESS - Multi-stem player loads without errors
+
+=== Version 18 ===
+Date: 2025-10-14
+Files: index.html, src/core/app.js
+Prompt: "Make all 4 stem bars visible when STEMS button is clicked"
+
+Changes (Hide bottom player controls when stems expanded):
+- Moved STEMS button from Row 2 (controls) to Row 1 (waveform):
+  - Positioned absolutely in top-right corner of waveform
+  - Overlaid on waveform with semi-transparent background and blur
+  - Remains accessible when Row 2 is hidden
+- Modified toggleMultiStemPlayer() to hide/show controls row:
+  - When expanding: hides Row 2 (all controls) → more space for stem bars
+  - When collapsing: shows Row 2 again → normal player controls
+  - Uses `bottomPlayer.children[1]` to target Row 2
+  - Sets display: 'none' when expanded, display: 'flex' when collapsed
+- Removed duplicate STEMS button from Row 2 (Marker Controls section)
+- Created backups: index_v2.html, app_v23.js
+
+Implementation Notes:
+- Bottom player now has 2 modes:
+  1. Normal mode: Row 1 (waveform) + Row 2 (all controls)
+  2. Stems mode: Row 1 (waveform with STEMS button) + 4 stem bars above
+- Parent waveform always visible in bottom player Row 1
+- 4 stem bars get ~80px more vertical space (from hidden Row 2)
+- Total height for stems: 4 bars × 100px = 400px fits in most viewports
+- STEMS button styling: rgba(15, 15, 15, 0.9) with backdrop-filter: blur(4px)
+
+User Experience:
+- Click STEMS → Controls disappear, 4 stem bars slide up
+- All 4 stems visible immediately (no scrolling needed)
+- Parent waveform stays in bottom bar for visual reference
+- Click STEMS again → Stem bars slide down, controls reappear
+
 Git Commits: [pending]
-Result: ⏳ Ready for testing - Should load without errors now
+Result: ⏳ Ready for testing - All 4 stem bars should be visible now
 

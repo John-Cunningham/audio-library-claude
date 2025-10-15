@@ -678,6 +678,54 @@ Testing Instructions:
    - Seek should move all stems together
    - Rate changes should affect all stems
 
-Git Commits: [pending]
+Git Commits: e5d9d50
 Result: ⏳ READY FOR TESTING - Phase 1 complete, all core controls implemented
+
+=== Version 20 ===
+Date: 2025-10-14
+Files: src/core/app.js, styles/stems.css
+Prompt: "Fix formatTime reference error and layout issue where parent controls were hidden"
+
+User Feedback:
+1. ❌ formatTime error: "Uncaught ReferenceError: formatTime is not defined"
+2. ❌ Layout issue: "Parent player controls get hidden when stems expand - I need all controls visible"
+3. ✅ Individual stem muting works
+4. ✅ Volume mixing works
+5. ✅ Seeking individually works
+
+Changes (Bug Fixes):
+- Fixed formatTime reference in stem timeupdate handler (line 2408):
+  - Changed from `formatTime(...)` to `Utils.formatTime(...)`
+  - formatTime is exported from utils.js and imported as Utils namespace
+  - Now correctly displays time updates (e.g., "1:23 / 3:45") for each stem
+- Fixed layout to keep all controls visible when stems expand:
+  - Removed code that hides Row 2 (controls) in toggleMultiStemPlayer()
+  - Updated stems.css bottom position from 100px to 180px
+  - Multi-stem player now sits above FULL bottom player (waveform + controls)
+  - All parent controls remain accessible when stems are expanded
+- Created backups: app_v2.js, stems_v2.css
+
+Layout Before (Broken):
+```
+┌─ 4 Stem Bars (400px)
+├─ Parent Waveform Row ✓ visible
+└─ Parent Controls Row ✗ HIDDEN ← Problem!
+```
+
+Layout After (Fixed):
+```
+┌─ 4 Stem Bars (400px)
+├─ Parent Waveform Row ✓ visible
+└─ Parent Controls Row ✓ visible ← Fixed!
+```
+
+Implementation Details:
+- Bottom player total height ≈ 180px (Row 1: ~100px + Row 2: ~80px)
+- Multi-stem player positioned at `bottom: 180px`
+- When collapsed: `translateY(calc(100% + 180px))` moves it off-screen
+- When expanded: slides up to reveal all 4 stem bars above bottom player
+- Parent player always remains visible and fully functional
+
+Git Commits: [pending]
+Result: ⏳ READY FOR TESTING - formatTime fixed, layout fixed, all controls visible
 

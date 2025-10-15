@@ -25,10 +25,12 @@
 
         // Stem playback state (Phase 4 Step 2A)
         let stemWavesurfers = {}; // { vocals: WaveSurfer, drums: WaveSurfer, bass: WaveSurfer, other: WaveSurfer }
-        let stemFiles = {}; // Cached stem file data from audio_files_stems table
-        let stemMuted = { vocals: false, drums: false, bass: false, other: false };
-        let stemSoloed = { vocals: false, drums: false, bass: false, other: false };
-        let stemVolumes = { vocals: 1.0, drums: 1.0, bass: 1.0, other: 1.0 };
+        let stemFiles = {}; // Cached stem file data from audio_files_stems table for CURRENT file
+        let allStemFiles = {}; // Preloaded ALL stem files, keyed by parent audio_file_id (Phase 4 Fix 1)
+        // Phase 4 Fix 2: State keyed by stem file ID instead of stem type
+        let stemMuted = {}; // { stemFileId: true/false }
+        let stemSoloed = {}; // { stemFileId: true/false }
+        let stemVolumes = {}; // { stemFileId: 0.0-1.0 }
 
         let searchQuery = '';
         let currentTagMode = null; // Default mode for tag clicks (null = no mode, normal click behavior)
@@ -144,6 +146,9 @@
 
                 audioFiles = data || [];
 
+                // Phase 4 Fix 1: Preload ALL stem files for instant access
+                await preloadAllStems();
+
                 // Initialize view manager on first load
                 if (!ViewManager.getCurrentViewName()) {
                     // Register all views
@@ -164,6 +169,33 @@
             } catch (error) {
                 console.error('Error loading data:', error);
                 alert('Error loading files from Supabase. Check console for details.');
+            }
+        }
+
+        // Phase 4 Fix 1: Preload all stem files from database
+        async function preloadAllStems() {
+            try {
+                console.log('Preloading all stem files...');
+                const { data, error } = await supabase
+                    .from('audio_files_stems')
+                    .select('*');
+
+                if (error) throw error;
+
+                // Organize stems by parent file ID
+                allStemFiles = {};
+                if (data) {
+                    data.forEach(stem => {
+                        if (!allStemFiles[stem.audio_file_id]) {
+                            allStemFiles[stem.audio_file_id] = {};
+                        }
+                        allStemFiles[stem.audio_file_id][stem.stem_type] = stem;
+                    });
+                }
+
+                console.log(`✅ Preloaded stems for ${Object.keys(allStemFiles).length} files`);
+            } catch (error) {
+                console.error('Error preloading stems:', error);
             }
         }
 
@@ -240,8 +272,8 @@
                 autoScroll: false
             });
 
-            // Set initial volume
-            stemWS.setVolume(stemVolumes[stemType]);
+            // Phase 4 Fix 2: Set initial volume to 1.0 (will be updated by updateStemAudioState)
+            stemWS.setVolume(1.0);
 
             console.log(`Created WaveSurfer for ${stemType} stem`);
             return stemWS;
@@ -254,8 +286,8 @@
             // Destroy any existing stems
             destroyAllStems();
 
-            // Fetch stem files from database
-            const stems = await fetchStemFiles(parentFileId);
+            // Phase 4 Fix 1: Use preloaded stems instead of fetching
+            const stems = allStemFiles[parentFileId] || {};
             stemFiles = stems;
 
             // Check if we have all 4 stems
@@ -359,19 +391,36 @@
 
         // Apply solo/mute logic to stems
         function updateStemAudioState() {
-            const anySoloed = Object.values(stemSoloed).some(s => s);
+            // Phase 4 Step 2B: Get master volume from slider
+            const masterVolume = document.getElementById('volumeSlider')?.value / 100 || 1.0;
+
+            // Phase 4 Fix 2: Check if any stems are soloed (using stem file IDs)
+            const stemFileIds = Object.values(stemFiles).map(sf => sf.id);
+            const anySoloed = stemFileIds.some(id => stemSoloed[id]);
 
             Object.keys(stemWavesurfers).forEach(stemType => {
                 const stemWS = stemWavesurfers[stemType];
                 if (!stemWS) return;
 
+                const stemFileId = stemFiles[stemType]?.id;
+                if (!stemFileId) return;
+
+                // Get state for this specific stem file
+                const isMuted = stemMuted[stemFileId] || false;
+                const isSoloed = stemSoloed[stemFileId] || false;
+                const volume = stemVolumes[stemFileId] || 1.0;
+
+                let finalVolume = 0;
+
                 // If any stems are soloed, only play soloed stems
                 // Otherwise, respect individual mute states
                 if (anySoloed) {
-                    stemWS.setVolume(stemSoloed[stemType] ? stemVolumes[stemType] : 0);
+                    finalVolume = isSoloed ? masterVolume * volume : 0;
                 } else {
-                    stemWS.setVolume(stemMuted[stemType] ? 0 : stemVolumes[stemType]);
+                    finalVolume = isMuted ? 0 : masterVolume * volume;
                 }
+
+                stemWS.setVolume(finalVolume);
             });
         }
 
@@ -1747,56 +1796,112 @@
                         <div style="display: flex; flex-direction: column; gap: 12px;">
                             <!-- Vocals Stem -->
                             <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
                                     <span style="font-size: 18px;">🎤</span>
                                     <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Vocals</span>
                                     <div style="flex: 1;">
                                         <div id="stem-waveform-vocals-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
                                     </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <!-- Controls will go here -->
+                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
+                                        <!-- Volume Slider -->
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="color: #999; font-size: 11px;">Vol</span>
+                                            <input type="range" id="stem-volume-vocals-${file.id}" min="0" max="100" value="100"
+                                                   style="width: 80px;" oninput="handleStemVolumeChange('vocals', this.value)">
+                                            <span id="stem-volume-value-vocals-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
+                                        </div>
+                                        <!-- Mute Button -->
+                                        <button id="stem-mute-vocals-${file.id}" onclick="handleStemMute('vocals')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
+                                                title="Mute Vocals">🔊</button>
+                                        <!-- Solo Button -->
+                                        <button id="stem-solo-vocals-${file.id}" onclick="handleStemSolo('vocals')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
+                                                title="Solo Vocals">S</button>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Drums Stem -->
                             <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
                                     <span style="font-size: 18px;">🥁</span>
                                     <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Drums</span>
                                     <div style="flex: 1;">
                                         <div id="stem-waveform-drums-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
                                     </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <!-- Controls will go here -->
+                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
+                                        <!-- Volume Slider -->
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="color: #999; font-size: 11px;">Vol</span>
+                                            <input type="range" id="stem-volume-drums-${file.id}" min="0" max="100" value="100"
+                                                   style="width: 80px;" oninput="handleStemVolumeChange('drums', this.value)">
+                                            <span id="stem-volume-value-drums-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
+                                        </div>
+                                        <!-- Mute Button -->
+                                        <button id="stem-mute-drums-${file.id}" onclick="handleStemMute('drums')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
+                                                title="Mute Drums">🔊</button>
+                                        <!-- Solo Button -->
+                                        <button id="stem-solo-drums-${file.id}" onclick="handleStemSolo('drums')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
+                                                title="Solo Drums">S</button>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Bass Stem -->
                             <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
                                     <span style="font-size: 18px;">🎸</span>
                                     <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Bass</span>
                                     <div style="flex: 1;">
                                         <div id="stem-waveform-bass-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
                                     </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <!-- Controls will go here -->
+                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
+                                        <!-- Volume Slider -->
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="color: #999; font-size: 11px;">Vol</span>
+                                            <input type="range" id="stem-volume-bass-${file.id}" min="0" max="100" value="100"
+                                                   style="width: 80px;" oninput="handleStemVolumeChange('bass', this.value)">
+                                            <span id="stem-volume-value-bass-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
+                                        </div>
+                                        <!-- Mute Button -->
+                                        <button id="stem-mute-bass-${file.id}" onclick="handleStemMute('bass')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
+                                                title="Mute Bass">🔊</button>
+                                        <!-- Solo Button -->
+                                        <button id="stem-solo-bass-${file.id}" onclick="handleStemSolo('bass')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
+                                                title="Solo Bass">S</button>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Other Stem -->
                             <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
                                     <span style="font-size: 18px;">🎹</span>
                                     <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Other</span>
                                     <div style="flex: 1;">
                                         <div id="stem-waveform-other-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
                                     </div>
-                                    <div style="display: flex; gap: 8px; align-items: center;">
-                                        <!-- Controls will go here -->
+                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
+                                        <!-- Volume Slider -->
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="color: #999; font-size: 11px;">Vol</span>
+                                            <input type="range" id="stem-volume-other-${file.id}" min="0" max="100" value="100"
+                                                   style="width: 80px;" oninput="handleStemVolumeChange('other', this.value)">
+                                            <span id="stem-volume-value-other-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
+                                        </div>
+                                        <!-- Mute Button -->
+                                        <button id="stem-mute-other-${file.id}" onclick="handleStemMute('other')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
+                                                title="Mute Other">🔊</button>
+                                        <!-- Solo Button -->
+                                        <button id="stem-solo-other-${file.id}" onclick="handleStemSolo('other')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
+                                                title="Solo Other">S</button>
                                     </div>
                                 </div>
                             </div>
@@ -2022,7 +2127,308 @@
 
             // Phase 4 Step 2B: Render waveforms in expansion containers if stems are loaded
             if (expandedStems.has(fileId) && Object.keys(stemWavesurfers).length > 0 && currentFileId === fileId) {
-                setTimeout(() => renderStemWaveforms(fileId), 100); // Small delay to ensure DOM is ready
+                setTimeout(() => {
+                    renderStemWaveforms(fileId);
+                    restoreStemControlStates(fileId);
+                }, 100); // Small delay to ensure DOM is ready
+            }
+        }
+
+        // Phase 4: Toggle stems viewer from bottom player bar STEMS button
+        function toggleStemsViewer() {
+            if (!currentFileId) return;
+
+            // Toggle expansion state for current file
+            if (expandedStems.has(currentFileId)) {
+                expandedStems.delete(currentFileId);
+            } else {
+                expandedStems.add(currentFileId);
+            }
+
+            // Re-render to show/hide stems
+            renderFiles();
+
+            // Phase 4 Step 2B: Render waveforms in expansion containers if stems are loaded
+            if (expandedStems.has(currentFileId) && Object.keys(stemWavesurfers).length > 0) {
+                setTimeout(() => {
+                    renderStemWaveforms(currentFileId);
+                    restoreStemControlStates(currentFileId);
+                }, 100); // Small delay to ensure DOM is ready
+            }
+
+            // Update STEMS button appearance
+            updateStemsButton();
+        }
+
+        // Update STEMS button visibility and active state
+        function updateStemsButton() {
+            const stemsBtn = document.getElementById('stemsBtn');
+            if (!stemsBtn) return;
+
+            // Get current file
+            const currentFile = audioFiles.find(f => f.id === currentFileId);
+
+            // Show button only if current file has stems
+            if (currentFile && currentFile.has_stems) {
+                stemsBtn.style.display = 'block';
+                // Toggle active class and text based on multi-stem player state
+                if (multiStemPlayerExpanded) {
+                    stemsBtn.classList.add('active');
+                    stemsBtn.innerHTML = '<span>▼ STEMS</span>';
+                } else {
+                    stemsBtn.classList.remove('active');
+                    stemsBtn.innerHTML = '<span>▲ STEMS</span>';
+                }
+            } else {
+                stemsBtn.style.display = 'none';
+                // Close multi-stem player if it's open and file has no stems
+                if (multiStemPlayerExpanded) {
+                    toggleMultiStemPlayer();
+                }
+            }
+        }
+
+        // Multi-Stem Player Functions (Galaxy View Style)
+        let multiStemPlayerExpanded = false;
+        let stemPlayerWavesurfers = {}; // Separate WaveSurfer instances for multi-stem player
+
+        function toggleMultiStemPlayer() {
+            console.log('toggleMultiStemPlayer called, currentFileId:', currentFileId);
+            if (!currentFileId) {
+                console.log('No current file, returning');
+                return;
+            }
+
+            const multiStemPlayer = document.getElementById('multiStemPlayer');
+            if (!multiStemPlayer) {
+                console.log('multiStemPlayer element not found');
+                return;
+            }
+
+            multiStemPlayerExpanded = !multiStemPlayerExpanded;
+            console.log('multiStemPlayerExpanded:', multiStemPlayerExpanded);
+
+            if (multiStemPlayerExpanded) {
+                console.log('Expanding multi-stem player');
+                generateMultiStemPlayerBars();
+                // Small delay to ensure DOM is ready before removing collapsed class for smooth animation
+                setTimeout(() => {
+                    multiStemPlayer.classList.remove('collapsed');
+                }, 10);
+            } else {
+                console.log('Collapsing multi-stem player');
+                multiStemPlayer.classList.add('collapsed');
+                // Destroy waveforms after animation completes
+                setTimeout(() => {
+                    destroyMultiStemPlayerWavesurfers();
+                }, 300); // Match CSS transition duration
+            }
+
+            // Update STEMS button text
+            const stemsBtn = document.getElementById('stemsBtn');
+            if (stemsBtn) {
+                stemsBtn.innerHTML = multiStemPlayerExpanded ? '<span>▼ STEMS</span>' : '<span>▲ STEMS</span>';
+                if (multiStemPlayerExpanded) {
+                    stemsBtn.classList.add('active');
+                } else {
+                    stemsBtn.classList.remove('active');
+                }
+            }
+        }
+
+        function generateMultiStemPlayerBars() {
+            console.log('generateMultiStemPlayerBars called');
+            const multiStemPlayer = document.getElementById('multiStemPlayer');
+            console.log('multiStemPlayer element:', multiStemPlayer);
+            console.log('currentFileId:', currentFileId);
+
+            if (!multiStemPlayer || !currentFileId) {
+                console.log('Returning early - multiStemPlayer:', multiStemPlayer, 'currentFileId:', currentFileId);
+                return;
+            }
+
+            // Clear existing content
+            multiStemPlayer.innerHTML = '<div class="multi-stem-player-container" id="multiStemPlayerContainer"></div>';
+            console.log('Set innerHTML');
+
+            const container = document.getElementById('multiStemPlayerContainer');
+            console.log('container:', container);
+            if (!container) {
+                console.log('Container not found, returning');
+                return;
+            }
+
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            console.log('stemFiles:', stemFiles);
+
+            stemTypes.forEach(stemType => {
+                const stemFile = stemFiles[stemType];
+                console.log(`stemFile for ${stemType}:`, stemFile);
+                if (!stemFile) {
+                    console.log(`No stem file for ${stemType}, skipping`);
+                    return;
+                }
+
+                const stemBarHTML = `
+                    <div class="stem-player-bar" id="stem-player-${stemType}">
+                        <div class="stem-player-header">
+                            <div class="stem-player-title">${stemType}</div>
+                            <div class="stem-player-controls">
+                                <button class="stem-player-btn" id="stem-play-${stemType}" onclick="toggleMultiStemPlay('${stemType}')">
+                                    ▶
+                                </button>
+                                <button class="stem-player-btn" id="stem-mute-${stemType}" onclick="toggleMultiStemMute('${stemType}')">
+                                    MUTE
+                                </button>
+                                <button class="stem-player-btn" id="stem-loop-${stemType}" onclick="toggleMultiStemLoop('${stemType}')">
+                                    LOOP
+                                </button>
+                            </div>
+                        </div>
+                        <div class="stem-player-waveform-container">
+                            <div id="multi-stem-waveform-${stemType}" style="width: 100%; height: 80px;"></div>
+                        </div>
+                        <div class="stem-player-footer">
+                            <div class="stem-player-volume">
+                                <span style="font-size: 11px; color: #999;">VOL</span>
+                                <input type="range" min="0" max="100" value="100"
+                                    oninput="handleMultiStemVolumeChange('${stemType}', this.value)">
+                                <span id="multi-stem-volume-value-${stemType}" style="font-size: 11px; color: #999; min-width: 35px;">100%</span>
+                            </div>
+                            <div class="stem-player-time" id="multi-stem-time-${stemType}">0:00 / 0:00</div>
+                        </div>
+                    </div>
+                `;
+
+                container.insertAdjacentHTML('beforeend', stemBarHTML);
+            });
+
+            // Initialize WaveSurfer instances after DOM is ready
+            setTimeout(() => {
+                initializeMultiStemPlayerWavesurfers();
+            }, 50);
+        }
+
+        async function initializeMultiStemPlayerWavesurfers() {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+
+            for (const stemType of stemTypes) {
+                const stemFile = stemFiles[stemType];
+                if (!stemFile) continue;
+
+                const containerId = `multi-stem-waveform-${stemType}`;
+                const container = document.getElementById(containerId);
+                if (!container) continue;
+
+                try {
+                    const ws = WaveSurfer.create({
+                        container: `#${containerId}`,
+                        waveColor: '#4a5568',
+                        progressColor: '#f59e0b',
+                        cursorColor: '#f59e0b',
+                        height: 80,
+                        barWidth: 2,
+                        barGap: 1,
+                        barRadius: 2,
+                        normalize: true,
+                        backend: 'WebAudio'
+                    });
+
+                    // Use file_url directly (already a public URL)
+                    await ws.load(stemFile.file_url);
+
+                    // Store instance
+                    stemPlayerWavesurfers[stemType] = ws;
+
+                    // Update time display on timeupdate
+                    ws.on('timeupdate', (currentTime) => {
+                        const duration = ws.getDuration();
+                        const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
+                        if (timeDisplay) {
+                            timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+                        }
+                    });
+
+                } catch (error) {
+                    console.error(`Error loading multi-stem waveform for ${stemType}:`, error);
+                }
+            }
+        }
+
+        function destroyMultiStemPlayerWavesurfers() {
+            Object.values(stemPlayerWavesurfers).forEach(ws => {
+                if (ws) {
+                    ws.destroy();
+                }
+            });
+            stemPlayerWavesurfers = {};
+        }
+
+        function toggleMultiStemPlay(stemType) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const playBtn = document.getElementById(`stem-play-${stemType}`);
+
+            if (ws.isPlaying()) {
+                ws.pause();
+                if (playBtn) playBtn.textContent = '▶';
+            } else {
+                ws.play();
+                if (playBtn) playBtn.textContent = '⏸';
+            }
+        }
+
+        function toggleMultiStemMute(stemType) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const muteBtn = document.getElementById(`stem-mute-${stemType}`);
+            const currentVolume = ws.getVolume();
+
+            if (currentVolume > 0) {
+                ws.setVolume(0);
+                if (muteBtn) muteBtn.classList.add('active');
+            } else {
+                const slider = document.querySelector(`#stem-player-${stemType} input[type="range"]`);
+                const sliderValue = slider ? slider.value / 100 : 1.0;
+                ws.setVolume(sliderValue);
+                if (muteBtn) muteBtn.classList.remove('active');
+            }
+        }
+
+        function toggleMultiStemLoop(stemType) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const loopBtn = document.getElementById(`stem-loop-${stemType}`);
+            const currentLoop = ws.options.interact;
+
+            // Toggle loop - WaveSurfer v7 doesn't have built-in loop, so we use finish event
+            if (loopBtn.classList.contains('active')) {
+                loopBtn.classList.remove('active');
+                ws.un('finish'); // Remove finish event
+            } else {
+                loopBtn.classList.add('active');
+                ws.on('finish', () => {
+                    if (loopBtn.classList.contains('active')) {
+                        ws.seekTo(0);
+                        ws.play();
+                    }
+                });
+            }
+        }
+
+        function handleMultiStemVolumeChange(stemType, value) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const volume = value / 100;
+            ws.setVolume(volume);
+
+            const valueDisplay = document.getElementById(`multi-stem-volume-value-${stemType}`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${value}%`;
             }
         }
 
@@ -2071,6 +2477,42 @@
                     console.log(`Rendered visual waveform for ${stemType} stem`);
                 } else {
                     console.warn(`No stem file found for ${stemType}`);
+                }
+            });
+        }
+
+        // Phase 4 Step 2B: Restore control states after re-expansion
+        function restoreStemControlStates(fileId) {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+
+            stemTypes.forEach(stemType => {
+                // Phase 4 Fix 2: Get stem file ID
+                const stemFileId = stemFiles[stemType]?.id;
+                if (!stemFileId) return;
+
+                // Restore volume slider
+                const volumeSlider = document.getElementById(`stem-volume-${stemType}-${fileId}`);
+                const volumeValue = document.getElementById(`stem-volume-value-${stemType}-${fileId}`);
+                if (volumeSlider && volumeValue) {
+                    const currentVolume = Math.round((stemVolumes[stemFileId] || 1.0) * 100);
+                    volumeSlider.value = currentVolume;
+                    volumeValue.textContent = `${currentVolume}%`;
+                }
+
+                // Restore mute button
+                const muteBtn = document.getElementById(`stem-mute-${stemType}-${fileId}`);
+                if (muteBtn) {
+                    const isMuted = stemMuted[stemFileId] || false;
+                    muteBtn.textContent = isMuted ? '🔇' : '🔊';
+                    muteBtn.style.background = isMuted ? '#8b0000' : '#2a2a2a';
+                }
+
+                // Restore solo button
+                const soloBtn = document.getElementById(`stem-solo-${stemType}-${fileId}`);
+                if (soloBtn) {
+                    const isSoloed = stemSoloed[stemFileId] || false;
+                    soloBtn.style.background = isSoloed ? '#00aa00' : '#2a2a2a';
+                    soloBtn.style.borderColor = isSoloed ? '#00ff00' : '#3a3a3a';
                 }
             });
         }
@@ -3532,6 +3974,9 @@
             if (currentFileItem) {
                 currentFileItem.classList.add('active');
             }
+
+            // Phase 4: Update STEMS button visibility/state
+            updateStemsButton();
         }
 
         // Play/Pause audio
@@ -3609,25 +4054,8 @@
                 wavesurfer.setVolume(volume);
             }
 
-            // Phase 4 Step 2A: Also set volume for all stem WaveSurfers
-            Object.keys(stemWavesurfers).forEach(stemType => {
-                const stemWS = stemWavesurfers[stemType];
-                if (stemWS) {
-                    // Apply master volume to stem, respecting per-stem volume and solo/mute state
-                    const anySoloed = Object.values(stemSoloed).some(s => s);
-                    let finalVolume = 0;
-
-                    if (anySoloed) {
-                        // If any stems are soloed, only soloed stems get volume
-                        finalVolume = stemSoloed[stemType] ? volume * stemVolumes[stemType] : 0;
-                    } else {
-                        // Otherwise, respect individual mute states
-                        finalVolume = stemMuted[stemType] ? 0 : volume * stemVolumes[stemType];
-                    }
-
-                    stemWS.setVolume(finalVolume);
-                }
-            });
+            // Phase 4 Step 2B: Update all stem volumes
+            updateStemAudioState();
 
             // Calculate decibels (relative to 100% = 0dB)
             let db;
@@ -3746,6 +4174,63 @@
         // Reset rate to 1.0x
         function resetRate() {
             setPlaybackRate(1.0);
+        }
+
+        // Phase 4 Step 2B: Stem volume control
+        function handleStemVolumeChange(stemType, value) {
+            // Phase 4 Fix 2: Use stem file ID instead of stem type
+            const stemFileId = stemFiles[stemType]?.id;
+            if (!stemFileId) return;
+
+            const volume = value / 100;
+            stemVolumes[stemFileId] = volume;
+
+            // Update the volume value display
+            const valueDisplay = document.getElementById(`stem-volume-value-${stemType}-${currentFileId}`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${value}%`;
+            }
+
+            // Update actual audio volume
+            updateStemAudioState();
+        }
+
+        // Phase 4 Step 2B: Stem mute toggle
+        function handleStemMute(stemType) {
+            // Phase 4 Fix 2: Use stem file ID instead of stem type
+            const stemFileId = stemFiles[stemType]?.id;
+            if (!stemFileId) return;
+
+            stemMuted[stemFileId] = !stemMuted[stemFileId];
+
+            // Update button appearance
+            const muteBtn = document.getElementById(`stem-mute-${stemType}-${currentFileId}`);
+            if (muteBtn) {
+                muteBtn.textContent = stemMuted[stemFileId] ? '🔇' : '🔊';
+                muteBtn.style.background = stemMuted[stemFileId] ? '#8b0000' : '#2a2a2a';
+            }
+
+            // Update actual audio volume
+            updateStemAudioState();
+        }
+
+        // Phase 4 Step 2B: Stem solo toggle
+        function handleStemSolo(stemType) {
+            // Phase 4 Fix 2: Use stem file ID instead of stem type
+            const stemFileId = stemFiles[stemType]?.id;
+            if (!stemFileId) return;
+
+            stemSoloed[stemFileId] = !stemSoloed[stemFileId];
+
+            // Update button appearance
+            const soloBtn = document.getElementById(`stem-solo-${stemType}-${currentFileId}`);
+            if (soloBtn) {
+                soloBtn.style.background = stemSoloed[stemFileId] ? '#00aa00' : '#2a2a2a';
+                soloBtn.style.borderColor = stemSoloed[stemFileId] ? '#00ff00' : '#3a3a3a';
+            }
+
+            // Update actual audio volume
+            updateStemAudioState();
         }
 
         // Next track
@@ -4698,3 +5183,12 @@ window.togglePreserveLoop = togglePreserveLoop;
 window.toggleBPMLock = toggleBPMLock;
 window.toggleRecordActions = toggleRecordActions;
 window.playRecordedActions = playRecordedActions;
+window.handleStemVolumeChange = handleStemVolumeChange;
+window.handleStemMute = handleStemMute;
+window.handleStemSolo = handleStemSolo;
+window.toggleStemsViewer = toggleStemsViewer;
+window.toggleMultiStemPlayer = toggleMultiStemPlayer;
+window.toggleMultiStemPlay = toggleMultiStemPlay;
+window.toggleMultiStemMute = toggleMultiStemMute;
+window.toggleMultiStemLoop = toggleMultiStemLoop;
+window.handleMultiStemVolumeChange = handleMultiStemVolumeChange;

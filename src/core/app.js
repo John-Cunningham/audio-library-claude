@@ -2248,20 +2248,14 @@
             }
 
             // Clear existing content
-            multiStemPlayer.innerHTML = '<div class="multi-stem-player-container" id="multiStemPlayerContainer"></div>';
-            console.log('Set innerHTML');
-
-            const container = document.getElementById('multiStemPlayerContainer');
-            console.log('container:', container);
-            if (!container) {
-                console.log('Container not found, returning');
-                return;
-            }
+            multiStemPlayer.innerHTML = '';
+            console.log('Cleared multiStemPlayer innerHTML');
 
             const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            const stemIcons = { vocals: '🎤', drums: '🥁', bass: '🎸', other: '🎹' };
             console.log('stemFiles:', stemFiles);
 
-            stemTypes.forEach(stemType => {
+            stemTypes.forEach((stemType, index) => {
                 const stemFile = stemFiles[stemType];
                 console.log(`stemFile for ${stemType}:`, stemFile);
                 if (!stemFile) {
@@ -2269,38 +2263,42 @@
                     return;
                 }
 
+                // Truncate filename if too long
+                const displayName = stemFile.name.length > 30
+                    ? stemFile.name.substring(0, 30) + '...'
+                    : stemFile.name;
+
                 const stemBarHTML = `
                     <div class="stem-player-bar" id="stem-player-${stemType}">
-                        <div class="stem-player-header">
-                            <div class="stem-player-title">${stemType}</div>
-                            <div class="stem-player-controls">
-                                <button class="stem-player-btn" id="stem-play-${stemType}" onclick="toggleMultiStemPlay('${stemType}')">
-                                    ▶
-                                </button>
-                                <button class="stem-player-btn" id="stem-mute-${stemType}" onclick="toggleMultiStemMute('${stemType}')">
-                                    MUTE
-                                </button>
-                                <button class="stem-player-btn" id="stem-loop-${stemType}" onclick="toggleMultiStemLoop('${stemType}')">
-                                    LOOP
-                                </button>
-                            </div>
+                        <div class="stem-player-controls">
+                            <button class="stem-player-btn play-pause" onclick="toggleMultiStemPlay('${stemType}')" id="stem-play-pause-${stemType}">
+                                <span id="stem-play-pause-icon-${stemType}">||</span>
+                            </button>
+                            <button class="stem-player-btn" onclick="toggleMultiStemMute('${stemType}')" id="stem-mute-${stemType}" title="Mute">
+                                <span>🔊</span>
+                            </button>
+                            <button class="stem-player-btn" onclick="toggleMultiStemLoop('${stemType}')" id="stem-loop-${stemType}" title="Loop">
+                                <span>LOOP</span>
+                            </button>
                         </div>
-                        <div class="stem-player-waveform-container">
-                            <div id="multi-stem-waveform-${stemType}" style="width: 100%; height: 80px;"></div>
-                        </div>
-                        <div class="stem-player-footer">
-                            <div class="stem-player-volume">
-                                <span style="font-size: 11px; color: #999;">VOL</span>
-                                <input type="range" min="0" max="100" value="100"
-                                    oninput="handleMultiStemVolumeChange('${stemType}', this.value)">
-                                <span id="multi-stem-volume-value-${stemType}" style="font-size: 11px; color: #999; min-width: 35px;">100%</span>
-                            </div>
+
+                        <div class="stem-player-waveform" id="multi-stem-waveform-${stemType}"></div>
+
+                        <div class="stem-player-info">
+                            <div class="stem-player-filename">${displayName}</div>
                             <div class="stem-player-time" id="multi-stem-time-${stemType}">0:00 / 0:00</div>
+                        </div>
+
+                        <div class="stem-player-volume">
+                            <span>🔊</span>
+                            <input type="range" min="0" max="100" value="100"
+                                   oninput="handleMultiStemVolumeChange('${stemType}', this.value)" id="stem-volume-${stemType}">
+                            <span id="stem-volume-percent-${stemType}">100%</span>
                         </div>
                     </div>
                 `;
 
-                container.insertAdjacentHTML('beforeend', stemBarHTML);
+                multiStemPlayer.insertAdjacentHTML('beforeend', stemBarHTML);
             });
 
             // Initialize WaveSurfer instances after DOM is ready
@@ -2323,15 +2321,19 @@
                 try {
                     const ws = WaveSurfer.create({
                         container: `#${containerId}`,
-                        waveColor: '#4a5568',
-                        progressColor: '#f59e0b',
-                        cursorColor: '#f59e0b',
-                        height: 80,
+                        waveColor: '#555',
+                        progressColor: '#667eea',
+                        cursorColor: '#ffffff',
+                        height: 50,
                         barWidth: 2,
                         barGap: 1,
                         barRadius: 2,
+                        cursorWidth: 1,
                         normalize: true,
-                        backend: 'WebAudio'
+                        responsive: true,
+                        backend: 'WebAudio',
+                        interact: true,
+                        hideScrollbar: true
                     });
 
                     // Use file_url directly (already a public URL)

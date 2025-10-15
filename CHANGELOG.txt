@@ -1,3 +1,74 @@
+=== Version 27b - Phase 2: Basic Independent Loop Regions ===
+Date: 2025-10-15
+Branch: experimental-v27-stem-independence
+Status: ⏳ IN PROGRESS - Basic loop functionality implemented, visual rendering pending
+
+**PHASE 2 SUMMARY**:
+Implemented basic independent loop regions for stem players. Each stem can now have its own loop points and loop independently.
+
+**PHASE 2 CHANGES**:
+
+1. Added per-stem loop state (src/core/app.js:2247-2253):
+   ```javascript
+   let stemLoopStates = {
+       vocals: { enabled: false, start: null, end: null },
+       drums: { enabled: false, start: null, end: null },
+       bass: { enabled: false, start: null, end: null },
+       other: { enabled: false, start: null, end: null }
+   };
+   ```
+
+2. Updated toggleMultiStemLoop() to use loop state (lines 2889-2914):
+   - Toggles loop enabled/disabled per stem
+   - Defaults to full file (0 to duration) if no loop points set
+   - Updates loop button visual state (active class)
+
+3. Added loop playback logic to timeupdate event (lines 2665-2673):
+   - Checks if stem loop is enabled and has valid points
+   - When playhead reaches loop end → seeks back to loop start
+   - Seamless looping per stem
+
+4. Created setStemLoopRegion() helper function (lines 2917-2924):
+   - Programmatically set loop start/end points per stem
+   - Exposed to global scope for testing: `window.setStemLoopRegion`
+   - TODO: Add visual loop region overlay on waveforms
+
+**CURRENT FUNCTIONALITY**:
+✅ Each stem can toggle loop on/off independently
+✅ Loop defaults to full file when first enabled
+✅ Loop playback works (jumps back to start at end)
+✅ Can programmatically set loop points via setStemLoopRegion()
+
+**TESTING INSTRUCTIONS**:
+```javascript
+// In browser console:
+setStemLoopRegion('vocals', 5, 10);  // Set vocals loop from 5s to 10s
+setStemLoopRegion('drums', 2, 8);    // Set drums loop from 2s to 8s
+// Then click loop buttons on stems to test
+```
+
+**STILL TODO** (for Phase 2 completion):
+- Visual loop region overlay on stem waveforms (like parent player)
+- Click/drag on waveform to set loop points
+- Loop manipulation controls (shift left/right, half/double, expand/shrink)
+- Loop info display (start time, end time, duration)
+
+**FILES MODIFIED**:
+- src/core/app.js (loop state, toggleMultiStemLoop, timeupdate event, setStemLoopRegion)
+
+**BACKUPS CREATED**:
+- src/core/app.js Backups/app_v27b_pre_loop.js
+
+**GIT COMMITS**:
+- [pending] Phase 2: Basic independent loop regions
+
+**NEXT STEPS**:
+- Add loop region visual rendering
+- Add click-to-set-loop UI interaction
+- Add loop manipulation controls
+
+---
+
 === Version 27a - Phase 1: Independent Stem Playback ===
 Date: 2025-10-15
 Branch: experimental-v27-stem-independence

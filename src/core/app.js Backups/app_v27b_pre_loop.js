@@ -2244,14 +2244,6 @@
         let stemPlaybackIndependent = {}; // {vocals: true, drums: false, ...} - whether stem should play when parent plays (user's active selection)
         let currentParentFileBPM = null; // Store parent file's original BPM for calculations
 
-        // Phase 2B: Individual Loop Controls (Version 27b)
-        let stemLoopStates = {
-            vocals: { enabled: false, start: null, end: null },
-            drums: { enabled: false, start: null, end: null },
-            bass: { enabled: false, start: null, end: null },
-            other: { enabled: false, start: null, end: null }
-        };
-
         // Phase 1: Pre-load stems silently in background when file loads
         async function preloadMultiStemWavesurfers(fileId) {
             console.log('=== Pre-loading Multi-Stem Wavesurfers (Phase 1) ===');
@@ -2654,30 +2646,13 @@
                         }
                     });
 
-                    // Update time display and handle loop playback
+                    // Update time display
                     ws.on('timeupdate', (currentTime) => {
                         const duration = ws.getDuration();
                         const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
                         if (timeDisplay) {
                             timeDisplay.textContent = `${Utils.formatTime(currentTime)} / ${Utils.formatTime(duration)}`;
                         }
-
-                        // Check for loop playback
-                        const loopState = stemLoopStates[stemType];
-                        if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                            // If playhead reaches or passes loop end, jump back to loop start
-                            if (currentTime >= loopState.end) {
-                                ws.seekTo(loopState.start / duration);
-                                console.log(`${stemType} looped back to ${loopState.start}s`);
-                            }
-                        }
-                    });
-
-                    // Add click-to-set-loop functionality (Shift+click)
-                    ws.on('interaction', () => {
-                        // This fires when user clicks on waveform
-                        // For now, just allow normal seeking
-                        // TODO: Add Shift+click to set loop points
                     });
 
                 } catch (error) {
@@ -2890,37 +2865,22 @@
             const ws = stemPlayerWavesurfers[stemType];
             if (!ws) return;
 
-            const loopState = stemLoopStates[stemType];
             const loopBtn = document.getElementById(`stem-loop-${stemType}`);
+            const currentLoop = ws.options.interact;
 
-            // Toggle loop enabled state
-            loopState.enabled = !loopState.enabled;
-
-            // Update button visual state
-            if (loopState.enabled) {
-                loopBtn.classList.add('active');
-                console.log(`${stemType} loop enabled:`, loopState.start, '-', loopState.end);
-
-                // If no loop points set yet, default to full file
-                if (loopState.start === null || loopState.end === null) {
-                    loopState.start = 0;
-                    loopState.end = ws.getDuration();
-                    console.log(`${stemType} loop points defaulted to full file: 0 - ${loopState.end}s`);
-                }
-            } else {
+            // Toggle loop - WaveSurfer v7 doesn't have built-in loop, so we use finish event
+            if (loopBtn.classList.contains('active')) {
                 loopBtn.classList.remove('active');
-                console.log(`${stemType} loop disabled`);
+                ws.un('finish'); // Remove finish event
+            } else {
+                loopBtn.classList.add('active');
+                ws.on('finish', () => {
+                    if (loopBtn.classList.contains('active')) {
+                        ws.seekTo(0);
+                        ws.play();
+                    }
+                });
             }
-        }
-
-        // Helper function to set stem loop region
-        function setStemLoopRegion(stemType, startTime, endTime) {
-            const loopState = stemLoopStates[stemType];
-            loopState.start = startTime;
-            loopState.end = endTime;
-            console.log(`${stemType} loop region set: ${startTime}s - ${endTime}s`);
-
-            // TODO: Render loop region visual overlay on waveform
         }
 
         function handleMultiStemVolumeChange(stemType, value) {
@@ -5963,5 +5923,3 @@ window.handleMultiStemVolumeChange = handleMultiStemVolumeChange;
 window.handleStemRateChange = handleStemRateChange;
 window.setStemRatePreset = setStemRatePreset;
 window.toggleStemRateLock = toggleStemRateLock;
-// Phase 2B: Loop region functions
-window.setStemLoopRegion = setStemLoopRegion;

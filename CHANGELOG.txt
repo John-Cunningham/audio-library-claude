@@ -1,7 +1,165 @@
+=== Version 27c - Phase 4: Independent Cycle Mode (FIX) ===
+Date: 2025-10-15
+Branch: experimental-v27-stem-independence
+Status: ⏳ READY FOR TESTING - Fixed stem independence from parent
+
+**BUG FIX**: Removed bidirectional sync that made parent follow stems.
+
+**ISSUE FOUND**:
+- When stem entered cycle mode and started playing, parent would follow it
+- Root cause: audioprocess listener on first stem was syncing parent TO stem (line 2814-2825)
+- This made ALL players (parent + all stems) jump to the stem's loop position
+
+**FIX APPLIED**:
+1. Removed bidirectional sync (lines 2809-2813):
+   - Parent no longer follows stem positions
+   - Stems can now play independently without affecting parent
+
+2. Updated parent pause behavior (lines 2771-2792):
+   - Parent pause only affects NON-INDEPENDENT stems
+   - Stems with active loops continue playing independently
+   - Independent = has loop enabled OR manually playing
+
+3. Updated parent seeking behavior (lines 2794-2813):
+   - Parent seek only affects NON-INDEPENDENT stems
+   - Stems with active loops maintain their own position
+   - Allows stems to loop in different sections while parent plays elsewhere
+
+**NEW ARCHITECTURE**:
+```
+Parent Player:
+├─ Timeline control (play/pause/seek)
+├─ Modifiers (rate, volume) multiply with stem values
+└─ Does NOT control independent stems
+
+Independent Stems (when loop enabled):
+├─ Own playback position (can be at 5s while parent at 20s)
+├─ Own loop region (loop 2-8s while parent plays full file)
+├─ Ignore parent pause/seek events
+└─ Still affected by parent rate/volume multipliers
+
+Non-Independent Stems (no loop):
+├─ Follow parent timeline exactly
+├─ Parent play → stem plays
+├─ Parent pause → stem pauses
+└─ Parent seek → stem seeks
+```
+
+**TESTING INSTRUCTIONS**:
+1. Load file with stems, click STEMS button
+2. Click LOOP on vocals → button should light up
+3. Click vocals waveform → sets loop start (watch console)
+4. Click vocals waveform again → sets loop end, auto-plays vocals
+5. **VERIFY**: Only vocals loops, other stems unaffected
+6. **VERIFY**: Parent waveform stays at its own position
+7. Seek parent → only non-looping stems should follow
+8. Pause parent → vocals keeps looping
+
+=== Version 27c - Phase 4: Independent Cycle Mode ===
+Date: 2025-10-15
+Branch: experimental-v27-stem-independence
+Status: ✅ IMPLEMENTED - Needs testing after bug fix
+
+**USER PRIORITY**: "I won't use this [loops] nearly as much as I will use individual cycle controls for the stems."
+
+**PHASE 4 SUMMARY**:
+Implemented independent cycle mode for stem players. Each stem can now enter cycle mode where clicking the waveform sets loop start/end points and automatically starts playback. This is the quick "click-to-loop-and-play" workflow from the parent player, now available per stem.
+
+**PHASE 4 CHANGES**:
+
+1. Added per-stem cycle mode state (src/core/app.js:2255-2267):
+   ```javascript
+   let stemCycleModes = {
+       vocals: false, drums: false, bass: false, other: false
+   };
+   let stemNextClickSets = {
+       vocals: 'start', drums: 'start', bass: 'start', other: 'start'
+   };
+   ```
+
+2. Modified toggleMultiStemLoop() to activate cycle mode (line 2907-2910):
+   - LOOP button now toggles cycle mode instead of basic loop
+   - Clicking LOOP → enters cycle mode
+   - User can then click waveform to set loop points
+
+3. Created toggleStemCycleMode() function (lines 2925-2950):
+   - Toggles cycle mode on/off per stem
+   - Updates LOOP button visual state (active + cycle-mode classes)
+   - Entering: Prepares for loop point selection
+   - Exiting: Disables loop and clears loop points
+
+4. Created setupStemCycleModeClickHandler() function (lines 2952-3043):
+   - Installs click handler on each stem waveform
+   - When cycle mode ON: Clicking waveform sets loop points
+   - First click → sets loop start
+   - Second click → sets loop end and AUTO-STARTS PLAYBACK
+   - Can adjust existing loop by clicking left/right of markers
+   - Prevents WaveSurfer seeking when in cycle mode
+
+5. Updated stem audioprocess event for looping (lines 2386-2394):
+   - Checks if loop is enabled and has valid start/end points
+   - When playhead reaches loop end → seeks back to loop start
+   - Seamless looping per stem
+
+**CYCLE MODE WORKFLOW**:
+1. User clicks LOOP button on a stem (e.g., vocals)
+2. Cycle mode activates (LOOP button lights up)
+3. User clicks waveform to set loop start
+4. User clicks again to set loop end
+5. Stem AUTOMATICALLY starts playing the loop
+6. Stem loops indefinitely until user stops or disables cycle mode
+
+**ADVANTAGES OVER BASIC LOOP**:
+- ✅ Quick workflow: 3 clicks (LOOP → Start → End) and you're looping
+- ✅ Auto-play: No need to manually start playback after setting loop
+- ✅ Visual feedback: LOOP button shows cycle mode active
+- ✅ Per-stem independence: Each stem has its own cycle mode
+- ✅ Adjustable: Click outside loop to move start/end points
+
+**CURRENT FUNCTIONALITY**:
+✅ Each stem has independent cycle mode toggle (LOOP button)
+✅ Click waveform to set loop start/end when cycle mode active
+✅ Auto-play when loop end is set
+✅ Loop playback works (jumps back to start at end)
+✅ Cycle mode visual state (active class on button)
+
+**TESTING INSTRUCTIONS**:
+1. Load file with stems and expand stems (STEMS button)
+2. Click LOOP button on vocals stem (should light up)
+3. Click vocals waveform to set loop start (console logs start time)
+4. Click vocals waveform again to set loop end (stem auto-plays!)
+5. Verify vocals loops back to start at loop end
+6. Try different stems independently
+7. Click LOOP button again to exit cycle mode
+
+**STILL TODO** (Lower Priority):
+- Visual loop region overlay on stem waveforms (green/blue like parent)
+- Loop manipulation controls (shift left/right, half/double, expand/shrink)
+- Loop info display (start time, end time, duration)
+- Hover preview when setting loop end
+
+**FILES MODIFIED**:
+- src/core/app.js (cycle mode state, toggle functions, click handlers, loop playback)
+
+**BACKUPS CREATED**:
+- src/core/app.js Backups/app_v27c_pre_cycle.js
+
+**GIT COMMITS**:
+- [pending] Phase 4: Independent cycle mode per stem
+
+**NEXT STEPS**:
+- Test cycle mode with user
+- Based on feedback, either:
+  - Add visual loop overlays (Phase 4 completion)
+  - Move to Phase 3: Markers (if user wants)
+  - Move to Phase 5: Keyboard shortcuts (if user wants)
+
+---
+
 === Version 27b - Phase 2: Basic Independent Loop Regions ===
 Date: 2025-10-15
 Branch: experimental-v27-stem-independence
-Status: ⏳ IN PROGRESS - Basic loop functionality implemented, visual rendering pending
+Status: ⏸️ DEFERRED - User priority is cycle mode (Phase 4) not basic loops
 
 **PHASE 2 SUMMARY**:
 Implemented basic independent loop regions for stem players. Each stem can now have its own loop points and loop independently.

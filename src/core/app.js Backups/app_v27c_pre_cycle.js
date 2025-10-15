@@ -2252,20 +2252,6 @@
             other: { enabled: false, start: null, end: null }
         };
 
-        // Phase 4: Cycle Mode Controls (Version 27c)
-        let stemCycleModes = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemNextClickSets = {
-            vocals: 'start',
-            drums: 'start',
-            bass: 'start',
-            other: 'start'
-        };
-
         // Phase 1: Pre-load stems silently in background when file loads
         async function preloadMultiStemWavesurfers(fileId) {
             console.log('=== Pre-loading Multi-Stem Wavesurfers (Phase 1) ===');
@@ -2374,23 +2360,13 @@
                 // Store instance
                 stemPlayerWavesurfers[stemType] = ws;
 
-                // Set up time display updates and loop checking
+                // Set up time display updates
                 ws.on('audioprocess', () => {
                     const currentTime = ws.getCurrentTime();
                     const duration = ws.getDuration();
                     const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
                     if (timeDisplay) {
                         timeDisplay.textContent = `${Utils.formatTime(currentTime)} / ${Utils.formatTime(duration)}`;
-                    }
-
-                    // Phase 4: Check if we need to loop this stem
-                    const loopState = stemLoopStates[stemType];
-                    if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                        if (currentTime >= loopState.end) {
-                            // Loop back to start
-                            ws.seekTo(loopState.start / duration);
-                            console.log(`[${stemType}] Looping back to ${loopState.start.toFixed(2)}s`);
-                        }
                     }
                 });
 
@@ -2400,9 +2376,6 @@
                     if (timeDisplay) {
                         timeDisplay.textContent = `0:00 / ${Utils.formatTime(duration)}`;
                     }
-
-                    // Phase 4: Add cycle mode click handler for this stem
-                    setupStemCycleModeClickHandler(stemType, container, ws);
                 });
 
                 // Wait for ready
@@ -2768,54 +2741,61 @@
                 }
             });
 
-            // When parent pauses, pause only NON-INDEPENDENT stems
-            // Independent stems (those with their own cycles/loops) continue playing
+            // When parent pauses, pause ALL stems (master control)
             wavesurfer.on('pause', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent pause event - pausing non-independent stems');
+                    console.log('Parent pause event - pausing all stems (master control)');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
-                        const loopState = stemLoopStates[stemType];
-                        const isIndependent = loopState.enabled || stemPlaybackIndependent[stemType];
-
-                        if (ws && !isIndependent) {
-                            // Only pause stems that aren't in their own loop/cycle
+                        if (ws) {
+                            // Remember which stems were playing BEFORE parent pause
                             if (ws.isPlaying()) {
+                                stemPlaybackIndependent[stemType] = true; // Mark as active
                                 ws.pause();
                                 const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
                                 if (icon) icon.textContent = '▶';
+                            } else {
+                                stemPlaybackIndependent[stemType] = false; // Mark as inactive
                             }
                         }
                     });
                 }
             });
 
-            // When parent seeks, seek only NON-INDEPENDENT stems
-            // Independent stems (those with their own cycles/loops) maintain their own position
+            // When parent seeks, seek all stems
             wavesurfer.on('seeking', (currentTime) => {
                 if (multiStemPlayerExpanded) {
                     const seekPosition = currentTime / wavesurfer.getDuration();
-                    console.log('Parent seek event - syncing non-independent stems to:', seekPosition);
+                    console.log('Parent seek event - syncing stems to:', seekPosition);
 
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
-                        const loopState = stemLoopStates[stemType];
-                        const isIndependent = loopState.enabled || stemPlaybackIndependent[stemType];
-
-                        if (ws && !isIndependent) {
-                            // Only seek stems that aren't in their own loop/cycle
+                        if (ws) {
                             ws.seekTo(seekPosition);
                         }
                     });
                 }
             });
 
-            // REMOVED: Bidirectional sync that made parent follow stems
-            // Stems now have independent playback and loops
-            // Parent controls act as MODIFIERS (rate × rate, volume × volume)
-            // But parent timeline does NOT follow stem timelines
+            // Keep stems in sync during playback (use first stem as reference)
+            const firstStem = stemPlayerWavesurfers['vocals'] || stemPlayerWavesurfers['drums'] ||
+                             stemPlayerWavesurfers['bass'] || stemPlayerWavesurfers['other'];
+
+            if (firstStem) {
+                firstStem.on('audioprocess', () => {
+                    if (!multiStemPlayerExpanded || !wavesurfer) return;
+
+                    const stemPosition = firstStem.getCurrentTime() / firstStem.getDuration();
+                    const parentPosition = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
+
+                    // If parent and stems drift more than 0.1 seconds apart, resync
+                    if (Math.abs(stemPosition - parentPosition) > 0.01) {
+                        wavesurfer.seekTo(stemPosition);
+                    }
+                });
+            }
         }
 
         function destroyMultiStemPlayerWavesurfers() {
@@ -2911,8 +2891,30 @@
         }
 
         function toggleMultiStemLoop(stemType) {
-            // Phase 4: Instead of toggling basic loop, toggle cycle mode
-            toggleStemCycleMode(stemType);
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const loopState = stemLoopStates[stemType];
+            const loopBtn = document.getElementById(`stem-loop-${stemType}`);
+
+            // Toggle loop enabled state
+            loopState.enabled = !loopState.enabled;
+
+            // Update button visual state
+            if (loopState.enabled) {
+                loopBtn.classList.add('active');
+                console.log(`${stemType} loop enabled:`, loopState.start, '-', loopState.end);
+
+                // If no loop points set yet, default to full file
+                if (loopState.start === null || loopState.end === null) {
+                    loopState.start = 0;
+                    loopState.end = ws.getDuration();
+                    console.log(`${stemType} loop points defaulted to full file: 0 - ${loopState.end}s`);
+                }
+            } else {
+                loopBtn.classList.remove('active');
+                console.log(`${stemType} loop disabled`);
+            }
         }
 
         // Helper function to set stem loop region
@@ -2923,126 +2925,6 @@
             console.log(`${stemType} loop region set: ${startTime}s - ${endTime}s`);
 
             // TODO: Render loop region visual overlay on waveform
-        }
-
-        // Phase 4: Toggle Cycle Mode for individual stem
-        function toggleStemCycleMode(stemType) {
-            const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) return;
-
-            const loopBtn = document.getElementById(`stem-loop-${stemType}`);
-            const loopState = stemLoopStates[stemType];
-
-            // Toggle cycle mode
-            stemCycleModes[stemType] = !stemCycleModes[stemType];
-
-            if (stemCycleModes[stemType]) {
-                // Entering cycle mode - enable loop editing
-                stemNextClickSets[stemType] = 'start';
-                loopBtn.classList.add('active', 'cycle-mode');
-                console.log(`[${stemType}] CYCLE MODE ON - click waveform to set loop start/end`);
-            } else {
-                // Exiting cycle mode - disable loop editing
-                loopBtn.classList.remove('active', 'cycle-mode');
-                // Also disable loop if it was playing
-                loopState.enabled = false;
-                loopState.start = null;
-                loopState.end = null;
-                console.log(`[${stemType}] CYCLE MODE OFF - loop disabled`);
-            }
-        }
-
-        // Phase 4: Setup click handler for stem waveform cycle mode
-        function setupStemCycleModeClickHandler(stemType, waveformContainer, ws) {
-            // Remove old click listeners if they exist
-            if (waveformContainer._clickHandler) {
-                waveformContainer.removeEventListener('click', waveformContainer._clickHandler, true);
-            }
-
-            // Create new click handler with capture phase to intercept BEFORE WaveSurfer
-            const clickHandler = (e) => {
-                const loopState = stemLoopStates[stemType];
-                const cycleMode = stemCycleModes[stemType];
-
-                // If cycle mode is off, let WaveSurfer handle click normally (seeking)
-                if (!cycleMode || !ws) return;
-
-                // Prevent WaveSurfer from seeking when in cycle mode
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-
-                // Get click position relative to waveform container
-                const rect = waveformContainer.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const relativeX = clickX / rect.width;
-
-                // Calculate time at click position
-                const duration = ws.getDuration();
-                const clickTime = relativeX * duration;
-
-                console.log(`[${stemType}] Click at ${clickTime.toFixed(2)}s`);
-
-                // Check if clicking left of loop start (reset start) or right of loop end (reset end)
-                if (loopState.start !== null && loopState.end !== null) {
-                    if (clickTime < loopState.start) {
-                        // Clicking left of loop start: move loop start
-                        loopState.start = clickTime;
-                        console.log(`[${stemType}] Loop start moved to ${clickTime.toFixed(2)}s`);
-                        return false;
-                    } else if (clickTime > loopState.end) {
-                        // Clicking right of loop end: move loop end
-                        loopState.end = clickTime;
-                        console.log(`[${stemType}] Loop end moved to ${clickTime.toFixed(2)}s`);
-                        return false;
-                    }
-                }
-
-                // Normal loop setting flow
-                if (stemNextClickSets[stemType] === 'start') {
-                    // Set loop start
-                    loopState.start = clickTime;
-                    loopState.end = null;
-                    loopState.enabled = false; // Don't enable loop yet (need end point)
-                    stemNextClickSets[stemType] = 'end';
-                    console.log(`[${stemType}] Loop start set to ${clickTime.toFixed(2)}s - click again for end`);
-                } else if (stemNextClickSets[stemType] === 'end') {
-                    // Set loop end
-                    if (clickTime <= loopState.start) {
-                        console.log(`[${stemType}] Loop end must be after loop start - ignoring click`);
-                        return false;
-                    }
-                    loopState.end = clickTime;
-                    loopState.enabled = true; // Enable loop now that we have both points
-                    stemNextClickSets[stemType] = 'start'; // Reset for next loop
-                    console.log(`[${stemType}] Loop end set to ${clickTime.toFixed(2)}s - Loop active! Starting playback...`);
-
-                    // Auto-play the stem when loop is set
-                    if (!ws.isPlaying()) {
-                        // Seek to loop start
-                        ws.seekTo(loopState.start / duration);
-                        // Start playing
-                        ws.play();
-                        // Mark stem as active (so parent play/pause respects it)
-                        stemPlaybackIndependent[stemType] = true;
-                        // Update play button icon
-                        const playBtn = document.getElementById(`stem-play-pause-${stemType}`);
-                        if (playBtn) {
-                            const icon = playBtn.querySelector('span');
-                            if (icon) icon.textContent = '||';
-                        }
-                        console.log(`[${stemType}] Auto-started playback from loop start`);
-                    }
-                }
-
-                return false;
-            };
-
-            // Add listener in CAPTURE phase to intercept before WaveSurfer's handler
-            waveformContainer.addEventListener('click', clickHandler, true);
-            waveformContainer._clickHandler = clickHandler; // Store reference for cleanup
-
-            console.log(`[${stemType}] Cycle mode click handler installed`);
         }
 
         function handleMultiStemVolumeChange(stemType, value) {

@@ -61,7 +61,8 @@
    - Exposed to global scope: `window.setStemLoopRegion`
    - For testing: `setStemLoopRegion('vocals', 5, 10)`
 
-**Testing Status**: ⏳ User has not tested yet (needs page refresh)
+**Testing Status**: ❌ DOES NOT WORK - When file ends, goes to next song instead of looping stem
+**User Decision**: DEFER Phase 2 (loops) - Not as useful as cycle mode. Move to Phase 4 (cycle mode) instead.
 
 **What's Still Missing for Phase 2:**
 - Visual loop region overlay on stem waveforms (like parent player's green/blue overlay)
@@ -139,44 +140,62 @@ User suggested eventually implementing a **player selection system**:
 
 ## What to Do Next (Priority Order)
 
+### ⚠️ IMPORTANT USER DECISION ⚠️
+
+**SKIP Phase 2 (loops) and Phase 3 (markers) for now.**
+
+**PROCEED DIRECTLY TO Phase 4: CYCLE MODE**
+
+User quote: "I won't use this nearly as much as I will use individual cycle controls for the stems."
+
 ### Immediate Next Steps:
 
-1. **User needs to test Phase 2 basic loops**:
-   - Refresh localhost:5500
-   - Load file with stems, expand them
-   - Click LOOP button on individual stems
-   - Test in console: `setStemLoopRegion('vocals', 5, 10)`
-   - Verify each stem loops independently
+1. **Implement Phase 4: Independent Cycle Mode per Stem**
+   - This is what user wants most
+   - Cycle mode = click waveform to set loop start, drag to end, auto-plays
+   - Copy parent player's cycle mode functionality
+   - Adapt for per-stem cycle state
 
-2. **If basic loops work, complete Phase 2 visual features**:
-   - Add loop region visual overlay on stem waveforms
-   - Copy parent's loop region rendering code
-   - Adapt for per-stem loop state
-   - Add to stem waveform containers
+2. **After Cycle Mode is working**:
+   - Then return to Phase 3: Markers (if user wants)
+   - Then return to Phase 2: Complete loop visuals (if user wants)
+   - Or move to Phase 5: Keyboard shortcuts for active stem
 
-3. **OR skip to simpler feature** (if visual rendering is complex):
-   - Phase 3: Independent markers (simpler than loop visuals)
-   - Phase 4: Cycle mode (user mentioned interest)
+### How Parent Player Cycle Mode Works:
 
-### How Parent Player Loop Visuals Work:
+The parent player has cycle mode - here's where the code is:
 
-The parent player has loop region visuals - here's where the code is:
+**Cycle Mode State** (search for these in app.js):
+- `let cycleMode = false;` - Whether cycle mode is enabled
+- Cycle button toggles this on/off
 
-**Loop Region Rendering**:
-- Function: `updateLoopVisuals()` (around line 3690)
-- Creates visual overlay on waveform showing loop start/end
-- Updates loop status display
-- Shows loop duration, bar/beat count
+**Cycle Mode Behavior**:
+- When cycle mode ON: Clicking waveform sets loop AND starts playing
+- When cycle mode OFF: Normal seek behavior
+- Function: Look for `cycleMode` checks in waveform click handlers
 
 **To Implement for Stems**:
-1. Create `updateStemLoopVisuals(stemType)` function
-2. Add loop region div to each stem waveform container
-3. Calculate loop region position based on `stemLoopStates[stemType]`
-4. Style with CSS (green/blue overlay like parent)
+1. Add per-stem cycle mode state:
+   ```javascript
+   let stemCycleModes = {
+       vocals: false,
+       drums: false,
+       bass: false,
+       other: false
+   };
+   ```
+
+2. Add cycle button to each stem (or use existing loop button as toggle)
+
+3. Add waveform click handlers to stem waveforms:
+   - If cycle mode ON: set loop start/end, enable loop, start playing
+   - If cycle mode OFF: normal seek
+
+4. Copy parent's cycle logic and adapt for per-stem state
 
 **Code Reference**:
-- Parent loop code: app.js lines ~3690-4000
-- Look for: `updateLoopVisuals()`, loop region rendering
+- Search app.js for: `cycleMode`, cycle button handler
+- Look for waveform click handling with cycle mode checks
 - Copy/adapt for per-stem implementation
 
 ---

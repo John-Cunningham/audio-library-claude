@@ -726,6 +726,74 @@ Implementation Details:
 - When expanded: slides up to reveal all 4 stem bars above bottom player
 - Parent player always remains visible and fully functional
 
+Git Commits: 23fa54a
+Result: ✅ FIXED - formatTime error resolved, all controls now visible
+
+=== Version 21 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix playback reset and double audio issues when clicking STEMS button"
+
+User Feedback:
+✅ "When I have Cycle on the parent file, the playheads of the individual stems are following that"
+❌ "When I click on the STEMS button, playback of the currently playing parent file gets reset"
+❌ "Sometimes I'm still hearing the parent file and the stems play at the same time"
+
+Changes (Seamless Audio Switching):
+- Rewrote initializeMultiStemPlayerWavesurfers() for seamless switching (lines 2313-2428):
+  - **Capture parent state BEFORE loading stems:**
+    - parentWasPlaying (boolean)
+    - parentCurrentTime (seconds)
+    - parentProgress (0-1 ratio)
+  - **When all stems ready - perform seamless switch:**
+    1. Seek all stems to parent's current position (prevents reset)
+    2. Mute parent player FIRST (prevents double audio)
+    3. If parent was playing → start all stems at synced position
+    4. If parent was paused → keep stems paused at position
+    5. Set up ongoing parent-stem sync
+  - Added 50ms delay after seeking before playing (ensures seek completes)
+- Created backup: app_v3.js
+
+Algorithm Flow:
+```
+1. User clicks STEMS button
+2. Parent continues playing at position X
+3. Stems load in background
+4. When all stems ready:
+   ├─ Stems seek to position X
+   ├─ Parent mutes (volume = 0)
+   ├─ Stems start playing at position X
+   └─ User hears seamless transition
+```
+
+Before (Broken):
+- Stems always started at 0:00 (reset)
+- Parent + stems played together briefly (double audio)
+- User experience: jarring audio glitch
+
+After (Fixed):
+- Stems start at parent's current position (no reset)
+- Parent mutes before stems play (no double audio)
+- User experience: seamless audio switch
+
+Console Output Example:
+```
+=== Initializing Multi-Stem Player Wavesurfers ===
+Parent state: playing at 15.32s (38.3%)
+Creating WaveSurfer for vocals...
+Creating WaveSurfer for drums...
+Creating WaveSurfer for bass...
+Creating WaveSurfer for other...
+Stem 1/4 ready: vocals
+Stem 2/4 ready: drums
+Stem 3/4 ready: bass
+Stem 4/4 ready: other
+All stems ready - performing seamless audio switch
+Syncing all stems to parent position: 0.383
+Muting parent player
+Parent was playing - starting all stems in sync
+```
+
 Git Commits: [pending]
-Result: ⏳ READY FOR TESTING - formatTime fixed, layout fixed, all controls visible
+Result: ⏳ READY FOR TESTING - Seamless audio switching implemented
 

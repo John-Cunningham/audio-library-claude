@@ -6,6 +6,7 @@
     <title>Audio Library Manager</title>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="./modular-multi-stem/multi-stem.css" />
     <style>
         * {
             margin: 0;
@@ -1073,11 +1074,16 @@
     <input type="file" id="uploadFileInput" accept="audio/*" multiple style="display: none;">
 
     <!-- Upload progress bar -->
+
+    <!-- Multi-Stem stacked player container (module will create if missing) -->
+    <div id="multiStemPlayer" class="multi-stem-player"></div>
     <div id="uploadProgressBar" style="position: fixed; top: 0; left: 0; width: 0%; height: 3px; background: linear-gradient(90deg, #f59e0b, #fb923c); z-index: 10000; transition: width 0.3s ease; display: none;"></div>
 
     <!-- Fixed Bottom Audio Player -->
     <div class="bottom-player" id="bottomPlayer">
-        <!-- Row 1: Full-width Waveform -->
+    <!-- STEMS Toggle Button -->
+    <button class="player-btn" id="stemsToggleBtn" style="position:absolute; right:24px; top:-44px; z-index:1100; background:#3a86ff; color:#fff; border:none; border-radius:6px; padding:8px 16px; font-weight:600; cursor:pointer;" onclick="window.multiStems && window.multiStems.toggleExpand()">STEMS</button>
+    <!-- Row 1: Full-width Waveform -->
         <div style="width: 100%; padding: 8px 12px; background: #0f0f0f; border-bottom: 1px solid #2a2a2a;">
             <div class="player-waveform" id="waveform" style="width: 100%; height: 80px;"></div>
         </div>
@@ -5654,4 +5660,18 @@
         loadData();
     </script>
 </body>
+        <script type="module">
+            import MultiStemPlayer from './modular-multi-stem/multi-stem-player.js';
+            // Expose for button
+            window.multiStems = new MultiStemPlayer({ containerId: 'multiStemPlayer' });
+            // Example stems (replace with real URLs as needed)
+            const stems = [
+                { name: 'Drums',  file_url: 'https://wavesurfer-js.org/example/media/demo.wav' },
+                { name: 'Bass',   file_url: 'https://wavesurfer-js.org/example/media/demo.wav' },
+                { name: 'Vocals', file_url: 'https://wavesurfer-js.org/example/media/demo.wav' },
+                { name: 'Other',  file_url: 'https://wavesurfer-js.org/example/media/demo.wav' }
+            ];
+            await window.multiStems.loadStems(stems);
+            window.multiStems.show();
+        </script>
 </html>

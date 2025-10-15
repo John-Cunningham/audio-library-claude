@@ -1,0 +1,60 @@
+/* Multi-Stem stacked bars styles */
+:root {
+  --multi-stem-height: 280px; /* total expanded height */
+}
+
+.multi-stem-player {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 100px; /* sit above a 100px bottom player */
+  background: #0f0f0f;
+  border-top: 1px solid #222;
+  border-bottom: 1px solid #222;
+  box-shadow: 0 -10px 30px rgba(0,0,0,0.25);
+  z-index: 1000;
+  display: none; /* hidden until show() */
+  transform: translateY(calc(var(--multi-stem-height) - 4px));
+  opacity: 0;
+  transition: transform 220ms ease, opacity 200ms ease;
+}
+.multi-stem-player.collapsed {
+  transform: translateY(calc(var(--multi-stem-height) - 4px));
+  opacity: 0.9;
+}
+body.multi-stem-active .multi-stem-player {
+  display: block;
+}
+body.multi-stem-active { /* add extra bottom padding so page content doesn't hide */
+  padding-bottom: calc(100px + var(--multi-stem-height));
+}
+
+.stem-player-bar {
+  height: 70px;
+  display: grid;
+  grid-template-columns: 48px 1fr 180px 160px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #1b1b1b;
+}
+.stem-player-bar:last-child {
+  border-bottom: none;
+}
+
+.stem-play {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #fff;
+  cursor: pointer;
+}
+
+.stem-waveform { height: 48px; }
+.stem-info { color: #bbb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stem-volume { width: 150px; }
+
+@media (max-width: 900px) {
+  .stem-player-bar { grid-template-columns: 48px 1fr 80px 120px; }
+}

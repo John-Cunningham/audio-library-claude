@@ -2237,6 +2237,11 @@
         let multiStemAutoPlayOnReady = false; // Whether to auto-play stems when all are ready
         let stemsPreloaded = false; // Track if stems are pre-loaded for current file
 
+        // Phase 2A: Individual Rate Controls
+        let stemIndependentRates = {}; // {vocals: 1.0, drums: 1.25, ...} - user's rate multiplier per stem
+        let stemRateLocked = {}; // {vocals: true, drums: false, ...} - whether stem follows parent rate
+        let currentParentFileBPM = null; // Store parent file's original BPM for calculations
+
         // Phase 1: Pre-load stems silently in background when file loads
         async function preloadMultiStemWavesurfers(fileId) {
             console.log('=== Pre-loading Multi-Stem Wavesurfers (Phase 1) ===');
@@ -2265,6 +2270,18 @@
             });
             console.log('Organized stem files:', Object.keys(stemFiles));
 
+            // Phase 2A: Get parent file BPM and initialize rate controls
+            const parentFile = audioFiles.find(f => f.id === fileId);
+            currentParentFileBPM = parentFile ? parentFile.bpm : null;
+            console.log(`Parent file BPM: ${currentParentFileBPM}`);
+
+            // Initialize rate control state for each stem
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            stemTypes.forEach(type => {
+                stemIndependentRates[type] = 1.0; // Start at 1x
+                stemRateLocked[type] = true; // Start locked to parent
+            });
+
             // 3. Generate UI structure in multiStemPlayer
             const multiStemPlayer = document.getElementById('multiStemPlayer');
             if (!multiStemPlayer) {
@@ -2275,7 +2292,7 @@
             // Clear existing content
             multiStemPlayer.innerHTML = '';
 
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            // stemTypes already declared above at line 2279
             const loadPromises = [];
 
             for (const stemType of stemTypes) {
@@ -2292,33 +2309,82 @@
                 // Show full filename - user needs to see "empty" suffix
                 const displayName = fileName;
 
-                // Create stem UI HTML
+                // Phase 2A: Calculate initial BPM display
+                const initialRate = currentRate || 1.0;
+                const initialBPM = currentParentFileBPM ? (currentParentFileBPM * initialRate).toFixed(1) : '---';
+
+                // Create stem UI HTML (Phase 2A: Added rate controls row beneath waveform)
                 const stemBarHTML = `
                     <div class="stem-player-bar" id="stem-player-${stemType}">
-                        <div class="stem-player-controls">
-                            <button class="stem-player-btn play-pause" onclick="toggleMultiStemPlay('${stemType}')" id="stem-play-pause-${stemType}">
-                                <span id="stem-play-pause-icon-${stemType}">||</span>
-                            </button>
-                            <button class="stem-player-btn" onclick="toggleMultiStemMute('${stemType}')" id="stem-mute-${stemType}" title="Mute">
+                        <!-- Top Row: Play/Mute/Loop + Waveform + Info + Volume -->
+                        <div class="stem-player-main-row">
+                            <div class="stem-player-controls">
+                                <button class="stem-player-btn play-pause" onclick="toggleMultiStemPlay('${stemType}')" id="stem-play-pause-${stemType}">
+                                    <span id="stem-play-pause-icon-${stemType}">||</span>
+                                </button>
+                                <button class="stem-player-btn" onclick="toggleMultiStemMute('${stemType}')" id="stem-mute-${stemType}" title="Mute">
+                                    <span>🔊</span>
+                                </button>
+                                <button class="stem-player-btn" onclick="toggleMultiStemLoop('${stemType}')" id="stem-loop-${stemType}" title="Loop">
+                                    <span>LOOP</span>
+                                </button>
+                            </div>
+
+                            <div class="stem-player-waveform" id="multi-stem-waveform-${stemType}"></div>
+
+                            <div class="stem-player-info">
+                                <div class="stem-player-filename">${displayName}</div>
+                                <div class="stem-player-time" id="multi-stem-time-${stemType}">0:00 / 0:00</div>
+                            </div>
+
+                            <div class="stem-player-volume">
                                 <span>🔊</span>
-                            </button>
-                            <button class="stem-player-btn" onclick="toggleMultiStemLoop('${stemType}')" id="stem-loop-${stemType}" title="Loop">
-                                <span>LOOP</span>
-                            </button>
+                                <input type="range" min="0" max="100" value="100"
+                                       oninput="handleMultiStemVolumeChange('${stemType}', this.value)" id="stem-volume-${stemType}">
+                                <span id="stem-volume-percent-${stemType}">100%</span>
+                            </div>
                         </div>
 
-                        <div class="stem-player-waveform" id="multi-stem-waveform-${stemType}"></div>
+                        <!-- Bottom Row: Rate Controls (Phase 2A) -->
+                        <div class="stem-player-rate-row">
+                            <!-- Lock Toggle Button -->
+                            <button class="stem-lock-btn locked"
+                                    onclick="toggleStemRateLock('${stemType}')"
+                                    id="stem-lock-${stemType}"
+                                    title="Lock to Parent Rate">
+                                <span class="lock-icon">🔒</span>
+                                <span class="lock-text">LOCK</span>
+                            </button>
 
-                        <div class="stem-player-info">
-                            <div class="stem-player-filename">${displayName}</div>
-                            <div class="stem-player-time" id="multi-stem-time-${stemType}">0:00 / 0:00</div>
-                        </div>
+                            <!-- Rate Preset Buttons -->
+                            <div class="stem-rate-presets">
+                                <button class="stem-rate-preset-btn" onclick="setStemRatePreset('${stemType}', 0.5)" title="Half Speed">0.5x</button>
+                                <button class="stem-rate-preset-btn" onclick="setStemRatePreset('${stemType}', 1.0)" title="Normal Speed">1x</button>
+                                <button class="stem-rate-preset-btn" onclick="setStemRatePreset('${stemType}', 2.0)" title="Double Speed">2x</button>
+                            </div>
 
-                        <div class="stem-player-volume">
-                            <span>🔊</span>
-                            <input type="range" min="0" max="100" value="100"
-                                   oninput="handleMultiStemVolumeChange('${stemType}', this.value)" id="stem-volume-${stemType}">
-                            <span id="stem-volume-percent-${stemType}">100%</span>
+                            <!-- Rate Slider with Label -->
+                            <div class="stem-rate-control">
+                                <label class="stem-rate-label">Rate:</label>
+                                <input type="range"
+                                       min="50"
+                                       max="200"
+                                       value="100"
+                                       step="1"
+                                       class="stem-rate-slider"
+                                       oninput="handleStemRateChange('${stemType}', this.value)"
+                                       id="stem-rate-slider-${stemType}">
+                                <span class="stem-rate-display" id="stem-rate-display-${stemType}">1.00x @ ${initialBPM} BPM</span>
+                            </div>
+
+                            <!-- Placeholder for future: Radio buttons for Rate/Speed/Pitch -->
+                            <!--
+                            <div class="stem-playback-mode">
+                                <label><input type="radio" name="mode-${stemType}" value="rate" checked> Rate</label>
+                                <label><input type="radio" name="mode-${stemType}" value="speed"> Speed</label>
+                                <label><input type="radio" name="mode-${stemType}" value="pitch"> Pitch</label>
+                            </div>
+                            -->
                         </div>
                     </div>
                 `;
@@ -2889,6 +2955,168 @@
             }
 
             console.log(`Set ${stemType} volume to ${value}%`);
+        }
+
+        // Phase 2A: Individual Rate Control Functions
+
+        /**
+         * Calculate the final playback rate for a stem
+         * Formula: finalRate = stemIndependentRate × parentRate (if unlocked)
+         *       or finalRate = parentRate (if locked)
+         */
+        function calculateStemFinalRate(stemType) {
+            const parentRate = currentRate || 1.0;
+            const isLocked = stemRateLocked[stemType];
+
+            if (isLocked) {
+                // Locked: stem follows parent rate exactly
+                return parentRate;
+            } else {
+                // Unlocked: stem rate = independent multiplier × parent rate
+                const independentRate = stemIndependentRates[stemType] || 1.0;
+                return independentRate * parentRate;
+            }
+        }
+
+        /**
+         * Update the visual display of a stem's rate and BPM
+         */
+        function updateStemRateDisplay(stemType, finalRate) {
+            const display = document.getElementById(`stem-rate-display-${stemType}`);
+            if (!display) return;
+
+            // Calculate resulting BPM
+            const resultingBPM = currentParentFileBPM
+                ? (currentParentFileBPM * finalRate).toFixed(1)
+                : '---';
+
+            // Update display
+            display.textContent = `${finalRate.toFixed(2)}x @ ${resultingBPM} BPM`;
+        }
+
+        /**
+         * Update the rate slider position (without triggering oninput)
+         */
+        function updateStemRateSlider(stemType, sliderValue) {
+            const slider = document.getElementById(`stem-rate-slider-${stemType}`);
+            if (slider) {
+                slider.value = sliderValue;
+            }
+        }
+
+        /**
+         * Update the lock button visual state
+         */
+        function updateLockButton(stemType, isLocked) {
+            const lockBtn = document.getElementById(`stem-lock-${stemType}`);
+            if (!lockBtn) return;
+
+            if (isLocked) {
+                lockBtn.classList.add('locked');
+                lockBtn.classList.remove('unlocked');
+                lockBtn.title = 'Locked to Parent Rate (click to unlock)';
+            } else {
+                lockBtn.classList.remove('locked');
+                lockBtn.classList.add('unlocked');
+                lockBtn.title = 'Independent Rate (click to lock to parent)';
+            }
+        }
+
+        /**
+         * Handle rate slider changes
+         */
+        function handleStemRateChange(stemType, sliderValue) {
+            console.log(`=== handleStemRateChange(${stemType}, ${sliderValue}) ===`);
+
+            // Convert slider value (50-200) to rate (0.5x-2.0x)
+            const independentRate = sliderValue / 100;
+            stemIndependentRates[stemType] = independentRate;
+
+            // Unlock this stem (user is manually adjusting)
+            if (stemRateLocked[stemType]) {
+                stemRateLocked[stemType] = false;
+                updateLockButton(stemType, false);
+                console.log(`${stemType} unlocked (user adjusted rate manually)`);
+            }
+
+            // Calculate final rate (independent × parent)
+            const finalRate = calculateStemFinalRate(stemType);
+
+            // Apply to WaveSurfer
+            const ws = stemPlayerWavesurfers[stemType];
+            if (ws) {
+                ws.setPlaybackRate(finalRate, false);
+                console.log(`✓ ${stemType} rate set to ${finalRate.toFixed(2)}x (independent: ${independentRate.toFixed(2)}x × parent: ${(currentRate || 1.0).toFixed(2)}x)`);
+            }
+
+            // Update display
+            updateStemRateDisplay(stemType, finalRate);
+        }
+
+        /**
+         * Set rate to a preset value (0.5x, 1x, 2x)
+         */
+        function setStemRatePreset(stemType, presetRate) {
+            console.log(`=== setStemRatePreset(${stemType}, ${presetRate}x) ===`);
+
+            // Set independent rate
+            stemIndependentRates[stemType] = presetRate;
+
+            // Unlock if not already
+            if (stemRateLocked[stemType]) {
+                stemRateLocked[stemType] = false;
+                updateLockButton(stemType, false);
+                console.log(`${stemType} unlocked (preset button clicked)`);
+            }
+
+            // Update slider
+            updateStemRateSlider(stemType, presetRate * 100);
+
+            // Calculate and apply final rate
+            const finalRate = calculateStemFinalRate(stemType);
+            const ws = stemPlayerWavesurfers[stemType];
+            if (ws) {
+                ws.setPlaybackRate(finalRate, false);
+                console.log(`✓ ${stemType} rate set to ${finalRate.toFixed(2)}x`);
+            }
+
+            // Update display
+            updateStemRateDisplay(stemType, finalRate);
+        }
+
+        /**
+         * Toggle lock/unlock state for a stem's rate
+         */
+        function toggleStemRateLock(stemType) {
+            const wasLocked = stemRateLocked[stemType];
+            const newLockState = !wasLocked;
+
+            console.log(`=== toggleStemRateLock(${stemType}) === ${wasLocked ? 'UNLOCKED' : 'LOCKED'} → ${newLockState ? 'LOCKED' : 'UNLOCKED'}`);
+
+            stemRateLocked[stemType] = newLockState;
+
+            if (newLockState) {
+                // Locking: reset independent rate to 1.0
+                stemIndependentRates[stemType] = 1.0;
+                updateStemRateSlider(stemType, 100);
+                console.log(`${stemType} locked - reset to 1.0x multiplier`);
+            } else {
+                console.log(`${stemType} unlocked - can now set independent rate`);
+            }
+
+            // Update button appearance
+            updateLockButton(stemType, newLockState);
+
+            // Recalculate and apply final rate
+            const finalRate = calculateStemFinalRate(stemType);
+            const ws = stemPlayerWavesurfers[stemType];
+            if (ws) {
+                ws.setPlaybackRate(finalRate, false);
+                console.log(`✓ ${stemType} rate updated to ${finalRate.toFixed(2)}x`);
+            }
+
+            // Update display
+            updateStemRateDisplay(stemType, finalRate);
         }
 
         // Phase 4 Step 2B: Render visual waveforms in expansion containers
@@ -3550,7 +3778,33 @@
                 loopStatus.style.color = '#f59e0b';
             } else if (hasLoop) {
                 const duration = loopEnd - loopStart;
-                loopStatus.textContent = `${duration.toFixed(1)}s`;
+                let statusText = `${duration.toFixed(1)}s`;
+
+                // Add bar/beat count if file has beatmap data
+                const currentFile = audioFiles.find(f => f.id === currentFileId);
+                if (currentFile && currentFile.beatmap && currentFile.beatmap.length > 0) {
+                    // Calculate number of beats in loop
+                    const beatsInLoop = currentFile.beatmap.filter(beat =>
+                        beat.time >= loopStart && beat.time < loopEnd
+                    ).length;
+
+                    // Calculate bars (assuming 4 beats per bar)
+                    const bars = Math.floor(beatsInLoop / 4);
+                    const remainingBeats = beatsInLoop % 4;
+
+                    if (bars > 0 && remainingBeats === 0) {
+                        // Exact bar count
+                        statusText += ` (${bars} ${bars === 1 ? 'Bar' : 'Bars'})`;
+                    } else if (bars > 0) {
+                        // Bars + beats
+                        statusText += ` (${bars} ${bars === 1 ? 'Bar' : 'Bars'}, ${remainingBeats} ${remainingBeats === 1 ? 'Beat' : 'Beats'})`;
+                    } else if (beatsInLoop > 0) {
+                        // Just beats
+                        statusText += ` (${beatsInLoop} ${beatsInLoop === 1 ? 'Beat' : 'Beats'})`;
+                    }
+                }
+
+                loopStatus.textContent = statusText;
                 loopStatus.style.color = '#10b981';
             }
 
@@ -4118,70 +4372,78 @@
             updateLoopVisuals();
         }
 
-        // Move start marker left by loop duration (keep end in place)
+        // Shift+Left Arrow: Move loop START marker to the LEFT (expand loop from left)
         function moveStartLeft() {
             if (!cycleMode || loopStart === null || loopEnd === null || currentMarkers.length === 0) {
                 console.log('No active loop or no markers available');
                 return;
             }
 
-            const loopDuration = loopEnd - loopStart;
-            const targetTime = loopStart - loopDuration;
-
-            // Don't allow moving before 0
-            if (targetTime < 0) {
-                console.log('Cannot move start before beginning of track');
-                return;
-            }
-
-            // Find nearest marker to target time
-            let nearestMarker = currentMarkers[0];
-            let minDiff = Math.abs(currentMarkers[0] - targetTime);
-
-            for (const markerTime of currentMarkers) {
-                const diff = Math.abs(markerTime - targetTime);
-                if (diff < minDiff && markerTime < loopEnd) {
-                    minDiff = diff;
-                    nearestMarker = markerTime;
+            // Find the previous marker before current start (search backwards)
+            let prevMarker = null;
+            for (let i = currentMarkers.length - 1; i >= 0; i--) {
+                const markerTime = currentMarkers[i];
+                if (markerTime < loopStart) {
+                    prevMarker = markerTime;
+                    break; // Take first marker before start (searching backwards)
                 }
             }
 
-            loopStart = nearestMarker;
+            if (prevMarker === null) {
+                console.log('No marker found before loop start');
+                return;
+            }
+
+            loopStart = prevMarker;
             console.log(`Start marker moved left to ${loopStart.toFixed(2)}s (loop now ${(loopEnd - loopStart).toFixed(1)}s)`);
+            recordAction('moveStartLeft', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
+
+            // Handle jump based on mode
+            if (immediateJump === 'on' && wavesurfer) {
+                wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
+                console.log(`Jumped to new loop start: ${loopStart.toFixed(2)}s`);
+            } else if (immediateJump === 'clock' && wavesurfer) {
+                pendingJumpTarget = loopStart;
+                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
+            }
+
             updateLoopVisuals();
         }
 
-        // Move end marker right by loop duration (keep start in place)
+        // Shift+Up Arrow: Move loop END marker to the RIGHT (expand loop)
         function moveEndRight() {
-            if (!cycleMode || loopStart === null || loopEnd === null || !wavesurfer || currentMarkers.length === 0) {
+            if (!cycleMode || loopStart === null || loopEnd === null || currentMarkers.length === 0) {
                 console.log('No active loop or no markers available');
                 return;
             }
 
-            const loopDuration = loopEnd - loopStart;
-            const targetTime = loopEnd + loopDuration;
-            const trackDuration = wavesurfer.getDuration();
-
-            // Don't allow moving past end of track
-            if (targetTime > trackDuration) {
-                console.log('Cannot move end past end of track');
-                return;
-            }
-
-            // Find nearest marker to target time
-            let nearestMarker = currentMarkers[currentMarkers.length - 1];
-            let minDiff = Math.abs(currentMarkers[currentMarkers.length - 1] - targetTime);
-
+            // Find the next marker after current end
+            let nextMarker = null;
             for (const markerTime of currentMarkers) {
-                const diff = Math.abs(markerTime - targetTime);
-                if (diff < minDiff && markerTime > loopStart) {
-                    minDiff = diff;
-                    nearestMarker = markerTime;
+                if (markerTime > loopEnd) {
+                    nextMarker = markerTime;
+                    break; // Take first marker after end
                 }
             }
 
-            loopEnd = nearestMarker;
+            if (nextMarker === null) {
+                console.log('No marker found after loop end');
+                return;
+            }
+
+            loopEnd = nextMarker;
             console.log(`End marker moved right to ${loopEnd.toFixed(2)}s (loop now ${(loopEnd - loopStart).toFixed(1)}s)`);
+            recordAction('moveEndRight', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
+
+            // Handle jump based on mode
+            if (immediateJump === 'on' && wavesurfer) {
+                wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
+                console.log(`Jumped to new loop start: ${loopStart.toFixed(2)}s`);
+            } else if (immediateJump === 'clock' && wavesurfer) {
+                pendingJumpTarget = loopStart;
+                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
+            }
+
             updateLoopVisuals();
         }
 
@@ -4596,12 +4858,15 @@
                 }
             });
 
-            // Phase 1: Set rate on NEW multi-stem player WaveSurfers
+            // Phase 2A: Recalculate and set rate on NEW multi-stem player WaveSurfers
+            // Each stem's final rate = independentRate × parentRate (multiplicative)
             Object.keys(stemPlayerWavesurfers).forEach(stemType => {
                 const stemWS = stemPlayerWavesurfers[stemType];
                 if (stemWS) {
-                    stemWS.setPlaybackRate(rate, false);
-                    console.log(`✓ ${stemType} rate set to ${rate.toFixed(2)}x`);
+                    const finalRate = calculateStemFinalRate(stemType);
+                    stemWS.setPlaybackRate(finalRate, false);
+                    updateStemRateDisplay(stemType, finalRate);
+                    console.log(`✓ ${stemType} rate set to ${finalRate.toFixed(2)}x (${stemRateLocked[stemType] ? 'locked' : `independent: ${stemIndependentRates[stemType].toFixed(2)}x`})`);
                 }
             });
 
@@ -5426,8 +5691,8 @@
                 case 'arrowleft':
                     e.preventDefault();
                     if (e.shiftKey && cycleMode && loopStart !== null && loopEnd !== null) {
-                        // Shift+Left: Move END marker left (shrink from right)
-                        moveEndLeft();
+                        // Shift+Left: Move START marker left (expand from left)
+                        moveStartLeft();
                     } else if (cycleMode && loopStart !== null && loopEnd !== null) {
                         // In cycle mode with full loop: Left arrow = shift loop left
                         shiftLoopLeft();
@@ -5452,13 +5717,15 @@
                     break;
 
                 case 'arrowup':
-                    if (cycleMode) {
-                        e.preventDefault();
+                    e.preventDefault();
+                    if (e.shiftKey && cycleMode && loopStart !== null && loopEnd !== null) {
+                        // Shift+Up: Move END marker right (expand loop)
+                        moveEndRight();
+                    } else if (cycleMode) {
                         // In edit loop mode: Up arrow = double loop length
                         doubleLoopLength();
                     } else {
                         // Up: Play previous file (respect pause state)
-                        e.preventDefault();
                         if (currentIndex > 0) {
                             loadAudio(filteredFiles[currentIndex - 1].id, !userPaused);
                         } else {
@@ -5469,13 +5736,15 @@
                     break;
 
                 case 'arrowdown':
-                    if (cycleMode) {
-                        e.preventDefault();
+                    e.preventDefault();
+                    if (e.shiftKey && cycleMode && loopStart !== null && loopEnd !== null) {
+                        // Shift+Down: Move END marker left (shrink loop)
+                        moveEndLeft();
+                    } else if (cycleMode) {
                         // In edit loop mode: Down arrow = half loop length
                         halfLoopLength();
                     } else {
                         // Down: Play next file (respect pause state)
-                        e.preventDefault();
                         if (currentIndex < filteredFiles.length - 1) {
                             loadAudio(filteredFiles[currentIndex + 1].id, !userPaused);
                         } else {
@@ -5691,3 +5960,7 @@ window.toggleMultiStemPlay = toggleMultiStemPlay;
 window.toggleMultiStemMute = toggleMultiStemMute;
 window.toggleMultiStemLoop = toggleMultiStemLoop;
 window.handleMultiStemVolumeChange = handleMultiStemVolumeChange;
+// Phase 2A: Rate control functions
+window.handleStemRateChange = handleStemRateChange;
+window.setStemRatePreset = setStemRatePreset;
+window.toggleStemRateLock = toggleStemRateLock;

@@ -1,3 +1,74 @@
+=== Version 25d ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Show cycle length in beats and bars next to seconds display"
+
+User Request: "Can we also show our cycle length in beats and bars next to where it says seconds? For example, I have a cycle right now that says '7.4s' in green. I want to see '7.4s (4 Bars)'"
+
+Changes (Cycle Length Display Enhancement):
+- Modified updateLoopVisuals() function (lines 3779-3809):
+  - Added bar and beat count calculation to loop status display
+  - Counts beats in loop by filtering beatmap data between loopStart and loopEnd
+  - Calculates bars assuming 4 beats per bar
+  - Displays in multiple formats based on loop length:
+    - Exact bars: "7.4s (4 Bars)"
+    - Bars + beats: "9.2s (2 Bars, 3 Beats)"
+    - Just beats: "1.8s (3 Beats)"
+  - Only shows bar/beat count if file has beatmap data
+  - Proper singular/plural grammar (Bar vs Bars, Beat vs Beats)
+
+Display Examples:
+- 4 bars exactly: "7.4s (4 Bars)"
+- 2 bars + 1 beat: "5.5s (2 Bars, 1 Beat)"
+- 3 beats only: "1.8s (3 Beats)"
+- No beatmap data: "7.4s" (unchanged)
+
+Implementation Details:
+- Uses currentFile.beatmap.filter() to count beats in loop range
+- Math.floor(beatsInLoop / 4) for bar count
+- beatsInLoop % 4 for remaining beats
+- Conditionally appends to statusText based on values
+
+Created backup: app_v25d_cycle_length_bars_beats.js
+Git Commits: [pending]
+Result: ✅ SUCCESS - Cycle length now shows bars and beats
+
+=== Version 25c ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix Shift+Left keyboard shortcut - should move loop START marker left (expand from left), not END marker"
+
+User Request: "Okay, let's adjust it. So that shift left moves the loop start marker to the left by the current marker display and shift right moves the loop start marker to the right by current marker (like it does now). That's what I meant to say."
+
+Changes (Keyboard Shortcut Fix):
+- Created moveStartLeft() function (lines 4528-4564):
+  - Moves loop START marker to previous marker on the left (expands loop from left)
+  - Searches backwards through currentMarkers array to find previous marker
+  - Updates loopStart and recalculates loop duration
+  - Handles immediateJump modes (on/clock) with proper seek behavior
+  - Records action for playback recording system
+  - Updates loop visuals
+- Updated keyboard handler for ArrowLeft key (line 5735):
+  - Changed from calling moveEndLeft() to calling moveStartLeft()
+  - Comment updated: "Shift+Left: Move START marker left (expand from left)"
+  - Now correctly expands loop from the left side
+
+Keyboard Shortcuts Summary (All Working):
+- Shift+Left: Move START marker LEFT (expand from left) ✅ FIXED
+- Shift+Right: Move START marker RIGHT (shrink from left) ✅ Already working
+- Shift+Up: Move END marker RIGHT (expand from right) ✅ Already working
+- Shift+Down: Move END marker LEFT (shrink from right) ✅ Already working
+
+Implementation Notes:
+- Backward search logic: `for (let i = currentMarkers.length - 1; i >= 0; i--)`
+- Finds first marker before current loopStart position
+- Maintains consistency with existing moveEndRight() pattern
+- Console logs show new loop duration after expansion
+
+Created backup: app_v25c_keyboard_shift_left_fix.js
+Git Commits: [pending]
+Result: ✅ SUCCESS - Shift+Left now correctly expands loop from left
+
 === Version 24b (STABLE - Recommended Checkpoint) ===
 Date: 2025-10-14
 Files: src/core/app.js
@@ -91,8 +162,8 @@ Future Improvements:
 🔮 Keep stems view expanded when switching between files with stems (QoL feature)
 🔮 Individual stem controls (rate, cycle, shift, prev/next) - Phase 2
 
-Created backups: app_v24b_fixes.js
-Git Commits: [pending]
+Created backups: app_v24b_fixes.js, STABLE_BACKUPS/v24b_20251014_212150/
+Git Commits: 30bd16d
 Result: ✅ SUCCESS - Stable working version, all core functionality operational
 
 === Version 24 ===

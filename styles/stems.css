@@ -4,6 +4,9 @@
     bottom: 180px; /* Above the full bottom player (Row 1 + Row 2 ≈ 180px) */
     left: 0;
     right: 0;
+    max-height: calc(100vh - 200px); /* Leave room for bottom player and some top margin */
+    overflow-y: auto; /* Enable vertical scrolling */
+    overflow-x: hidden; /* Prevent horizontal scroll */
     background: transparent; /* Transparent so individual bars show through */
     backdrop-filter: none;
     border-top: none;
@@ -15,6 +18,29 @@
     margin: 0;
     padding: 0;
     gap: 0; /* No gap between stem bars */
+
+    /* Custom scrollbar styling */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(102, 126, 234, 0.5) rgba(255, 255, 255, 0.1);
+}
+
+/* Webkit scrollbar styling */
+.multi-stem-player::-webkit-scrollbar {
+    width: 8px;
+}
+
+.multi-stem-player::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.multi-stem-player::-webkit-scrollbar-thumb {
+    background: rgba(102, 126, 234, 0.5);
+    border-radius: 4px;
+}
+
+.multi-stem-player::-webkit-scrollbar-thumb:hover {
+    background: rgba(102, 126, 234, 0.7);
 }
 
 .multi-stem-player.collapsed {
@@ -35,16 +61,25 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Each stem player bar - same height as bottom-player */
+/* Phase 2A: Each stem player bar - now with 2 rows (main + rate controls) */
 .stem-player-bar {
-    height: 100px;
+    min-height: 100px; /* Allow expansion for rate row */
     background: rgba(15, 15, 15, 0.95);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    flex-direction: column; /* Stack main row and rate row vertically */
+    padding: 0;
+    gap: 0;
+    margin: 0;
+}
+
+/* Top row: Play/Mute/Loop + Waveform + Info + Volume (original layout) */
+.stem-player-main-row {
     display: flex;
     align-items: center;
     padding: 10px 20px;
     gap: 15px;
-    margin: 0;
+    flex-shrink: 0;
 }
 
 .stem-player-bar:last-child {
@@ -156,5 +191,174 @@
     background: rgba(255, 255, 255, 0.15);
     border-radius: 2px;
     outline: none;
+    cursor: pointer;
+}
+
+/* Phase 2A: Bottom Row - Rate Controls */
+.stem-player-rate-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 20px 10px 20px;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Lock Toggle Button */
+.stem-lock-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    color: #888;
+    transition: all 0.2s;
+    min-width: 70px;
+    justify-content: center;
+}
+
+.stem-lock-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.stem-lock-btn.locked {
+    background: rgba(102, 126, 234, 0.15);
+    border-color: rgba(102, 126, 234, 0.4);
+    color: #667eea;
+}
+
+.stem-lock-btn.unlocked {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #888;
+}
+
+.stem-lock-btn .lock-icon {
+    font-size: 11px;
+}
+
+.stem-lock-btn .lock-text {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* Rate Preset Buttons */
+.stem-rate-presets {
+    display: flex;
+    gap: 4px;
+}
+
+.stem-rate-preset-btn {
+    min-width: 36px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    color: #888;
+    transition: all 0.15s;
+}
+
+.stem-rate-preset-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #aaa;
+}
+
+.stem-rate-preset-btn:active {
+    transform: scale(0.95);
+}
+
+/* Rate Control (Label + Slider + Display) */
+.stem-rate-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    max-width: 400px;
+}
+
+.stem-rate-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    min-width: 32px;
+}
+
+.stem-rate-slider {
+    flex: 1;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.stem-rate-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: #667eea;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.stem-rate-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    background: #7e8ef5;
+}
+
+.stem-rate-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: #667eea;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+}
+
+.stem-rate-slider::-moz-range-thumb:hover {
+    transform: scale(1.2);
+    background: #7e8ef5;
+}
+
+.stem-rate-display {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: #aaa;
+    min-width: 130px;
+    text-align: right;
+}
+
+/* Placeholder for future: Radio buttons for Rate/Speed/Pitch */
+.stem-playback-mode {
+    display: flex;
+    gap: 8px;
+    font-size: 10px;
+    color: #888;
+}
+
+.stem-playback-mode label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+}
+
+.stem-playback-mode input[type="radio"] {
     cursor: pointer;
 }

@@ -42,15 +42,15 @@ export const controlDefinitions = {
         tag: 'button',
         classes: (ctx) => ctx.playerType === 'parent'
             ? 'player-btn play-pause'
-            : 'stem-control-btn',
+            : 'stem-player-btn play-pause',
         innerHTML: (ctx) => ctx.playerType === 'parent'
             ? '<span id="playPauseIcon">▶</span>'
-            : '▶',
+            : '<span id="stem-play-pause-icon-' + ctx.stemType + '">||</span>',
         attributes: (ctx) => {
             const attrs = {
                 onclick: ctx.playerType === 'parent'
                     ? 'playPause()'
-                    : `toggleStemPlayPause('${ctx.stemType}')`,
+                    : `toggleMultiStemPlay('${ctx.stemType}')`,
                 title: 'Play/Pause'
             };
             return attrs;
@@ -69,12 +69,13 @@ export const controlDefinitions = {
         tag: 'button',
         classes: (ctx) => ctx.playerType === 'parent'
             ? 'control-btn'
-            : 'stem-control-btn',
-        innerHTML: () => '🔇 Mute',
+            : 'stem-player-btn',
+        innerHTML: (ctx) => ctx.playerType === 'parent' ? '🔇 Mute' : '<span>🔊</span>',
         attributes: (ctx) => ({
             onclick: ctx.playerType === 'parent'
                 ? 'toggleMute()'
-                : `toggleStemMute('${ctx.stemType}')`
+                : `toggleMultiStemMute('${ctx.stemType}')`,
+            title: 'Mute'
         })
     },
 
@@ -90,12 +91,13 @@ export const controlDefinitions = {
         tag: 'button',
         classes: (ctx) => ctx.playerType === 'parent'
             ? 'control-btn'
-            : 'stem-control-btn',
-        innerHTML: () => '🔁 Loop',
+            : 'stem-player-btn',
+        innerHTML: () => '<span>LOOP</span>',
         attributes: (ctx) => ({
             onclick: ctx.playerType === 'parent'
                 ? 'toggleLoop()'
-                : `toggleStemLoop('${ctx.stemType}')`
+                : `toggleMultiStemLoop('${ctx.stemType}')`,
+            title: 'Loop'
         })
     },
 
@@ -107,17 +109,15 @@ export const controlDefinitions = {
         order: 10,
         htmlId: (ctx) => ctx.playerType === 'parent'
             ? 'waveform'
-            : `stem-waveform-${ctx.stemType}`,
+            : `multi-stem-waveform-${ctx.stemType}`,
         tag: 'div',
         classes: (ctx) => ctx.playerType === 'parent'
             ? ''
-            : 'stem-waveform',
+            : 'stem-player-waveform',
         innerHTML: () => '',
         attributes: (ctx) => ctx.playerType === 'parent' ? {
             style: 'flex: 1; height: 80px; border: 1px solid #333; cursor: pointer;'
-        } : {
-            style: 'flex: 1; height: 50px; border: 1px solid #444; cursor: pointer;'
-        }
+        } : {}
     },
 
     volumeSlider: {
@@ -128,21 +128,21 @@ export const controlDefinitions = {
         order: 20,
         htmlId: (ctx) => ctx.playerType === 'parent'
             ? 'volumeSlider'
-            : `stem-volume-slider-${ctx.stemType}`,
+            : `stem-volume-${ctx.stemType}`,
         tag: 'input',
         classes: () => '',
         innerHTML: () => '',
         attributes: (ctx) => ({
             type: 'range',
             min: '0',
-            max: '398',
+            max: ctx.playerType === 'parent' ? '398' : '100',
             value: '100',
             style: ctx.playerType === 'parent'
                 ? 'flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;'
-                : 'width: 80px;',
+                : '',
             oninput: ctx.playerType === 'parent'
                 ? 'setVolume(this.value)'
-                : `changeStemVolume('${ctx.stemType}', this.value)`,
+                : `handleMultiStemVolumeChange('${ctx.stemType}', this.value)`,
             ondblclick: ctx.playerType === 'parent' ? 'resetVolume()' : undefined
         })
     },
@@ -176,9 +176,9 @@ export const controlDefinitions = {
         order: 30,
         htmlId: (ctx) => ctx.playerType === 'parent'
             ? 'playerFilename'
-            : `stem-file-name-${ctx.stemType}`,
+            : null, // Stem player filename is not a single element, it's part of stem-player-filename div
         tag: 'div',
-        classes: (ctx) => ctx.playerType === 'parent' ? 'player-filename' : '',
+        classes: (ctx) => ctx.playerType === 'parent' ? 'player-filename' : 'stem-player-filename',
         innerHTML: (ctx) => ctx.playerType === 'parent'
             ? 'No file selected'
             : ctx.stemType.toUpperCase(),
@@ -188,12 +188,14 @@ export const controlDefinitions = {
     timeDisplay: {
         id: 'timeDisplay',
         type: 'text',
-        showIn: ['parent'],
+        showIn: ['parent', 'stem'],
         row: 'main',
         order: 31,
-        htmlId: () => 'playerTime',
+        htmlId: (ctx) => ctx.playerType === 'parent'
+            ? 'playerTime'
+            : `multi-stem-time-${ctx.stemType}`,
         tag: 'div',
-        classes: () => 'player-time',
+        classes: (ctx) => ctx.playerType === 'parent' ? 'player-time' : 'stem-player-time',
         innerHTML: () => '0:00 / 0:00',
         attributes: () => ({})
     },
@@ -208,13 +210,13 @@ export const controlDefinitions = {
         showIn: ['stem'],
         row: 'rate',
         order: 1,
-        htmlId: (ctx) => `stem-rate-lock-${ctx.stemType}`,
+        htmlId: (ctx) => `stem-lock-${ctx.stemType}`,
         tag: 'button',
-        classes: () => 'stem-control-btn stem-rate-lock-btn',
-        innerHTML: () => '🔒',
+        classes: () => 'stem-lock-btn locked',
+        innerHTML: () => '<span class="lock-icon">🔒</span><span class="lock-text">LOCK</span>',
         attributes: (ctx) => ({
             onclick: `toggleStemRateLock('${ctx.stemType}')`,
-            title: 'Lock/Unlock playback rate'
+            title: 'Lock to Parent Rate'
         })
     },
 
@@ -226,16 +228,17 @@ export const controlDefinitions = {
         order: 10,
         htmlId: (ctx) => ctx.playerType === 'parent'
             ? 'ratePreset05'
-            : `stem-rate-preset-05-${ctx.stemType}`,
+            : null, // Stem rate presets don't have individual IDs
         tag: 'button',
         classes: (ctx) => ctx.playerType === 'parent'
             ? 'control-btn rate-preset-btn'
-            : 'stem-control-btn stem-rate-preset-btn',
+            : 'stem-rate-preset-btn',
         innerHTML: () => '0.5x',
         attributes: (ctx) => ({
             onclick: ctx.playerType === 'parent'
                 ? 'setPlaybackRate(0.5)'
-                : `setStemPlaybackRate('${ctx.stemType}', 0.5)`
+                : `setStemRatePreset('${ctx.stemType}', 0.5)`,
+            title: 'Half Speed'
         })
     },
 
@@ -247,16 +250,17 @@ export const controlDefinitions = {
         order: 11,
         htmlId: (ctx) => ctx.playerType === 'parent'
             ? 'ratePreset1'
-            : `stem-rate-preset-1-${ctx.stemType}`,
+            : null, // Stem rate presets don't have individual IDs
         tag: 'button',
         classes: (ctx) => ctx.playerType === 'parent'
             ? 'control-btn rate-preset-btn'
-            : 'stem-control-btn stem-rate-preset-btn',
+            : 'stem-rate-preset-btn',
         innerHTML: () => '1x',
         attributes: (ctx) => ({
             onclick: ctx.playerType === 'parent'
                 ? 'setPlaybackRate(1.0)'
-                : `setStemPlaybackRate('${ctx.stemType}', 1.0)`
+                : `setStemRatePreset('${ctx.stemType}', 1.0)`,
+            title: 'Normal Speed'
         })
     },
 
@@ -268,16 +272,17 @@ export const controlDefinitions = {
         order: 12,
         htmlId: (ctx) => ctx.playerType === 'parent'
             ? 'ratePreset2'
-            : `stem-rate-preset-2-${ctx.stemType}`,
+            : null, // Stem rate presets don't have individual IDs
         tag: 'button',
         classes: (ctx) => ctx.playerType === 'parent'
             ? 'control-btn rate-preset-btn'
-            : 'stem-control-btn stem-rate-preset-btn',
+            : 'stem-rate-preset-btn',
         innerHTML: () => '2x',
         attributes: (ctx) => ({
             onclick: ctx.playerType === 'parent'
                 ? 'setPlaybackRate(2.0)'
-                : `setStemPlaybackRate('${ctx.stemType}', 2.0)`
+                : `setStemRatePreset('${ctx.stemType}', 2.0)`,
+            title: 'Double Speed'
         })
     },
 
@@ -291,20 +296,20 @@ export const controlDefinitions = {
             ? 'rateSlider'
             : `stem-rate-slider-${ctx.stemType}`,
         tag: 'input',
-        classes: () => '',
+        classes: (ctx) => ctx.playerType === 'parent' ? '' : 'stem-rate-slider',
         innerHTML: () => '',
         attributes: (ctx) => ({
             type: 'range',
-            min: ctx.playerType === 'parent' ? '0.025' : '0.25',
-            max: ctx.playerType === 'parent' ? '4.0' : '2.0',
-            step: ctx.playerType === 'parent' ? '0.025' : '0.01',
-            value: '1.0',
+            min: ctx.playerType === 'parent' ? '0.025' : '50',
+            max: ctx.playerType === 'parent' ? '4.0' : '200',
+            step: ctx.playerType === 'parent' ? '0.025' : '1',
+            value: ctx.playerType === 'parent' ? '1.0' : '100',
             style: ctx.playerType === 'parent'
                 ? 'flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;'
-                : 'width: 120px;',
+                : '',
             oninput: ctx.playerType === 'parent'
                 ? 'setPlaybackRate(parseFloat(this.value))'
-                : `changeStemPlaybackRate('${ctx.stemType}', this.value)`,
+                : `handleStemRateChange('${ctx.stemType}', this.value)`,
             ondblclick: ctx.playerType === 'parent' ? 'resetRate()' : undefined
         })
     },
@@ -319,10 +324,17 @@ export const controlDefinitions = {
             ? 'rateValue'
             : `stem-rate-display-${ctx.stemType}`,
         tag: 'span',
-        classes: () => '',
-        innerHTML: (ctx) => ctx.playerType === 'parent'
-            ? '1.0x'
-            : '1.00x',
+        classes: (ctx) => ctx.playerType === 'parent' ? '' : 'stem-rate-display',
+        innerHTML: (ctx) => {
+            if (ctx.playerType === 'parent') {
+                return '1.0x';
+            } else {
+                // For stems, include BPM placeholder (will be updated dynamically)
+                const initialRate = ctx.initialRate || 1.0;
+                const initialBPM = ctx.initialBPM || '---';
+                return `${initialRate.toFixed(2)}x @ ${initialBPM} BPM`;
+            }
+        },
         attributes: (ctx) => ({
             style: ctx.playerType === 'parent'
                 ? 'color: #999; font-size: 11px; min-width: 35px; text-align: right;'
@@ -381,18 +393,22 @@ export function generatePlayerHTML(playerType, options = {}) {
             ? control.attributes(ctx)
             : control.attributes;
 
-        // Build attributes string
+        // Build attributes string (filter out undefined values)
         const attrsStr = Object.entries(attributes || {})
+            .filter(([key, value]) => value !== undefined)
             .map(([key, value]) => `${key}="${value}"`)
             .join(' ');
 
+        // Build ID attribute (only if id is not null)
+        const idAttr = id ? `id="${id}"` : '';
+
         // Self-closing tags
         if (control.tag === 'input') {
-            return `<${control.tag} id="${id}" ${classes ? `class="${classes}"` : ''} ${attrsStr} />`;
+            return `<${control.tag} ${idAttr} ${classes ? `class="${classes}"` : ''} ${attrsStr} />`.replace(/\s+/g, ' ').trim();
         }
 
         // Regular tags
-        return `<${control.tag} id="${id}" ${classes ? `class="${classes}"` : ''} ${attrsStr}>${innerHTML}</${control.tag}>`;
+        return `<${control.tag} ${idAttr} ${classes ? `class="${classes}"` : ''} ${attrsStr}>${innerHTML}</${control.tag}>`.replace(/\s+/g, ' ').trim();
     }
 
     // Build HTML
@@ -443,4 +459,97 @@ export function getRowControls(row, playerType) {
             control.showIn.includes(playerType)
         )
         .sort((a, b) => a.order - b.order);
+}
+
+/**
+ * Generate complete stem player bar HTML with proper container structure
+ * This matches the exact structure used in app.js preloadMultiStemWavesurfers
+ *
+ * @param {string} stemType - 'vocals' | 'drums' | 'bass' | 'other'
+ * @param {string} displayName - Display name for the stem
+ * @param {number} initialRate - Initial playback rate (default: 1.0)
+ * @param {string} initialBPM - Initial BPM display (default: '---')
+ * @returns {string} Complete stem player bar HTML
+ */
+export function generateStemPlayerBar(stemType, displayName, initialRate = 1.0, initialBPM = '---') {
+    const ctx = {
+        playerType: 'stem',
+        stemType,
+        initialRate,
+        initialBPM
+    };
+
+    // Get controls
+    const mainControls = getRowControls('main', 'stem');
+    const rateControls = getRowControls('rate', 'stem');
+
+    // Generate control HTMLs
+    function genControl(controlId) {
+        const control = controlDefinitions[controlId];
+        if (!control) return '';
+
+        const id = typeof control.htmlId === 'function' ? control.htmlId(ctx) : control.htmlId;
+        const classes = typeof control.classes === 'function' ? control.classes(ctx) : control.classes;
+        const innerHTML = typeof control.innerHTML === 'function' ? control.innerHTML(ctx) : control.innerHTML;
+        const attributes = typeof control.attributes === 'function' ? control.attributes(ctx) : control.attributes;
+
+        const attrsStr = Object.entries(attributes || {})
+            .filter(([key, value]) => value !== undefined)
+            .map(([key, value]) => `${key}="${value}"`)
+            .join(' ');
+
+        const idAttr = id ? `id="${id}"` : '';
+
+        if (control.tag === 'input') {
+            return `<${control.tag} ${idAttr} ${classes ? `class="${classes}"` : ''} ${attrsStr} />`.replace(/\s+/g, ' ').trim();
+        }
+        return `<${control.tag} ${idAttr} ${classes ? `class="${classes}"` : ''} ${attrsStr}>${innerHTML}</${control.tag}>`.replace(/\s+/g, ' ').trim();
+    }
+
+    // Build complete stem player bar HTML
+    return `
+        <div class="stem-player-bar" id="stem-player-${stemType}">
+            <!-- Top Row: Play/Mute/Loop + Waveform + Info + Volume -->
+            <div class="stem-player-main-row">
+                <div class="stem-player-controls">
+                    ${genControl('playPause')}
+                    ${genControl('mute')}
+                    ${genControl('loop')}
+                </div>
+
+                ${genControl('waveform')}
+
+                <div class="stem-player-info">
+                    <div class="stem-player-filename">${displayName}</div>
+                    ${genControl('timeDisplay')}
+                </div>
+
+                <div class="stem-player-volume">
+                    <span>🔊</span>
+                    ${genControl('volumeSlider')}
+                    ${genControl('volumeDisplay')}
+                </div>
+            </div>
+
+            <!-- Bottom Row: Rate Controls -->
+            <div class="stem-player-rate-row">
+                <!-- Lock Toggle Button -->
+                ${genControl('rateLock')}
+
+                <!-- Rate Preset Buttons -->
+                <div class="stem-rate-presets">
+                    ${genControl('ratePreset05')}
+                    ${genControl('ratePreset1')}
+                    ${genControl('ratePreset2')}
+                </div>
+
+                <!-- Rate Slider with Label -->
+                <div class="stem-rate-control">
+                    <label class="stem-rate-label">Rate:</label>
+                    ${genControl('rateSlider')}
+                    ${genControl('rateDisplay')}
+                </div>
+            </div>
+        </div>
+    `.trim();
 }

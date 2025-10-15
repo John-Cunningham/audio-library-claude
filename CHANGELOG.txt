@@ -533,6 +533,33 @@ Testing Instructions:
    - ✓ Dark background, subtle borders
    - ✓ Proper spacing and typography
 
+Git Commits: b58f4fc
+Result: ✅ SUCCESS - Visual styling matches reference
+
+=== Version 17 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix 'Cannot read properties of undefined (reading length)' error when generating multi-stem player bars"
+
+Changes (Fix stem filename property):
+- Fixed generateMultiStemPlayerBars() to use correct database field:
+  - Changed from `stemFile.name` to `stemFile.stem_file_name`
+  - Added fallback to `stemType` if stem_file_name is missing
+  - Error occurred because audio_files_stems table has `stem_file_name` field, not `name`
+- Database schema clarification:
+  - audio_files_stems fields: id, audio_file_id, stem_type, file_url, file_size,
+    created_at, stem_file_name, bpm, key, empty_status
+  - stem_file_name contains the actual filename (e.g., "crazed SYN...01 (other).mp3")
+- Created backup: app_v22.js
+
+Implementation Notes:
+- This fix only affects the NEW multi-stem player (STEMS button)
+- Does NOT affect existing STEMS icon (🎛️) functionality in file list
+- Two completely separate systems:
+  1. STEMS Icon: openStemsViewer() → inline expansion in file list
+  2. STEMS Button: toggleMultiStemPlayer() → fixed player at bottom
+- Both systems use different variables and WaveSurfer instances
+
 Git Commits: [pending]
-Result: ⏳ Ready for testing - Visual styling should now match reference
+Result: ⏳ Ready for testing - Should load without errors now
 

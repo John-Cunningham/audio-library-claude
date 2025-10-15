@@ -2263,11 +2263,10 @@
                     return;
                 }
 
-                // Truncate filename if too long (use stem_file_name from database)
-                const fileName = stemFile.stem_file_name || stemType;
-                const displayName = fileName.length > 30
-                    ? fileName.substring(0, 30) + '...'
-                    : fileName;
+                // Truncate filename if too long
+                const displayName = stemFile.name.length > 30
+                    ? stemFile.name.substring(0, 30) + '...'
+                    : stemFile.name;
 
                 const stemBarHTML = `
                     <div class="stem-player-bar" id="stem-player-${stemType}">

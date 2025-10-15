@@ -2287,10 +2287,11 @@
 
                 console.log(`Creating UI and WaveSurfer for ${stemType}`);
 
-                // Use full filename from database (important for "empty" suffix filtering)
+                // Truncate filename if too long
                 const fileName = stemFile.stem_file_name || stemType;
-                // Show full filename - user needs to see "empty" suffix
-                const displayName = fileName;
+                const displayName = fileName.length > 30
+                    ? fileName.substring(0, 30) + '...'
+                    : fileName;
 
                 // Create stem UI HTML
                 const stemBarHTML = `
@@ -2438,28 +2439,11 @@
             if (multiStemPlayerExpanded) {
                 console.log('🎵 EXPANDING: Switching from parent to stems (instant)');
 
-                // Check if parent is currently playing
-                const parentIsPlaying = wavesurfer && wavesurfer.isPlaying();
-                const parentTime = wavesurfer ? wavesurfer.getCurrentTime() : 0;
-                const parentDuration = wavesurfer ? wavesurfer.getDuration() : 1;
-                const parentProgress = parentDuration > 0 ? parentTime / parentDuration : 0;
-
-                console.log(`Parent state: ${parentIsPlaying ? 'playing' : 'paused'} at ${parentTime.toFixed(2)}s (${(parentProgress * 100).toFixed(1)}%)`);
-
-                // 1. SYNC ALL STEMS TO PARENT POSITION FIRST
-                stemTypes.forEach(type => {
-                    const ws = stemPlayerWavesurfers[type];
-                    if (ws) {
-                        ws.seekTo(parentProgress);
-                        console.log(`✓ ${type} synced to position ${(parentProgress * 100).toFixed(1)}%`);
-                    }
-                });
-
-                // 2. MUTE PARENT IMMEDIATELY (prevents double audio)
+                // 1. MUTE PARENT IMMEDIATELY (prevents double audio)
                 wavesurfer.setVolume(0);
                 console.log('✓ Parent muted');
 
-                // 3. UNMUTE ALL STEMS
+                // 2. UNMUTE ALL STEMS (they're already playing in background)
                 stemTypes.forEach(type => {
                     const ws = stemPlayerWavesurfers[type];
                     if (ws) {
@@ -2470,23 +2454,7 @@
                     }
                 });
 
-                // 4. IF PARENT WAS PLAYING, START ALL STEMS
-                if (parentIsPlaying) {
-                    console.log('Parent was playing - starting all stems');
-                    setTimeout(() => {
-                        stemTypes.forEach(type => {
-                            const ws = stemPlayerWavesurfers[type];
-                            if (ws && !ws.isPlaying()) {
-                                ws.play();
-                                console.log(`✓ ${type} playing`);
-                            }
-                        });
-                    }, 50); // Small delay to ensure seek completes
-                } else {
-                    console.log('Parent was paused - stems remain paused at position');
-                }
-
-                // 5. Show UI with animation (UI already exists, just reveal it)
+                // 3. Show UI with animation (UI already exists, just reveal it)
                 setTimeout(() => {
                     multiStemPlayer.classList.remove('collapsed');
                     console.log('✓ UI expanded');
@@ -4556,15 +4524,13 @@
         function setPlaybackRate(rate) {
             currentRate = rate;
 
-            // Check for OLD stem system (disabled but code still exists)
+            // Phase 4 Step 2A: Prevent phase drift when changing rate
+            // If stems are loaded, we need to synchronize them during rate change
             const hasStemWavesurfers = Object.keys(stemWavesurfers).length > 0;
-
-            // Phase 1: Check for NEW multi-stem player system
-            const hasMultiStemWavesurfers = Object.keys(stemPlayerWavesurfers).length > 0;
             const wasPlaying = wavesurfer && wavesurfer.isPlaying();
 
-            // Pause old stems if present (shouldn't happen but just in case)
             if (hasStemWavesurfers && wasPlaying) {
+                // 1. Pause all stems to prevent drift
                 Object.keys(stemWavesurfers).forEach(stemType => {
                     const stemWS = stemWavesurfers[stemType];
                     if (stemWS && stemWS.isPlaying()) {
@@ -4573,22 +4539,11 @@
                 });
             }
 
-            // Phase 1: Pause new multi-stem player stems if playing
-            if (hasMultiStemWavesurfers && wasPlaying) {
-                Object.keys(stemPlayerWavesurfers).forEach(stemType => {
-                    const stemWS = stemPlayerWavesurfers[stemType];
-                    if (stemWS && stemWS.isPlaying()) {
-                        stemWS.pause();
-                    }
-                });
-            }
-
-            // Set rate on parent WaveSurfer
             if (wavesurfer) {
                 wavesurfer.setPlaybackRate(rate, false); // false = natural analog (speed+pitch)
             }
 
-            // Set rate on OLD stem WaveSurfers (if any exist)
+            // Phase 4 Step 2A: Also set playback rate for all stem WaveSurfers
             Object.keys(stemWavesurfers).forEach(stemType => {
                 const stemWS = stemWavesurfers[stemType];
                 if (stemWS) {
@@ -4596,17 +4551,8 @@
                 }
             });
 
-            // Phase 1: Set rate on NEW multi-stem player WaveSurfers
-            Object.keys(stemPlayerWavesurfers).forEach(stemType => {
-                const stemWS = stemPlayerWavesurfers[stemType];
-                if (stemWS) {
-                    stemWS.setPlaybackRate(rate, false);
-                    console.log(`✓ ${stemType} rate set to ${rate.toFixed(2)}x`);
-                }
-            });
-
-            // Re-sync and resume OLD stems (if any)
             if (hasStemWavesurfers && wasPlaying) {
+                // 2. Re-sync all stems to main WaveSurfer position
                 const currentProgress = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
                 Object.keys(stemWavesurfers).forEach(stemType => {
                     const stemWS = stemWavesurfers[stemType];
@@ -4615,6 +4561,7 @@
                     }
                 });
 
+                // 3. Resume playback on all stems
                 setTimeout(() => {
                     Object.keys(stemWavesurfers).forEach(stemType => {
                         const stemWS = stemWavesurfers[stemType];
@@ -4622,28 +4569,7 @@
                             stemWS.play();
                         }
                     });
-                }, 50);
-            }
-
-            // Phase 1: Re-sync and resume NEW multi-stem player stems
-            if (hasMultiStemWavesurfers && wasPlaying) {
-                const currentProgress = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
-                Object.keys(stemPlayerWavesurfers).forEach(stemType => {
-                    const stemWS = stemPlayerWavesurfers[stemType];
-                    if (stemWS) {
-                        stemWS.seekTo(currentProgress);
-                    }
-                });
-
-                setTimeout(() => {
-                    Object.keys(stemPlayerWavesurfers).forEach(stemType => {
-                        const stemWS = stemPlayerWavesurfers[stemType];
-                        if (stemWS && !stemWS.isPlaying()) {
-                            stemWS.play();
-                            console.log(`✓ ${stemType} resumed at ${rate.toFixed(2)}x`);
-                        }
-                    });
-                }, 50);
+                }, 50); // Small delay to ensure all rate changes are applied
             }
 
             // Clear any scheduled metronome notes when rate changes

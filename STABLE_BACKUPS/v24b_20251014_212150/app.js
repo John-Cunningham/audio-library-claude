@@ -2287,10 +2287,11 @@
 
                 console.log(`Creating UI and WaveSurfer for ${stemType}`);
 
-                // Use full filename from database (important for "empty" suffix filtering)
+                // Truncate filename if too long
                 const fileName = stemFile.stem_file_name || stemType;
-                // Show full filename - user needs to see "empty" suffix
-                const displayName = fileName;
+                const displayName = fileName.length > 30
+                    ? fileName.substring(0, 30) + '...'
+                    : fileName;
 
                 // Create stem UI HTML
                 const stemBarHTML = `

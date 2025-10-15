@@ -1,1404 +1,68 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Library Manager</title>
-    <script src="https://unpkg.com/wavesurfer.js@7"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="./modular-multi-stem/multi-stem.css" />
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        /* Spinner animation for loading BPM/Key */
-        .spinner {
-            display: inline-block;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Smooth flashing animation for recording/playback */
-        .flashing {
-            animation: smoothFlash 2s ease-in-out infinite;
-        }
-
-        .flashing-green {
-            animation: smoothFlashGreen 2s ease-in-out infinite;
-        }
-
-        @keyframes smoothFlash {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-
-        @keyframes smoothFlashGreen {
-            0%, 100% {
-                opacity: 1;
-                background: #44ff44 !important;
-            }
-            50% {
-                opacity: 0.4;
-                background: #44ff44 !important;
-            }
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #0a0a0a;
-            min-height: 100vh;
-            padding: 0;
-            padding-bottom: 180px; /* Space for fixed bottom player (now taller with 2 rows) */
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: #1a1a1a;
-            border-radius: 0;
-            box-shadow: none;
-            overflow: hidden;
-        }
-
-        .header {
-            background: #0f0f0f;
-            color: #ffffff;
-            padding: 20px 30px;
-            text-align: center;
-            border-bottom: 1px solid #2a2a2a;
-        }
-
-        .header h1 {
-            font-size: 1.8em;
-            margin-bottom: 5px;
-            font-weight: 600;
-        }
-
-        .header p {
-            color: #999;
-            font-size: 0.9em;
-        }
-
-        .upload-section {
-            padding: 20px 30px;
-            background: #1a1a1a;
-            border-bottom: 1px solid #2a2a2a;
-        }
-
-        .upload-form {
-            display: flex;
-            gap: 15px;
-            align-items: flex-start;
-            flex-wrap: wrap;
-        }
-
-        .upload-form input[type="file"] {
-            flex: 1;
-            min-width: 200px;
-            padding: 10px;
-            border: 1px solid #3a3a3a;
-            border-radius: 6px;
-            font-size: 14px;
-            background: #2a2a2a;
-            color: #fff;
-        }
-
-        .upload-form input[type="text"] {
-            flex: 1;
-            min-width: 200px;
-            padding: 10px;
-            border: 1px solid #3a3a3a;
-            border-radius: 6px;
-            font-size: 14px;
-            background: #2a2a2a;
-            color: #fff;
-        }
-
-        .upload-form input[type="text"]::placeholder {
-            color: #666;
-        }
-
-        .upload-form button {
-            padding: 10px 30px;
-            background: #4a9eff;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .upload-form button:hover {
-            background: #3a8eef;
-        }
-
-        .tag-section {
-            padding: 20px 30px;
-            background: #1a1a1a;
-            border-bottom: 1px solid #2a2a2a;
-        }
-
-        .tag-section h2 {
-            font-size: 1.2em;
-            margin-bottom: 12px;
-            color: #fff;
-        }
-
-        .filter-legend {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 12px;
-            font-size: 12px;
-            color: #999;
-        }
-
-        .filter-legend span {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .filter-legend .legend-box {
-            width: 20px;
-            height: 20px;
-            border-radius: 4px;
-            border: 3px solid;
-        }
-
-        .legend-box.can-have { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
-        .legend-box.must-have { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
-        .legend-box.exclude { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
-
-        .tags-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .tag-button {
-            padding: 4px 10px;
-            background: #2a2a2a;
-            color: #ccc;
-            border: 1px solid transparent;
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 500;
-            transition: all 0.2s;
-            user-select: none;
-        }
-
-        .tag-button:hover {
-            background: #3a3a3a;
-        }
-
-        .tag-button.can-have {
-            border-color: #3b82f6;
-            background: rgba(59, 130, 246, 0.2);
-            color: #6ba3ff;
-            border-width: 2px;
-        }
-
-        .tag-button.must-have {
-            border-color: #10b981;
-            background: rgba(16, 185, 129, 0.2);
-            color: #4ade80;
-            border-width: 2px;
-        }
-
-        .tag-button.exclude {
-            border-color: #ef4444;
-            background: rgba(239, 68, 68, 0.2);
-            color: #f87171;
-            border-width: 2px;
-        }
-
-        .active-filters {
-            margin-top: 12px;
-            padding: 12px;
-            background: #0f0f0f;
-            border-radius: 8px;
-            font-size: 12px;
-            color: #999;
-            min-height: 20px;
-        }
-
-        /* Bottom Audio Player - Fixed position */
-        .bottom-player {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: auto;
-            background: #0f0f0f;
-            border-top: 1px solid #2a2a2a;
-            display: flex;
-            flex-direction: column;
-            z-index: 1000;
-        }
-
-        .bottom-player.disabled {
-            opacity: 0.5;
-            pointer-events: none;
-        }
-
-        .player-controls {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        .player-btn {
-            min-width: 36px;
-            height: 36px;
-            padding: 0 8px;
-            background: transparent;
-            border: 1px solid #3a3a3a;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #999;
-            transition: all 0.2s;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .player-btn:hover {
-            background: #2a2a2a;
-            border-color: #4a4a4a;
-            color: #fff;
-        }
-
-        .player-btn.play-pause {
-            width: 44px;
-            height: 44px;
-            background: #4a9eff;
-            border: none;
-            border-radius: 50%;
-            font-size: 20px;
-            color: #fff;
-        }
-
-        .player-btn.play-pause:hover {
-            background: #3a8eef;
-        }
-
-        .player-btn.active {
-            background: #4a9eff;
-            border-color: #4a9eff;
-            color: #fff;
-        }
-
-        .player-waveform {
-            background: #1a1a1a;
-            border-radius: 4px;
-            overflow-x: hidden;
-            overflow-y: visible;
-            position: relative;
-        }
-
-        .bar-marker {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: rgba(255, 0, 0, 0.6);
-            pointer-events: none;
-            z-index: 11;
-        }
-
-        .beat-marker {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 1px;
-            background: rgba(255, 100, 0, 0.3);
-            pointer-events: none;
-            z-index: 10;
-        }
-
-        .marker-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            pointer-events: none;
-            z-index: 10;
-        }
-
-        .loop-region {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            background: rgba(100, 200, 255, 0.15);
-            border-left: 2px solid rgba(100, 200, 255, 0.7);
-            border-right: 2px solid rgba(100, 200, 255, 0.7);
-            pointer-events: none;
-            z-index: 9;
-        }
-
-        .loop-progress-mask {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            background: rgba(102, 102, 102, 0.9); /* Gray overlay to cover blue progress */
-            pointer-events: none;
-            z-index: 12; /* Above progress (11) but need to be subtle */
-            mix-blend-mode: darken; /* Blend mode to preserve waveform visibility */
-        }
-
-        .loop-preview {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            background: rgba(100, 200, 255, 0.25);
-            border-left: 2px dashed rgba(100, 200, 255, 0.8);
-            border-right: 2px dashed rgba(100, 200, 255, 0.8);
-            pointer-events: none;
-            z-index: 8; /* Below loop-region */
-        }
-
-        .player-info {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            min-width: 200px;
-            max-width: 300px;
-            flex-shrink: 0;
-        }
-
-        .player-filename {
-            color: #fff;
-            font-size: 13px;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .player-time {
-            color: #999;
-            font-size: 11px;
-        }
-
-        /* Hide old player section */
-        .player-section {
-            display: none;
-        }
-
-        .files-section {
-            background: #1a1a1a;
-        }
-
-        .files-header {
-            padding: 30px 30px 0 30px;
-            background: #1a1a1a;
-        }
-
-        .files-section h2 {
-            font-size: 1.3em;
-            margin-bottom: 20px;
-            color: #fff;
-        }
-
-        .files-scroll-container {
-            padding: 0 30px 30px 30px;
-            max-height: 600px;
-            overflow-y: auto;
-            background: #1a1a1a;
-        }
-
-        .file-list {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .file-item {
-            padding: 10px;
-            background: #0f0f0f;
-            border: 1px solid #2a2a2a;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .file-item:hover {
-            background: #252525;
-            border-color: #3a3a3a;
-        }
-
-        .file-item.active {
-            background: rgba(74, 158, 255, 0.15);
-            border-color: #4a9eff;
-            border-width: 2px;
-            box-shadow: 0 0 0 1px rgba(74, 158, 255, 0.3);
-        }
-
-        .file-name {
-            font-weight: 600;
-            font-size: 13px;
-            color: #fff;
-            margin-bottom: 6px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .file-tags {
-            display: flex;
-            flex-wrap: nowrap;
-            gap: 4px;
-            overflow: hidden;
-            max-height: 20px;
-        }
-
-        .file-tag {
-            padding: 2px 8px;
-            background: #2a2a2a;
-            border-radius: 10px;
-            font-size: 11px;
-            color: #999;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-
-        .stems-icon {
-            display: inline-block;
-            font-size: 18px;
-            cursor: pointer;
-            opacity: 0.4;
-            transition: all 0.2s;
-            filter: grayscale(100%);
-        }
-
-        .stems-icon:hover {
-            opacity: 0.6;
-            transform: scale(1.1);
-        }
-
-        .stems-icon.active {
-            opacity: 1;
-            filter: grayscale(0%);
-        }
-
-        .stems-icon.active:hover {
-            opacity: 1;
-            transform: scale(1.2);
-        }
-
-        .file-item button:hover {
-            background: #3a3a3a !important;
-            color: #fff !important;
-        }
-
-        .file-actions {
-            margin-top: 10px;
-            display: flex;
-            gap: 10px;
-        }
-
-        .file-actions button {
-            padding: 5px 12px;
-            background: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .file-actions button:hover {
-            background: #c82333;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-        }
-
-        .empty-state svg {
-            width: 64px;
-            height: 64px;
-            margin-bottom: 15px;
-            opacity: 0.3;
-        }
-
-        /* Edit Tags Modal */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 2000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal-content {
-            background: #1a1a1a;
-            border-radius: 12px;
-            padding: 30px;
-            max-width: 600px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            border: 1px solid #2a2a2a;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .modal-header h2 {
-            margin: 0;
-            color: #fff;
-            font-size: 1.5em;
-        }
-
-        .modal-close {
-            background: transparent;
-            border: none;
-            color: #999;
-            font-size: 28px;
-            cursor: pointer;
-            padding: 0;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            transition: all 0.2s;
-        }
-
-        .modal-close:hover {
-            background: #2a2a2a;
-            color: #fff;
-        }
-
-        .tag-input-container {
-            background: #2a2a2a;
-            border: 1px solid #3a3a3a;
-            border-radius: 6px;
-            padding: 10px;
-            min-height: 80px;
-            margin-bottom: 15px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            align-items: flex-start;
-        }
-
-        .tag-pill-editable {
-            padding: 6px 12px;
-            background: #3a3a3a;
-            color: #ccc;
-            border: 1px solid #4a4a4a;
-            border-radius: 16px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .tag-pill-editable:hover {
-            background: #4a4a4a;
-        }
-
-        .tag-pill-editable.selected {
-            background: #4a9eff;
-            border-color: #4a9eff;
-            color: white;
-        }
-
-        .tag-pill-editable .count {
-            background: #2a2a2a;
-            padding: 2px 6px;
-            border-radius: 8px;
-            font-size: 11px;
-        }
-
-        .tag-input-field {
-            flex: 1;
-            min-width: 150px;
-            background: transparent;
-            border: none;
-            color: #fff;
-            font-size: 14px;
-            outline: none;
-            padding: 6px;
-        }
-
-        .tag-suggestions {
-            background: #0f0f0f;
-            border: 1px solid #2a2a2a;
-            border-radius: 6px;
-            max-height: 200px;
-            overflow-y: auto;
-            margin-bottom: 15px;
-        }
-
-        .tag-suggestion-item {
-            padding: 10px 15px;
-            cursor: pointer;
-            transition: all 0.2s;
-            color: #ccc;
-            font-size: 14px;
-        }
-
-        .tag-suggestion-item:hover {
-            background: #2a2a2a;
-            color: #fff;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 20px;
-        }
-
-        .modal-btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .modal-btn-cancel {
-            background: #555;
-            color: white;
-        }
-
-        .modal-btn-cancel:hover {
-            background: #666;
-        }
-
-        .modal-btn-save {
-            background: #10b981;
-            color: white;
-        }
-
-        .modal-btn-save:hover {
-            background: #059669;
-        }
-
-        /* Mobile responsiveness */
-        @media (max-width: 768px) {
-            .header {
-                padding: 15px 20px;
-            }
-
-            .header h1 {
-                font-size: 1.4em;
-            }
-
-            .tag-section {
-                padding: 15px 20px;
-            }
-
-            .tag-section h2 {
-                font-size: 1.1em;
-            }
-
-            .tag-button {
-                padding: 3px 8px;
-                font-size: 11px;
-                border-radius: 10px;
-            }
-
-            .filter-legend {
-                font-size: 11px;
-                gap: 12px;
-                flex-wrap: wrap;
-            }
-
-            .filter-legend .legend-box {
-                width: 16px;
-                height: 16px;
-            }
-
-            .files-header {
-                padding: 20px 20px 0 20px;
-            }
-
-            .files-scroll-container {
-                padding: 0 20px 20px 20px;
-            }
-
-            .file-name {
-                font-size: 11px;
-            }
-
-            .file-tag {
-                font-size: 10px;
-                padding: 2px 6px;
-            }
-
-            /* Mobile bottom player - completely redesigned */
-            .bottom-player {
-                flex-direction: column;
-                padding: 8px;
-                gap: 6px;
-                height: auto;
-                min-height: 100px;
-                max-height: 130px;
-            }
-
-            /* Top row: controls + volume */
-            .player-controls {
-                display: flex;
-                gap: 4px;
-                flex-shrink: 0;
-                width: 100%;
-                justify-content: space-between;
-                align-items: center;
-            }
-
-            .player-btn {
-                min-width: 32px;
-                height: 32px;
-                font-size: 11px;
-                padding: 0 6px;
-            }
-
-            .player-btn.play-pause {
-                width: 40px;
-                height: 40px;
-                font-size: 18px;
-            }
-
-            /* Waveform already full width on its own row */
-            .player-waveform {
-                height: 60px;
-            }
-
-            /* Speed controls - hide on mobile to save space */
-            .bottom-player > div:nth-child(2) {
-                display: none !important;
-            }
-
-            /* Player info hidden on mobile */
-            .player-info {
-                display: none;
-            }
-
-            /* Volume controls - compact, in top row */
-            .bottom-player > div:last-child {
-                display: flex !important;
-                align-items: center !important;
-                gap: 3px !important;
-                min-width: 90px !important;
-                flex-shrink: 0;
-            }
-
-            .bottom-player > div:last-child > span:first-child {
-                font-size: 10px !important;
-            }
-
-            .bottom-player #volumeSlider {
-                flex: 1;
-                min-width: 40px !important;
-            }
-
-            .bottom-player #volumePercent {
-                font-size: 8px !important;
-                min-width: 35px !important;
-                white-space: nowrap;
-            }
-
-            .modal-content {
-                width: 100%;
-                max-width: 100%;
-                height: 100vh;
-                max-height: 100vh;
-                padding: 15px;
-                border-radius: 0;
-                overflow-y: auto;
-            }
-
-            /* Hide less critical table columns on mobile */
-            .file-row > div:nth-child(3), /* Created date */
-            .file-row > div:nth-child(4), /* Length */
-            #columnHeaders > div:nth-child(3),
-            #columnHeaders > div:nth-child(4) {
-                display: none;
-            }
-
-            /* Make remaining columns wider */
-            .file-row > div:nth-child(1), /* Filename */
-            #columnHeaders > div:nth-child(1) {
-                flex: 2;
-            }
-
-            /* Upload button full width */
-            .upload-form button {
-                width: 100%;
-            }
-
-            /* Bigger touch targets for buttons */
-            button, .player-btn, .tag-button {
-                min-height: 44px; /* Apple's recommended touch target */
-            }
-
-            .tag-button {
-                padding: 8px 12px;
-            }
-        }
-
-        /* iPad and larger tablets (768px - 1024px) */
-        @media (min-width: 769px) and (max-width: 1024px) {
-            .modal-content {
-                width: 90%;
-                max-width: 600px;
-                max-height: 90vh;
-            }
-
-            /* Keep speed controls on iPad */
-            .bottom-player > div:nth-child(2) {
-                display: flex !important;
-            }
-
-            /* Show all columns on iPad */
-            .file-row > div,
-            #columnHeaders > div {
-                display: block;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎵 Audio Library Manager</h1>
-            <p>Upload, tag, and organize your audio files</p>
-        </div>
-
-        <div class="tag-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div style="display: flex; gap: 12px; align-items: center;">
-                    <h2 style="margin: 0; font-size: 1.5em;">Filter by Tags</h2>
-                    <button id="modeCanHave" onclick="setTagMode('canHave')" style="padding: 8px 14px; background: transparent; color: #3b82f6; border: 2px solid #3b82f6; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 12px;">
-                        CAN <span style="font-size: 10px; opacity: 0.8; font-weight: 400;">(Click)</span>
-                    </button>
-                    <button id="modeMustHave" onclick="setTagMode('mustHave')" style="padding: 8px 14px; background: transparent; color: #10b981; border: 2px solid #10b981; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 12px;">
-                        MUST <span style="font-size: 10px; opacity: 0.8; font-weight: 400;">(Shift+Click)</span>
-                    </button>
-                    <button id="modeExclude" onclick="setTagMode('exclude')" style="padding: 8px 14px; background: transparent; color: #ef4444; border: 2px solid #ef4444; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 12px;">
-                        EXCLUDE <span style="font-size: 10px; opacity: 0.8; font-weight: 400;">(Option+Click)</span>
-                    </button>
-                </div>
-                <div style="display: flex; gap: 10px;">
-                    <button onclick="selectAllVisibleTags()" style="padding: 8px 16px; background: #4a9eff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Select All Tags</button>
-                    <button onclick="deselectAllTags()" style="padding: 8px 16px; background: #555; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Deselect All Tags</button>
-                </div>
-            </div>
-            <input type="text" id="searchBar" placeholder="Search files and tags..."
-                   oninput="handleSearch(this.value)"
-                   onkeydown="handleSearchKeydown(event)"
-                   style="width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #3a3a3a; border-radius: 6px; font-size: 14px; background: #2a2a2a; color: #fff;">
-            <div class="tags-container" id="tagsContainer">
-                <div class="empty-state" style="width: 100%; padding: 20px;">No tags yet. Upload audio files with tags to get started.</div>
-            </div>
-            <div class="active-filters" id="activeFilters">No active filters</div>
-        </div>
-
-        <div class="files-section">
-            <div class="files-header">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <h2 style="margin: 0;">Audio Files <span id="fileCount">(0)</span> <span id="selectedCount" style="color: #4a9eff;"></span></h2>
-                        <button onclick="openUploadFlow()" style="padding: 8px 16px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Upload Files</button>
-                    </div>
-                    <div style="display: flex; gap: 10px;">
-                        <button onclick="selectAll()" style="padding: 8px 16px; background: #4a9eff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">Select All</button>
-                        <button onclick="deselectAll()" style="padding: 8px 16px; background: #555; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">Deselect All</button>
-                        <button id="batchDeleteBtn" onclick="batchDelete()" disabled style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">Delete Selected</button>
-                        <button id="batchEditBtn" onclick="batchEditTags()" disabled style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">Edit Files</button>
-                        <button id="batchDetectBtn" onclick="batchDetect()" disabled style="padding: 8px 16px; background: #8b5cf6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">Detect BPM/Key</button>
-                        <button id="batchStemsBtn" onclick="batchSeparateStems()" disabled style="padding: 8px 16px; background: #ec4899; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">Separate Stems</button>
-                    </div>
-                </div>
-                <div id="columnHeaders"></div>
-            </div>
-            <div class="files-scroll-container">
-                <div class="file-list" id="fileList">
-                    <div class="empty-state">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-                        </svg>
-                        <div>No audio files yet. Upload your first audio file to get started!</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Progress Bar (Top of screen) -->
-    <div id="progressBar" style="position: fixed; top: 0; left: 0; right: 0; height: 0; background: linear-gradient(90deg, #4a9eff, #3a8eef); z-index: 9999; transition: height 0.2s, opacity 0.3s; opacity: 0; box-shadow: 0 2px 8px rgba(74, 158, 255, 0.3);">
-        <div style="padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; color: white; font-size: 13px; font-weight: 600;">
-            <span id="progressText">Processing...</span>
-            <span id="progressCounter">0/0</span>
-        </div>
-        <div style="position: absolute; bottom: 0; left: 0; height: 3px; background: rgba(255,255,255,0.3); width: 100%;">
-            <div id="progressBarFill" style="height: 100%; background: white; width: 0%; transition: width 0.5s linear;"></div>
-        </div>
-    </div>
-
-    <!-- Edit Files Modal -->
-    <div class="modal-overlay" id="editTagsModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Edit Files <span id="modalFileCount" style="color: #999; font-size: 0.8em;"></span></h2>
-                <button class="modal-close" onclick="closeEditTagsModal()">&times;</button>
-            </div>
-
-            <!-- Tags Section -->
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; color: #ccc; font-size: 13px; font-weight: 600; margin-bottom: 8px;">Tags:</label>
-                <div class="tag-input-container" id="tagInputContainer">
-                    <input type="text" class="tag-input-field" id="tagInputField" placeholder="Type to add tags...">
-                </div>
-                <div class="tag-suggestions" id="tagSuggestions" style="display: none;"></div>
-            </div>
-
-            <!-- BPM and Key Section -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                <div>
-                    <label style="display: block; color: #ccc; font-size: 13px; font-weight: 600; margin-bottom: 8px;">BPM:</label>
-                    <input type="text" id="modalBpmInput" placeholder="e.g., 120 or 97.833"
-                           style="width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 6px; color: #fff; font-size: 14px;">
-                </div>
-                <div>
-                    <label style="display: block; color: #ccc; font-size: 13px; font-weight: 600; margin-bottom: 8px;">Key:</label>
-                    <select id="modalKeyInput" style="width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 6px; color: #fff; font-size: 14px; cursor: pointer;">
-                        <option value="">-- Select Key --</option>
-                        <option value="Cmaj/Amin">Cmaj/Amin</option>
-                        <option value="C#maj/A#min">C#maj/A#min</option>
-                        <option value="Dmaj/Bmin">Dmaj/Bmin</option>
-                        <option value="D#maj/Cmin">D#maj/Cmin</option>
-                        <option value="Emaj/C#min">Emaj/C#min</option>
-                        <option value="Fmaj/Dmin">Fmaj/Dmin</option>
-                        <option value="F#maj/D#min">F#maj/D#min</option>
-                        <option value="Gmaj/Emin">Gmaj/Emin</option>
-                        <option value="G#maj/Fmin">G#maj/Fmin</option>
-                        <option value="Amaj/F#min">Amaj/F#min</option>
-                        <option value="A#maj/Gmin">A#maj/Gmin</option>
-                        <option value="Bmaj/G#min">Bmaj/G#min</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Processing Options Section -->
-            <div id="processingOptions" style="display: none; margin-bottom: 20px; padding: 15px; background: #252525; border: 1px solid #3a3a3a; border-radius: 8px;">
-                <label style="display: block; color: #ccc; font-size: 13px; font-weight: 600; margin-bottom: 12px;">
-                    <span id="processingOptionsTitle">Auto-Processing Options:</span>
-                </label>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ddd; font-size: 13px;">
-                        <input type="checkbox" id="processStems" style="width: 16px; height: 16px; cursor: pointer;">
-                        <span>Split Stems</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ddd; font-size: 13px;">
-                        <input type="checkbox" id="processBpmKey" checked style="width: 16px; height: 16px; cursor: pointer;">
-                        <span>BPM/Key Detection</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ddd; font-size: 13px;">
-                        <input type="checkbox" id="processInstruments" checked style="width: 16px; height: 16px; cursor: pointer;">
-                        <span>Instruments</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ddd; font-size: 13px;">
-                        <input type="checkbox" id="processChords" checked style="width: 16px; height: 16px; cursor: pointer;">
-                        <span>Chords</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ddd; font-size: 13px;">
-                        <input type="checkbox" id="processBeatmap" checked style="width: 16px; height: 16px; cursor: pointer;">
-                        <span>Beatmap</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ddd; font-size: 13px;">
-                        <input type="checkbox" id="processAutoTag" checked style="width: 16px; height: 16px; cursor: pointer;">
-                        <span>Auto-Tag</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ddd; font-size: 13px;">
-                        <input type="checkbox" id="processConvertMp3" style="width: 16px; height: 16px; cursor: pointer;">
-                        <span>Convert to MP3</span>
-                    </label>
-                </div>
-                <div id="processingNote" style="margin-top: 10px; padding: 8px; background: #1a1a1a; border-radius: 4px;">
-                    <p style="margin: 0; font-size: 11px; color: #888; line-height: 1.4;">
-                        <strong>Note:</strong> Your selections are saved and will be remembered for next time.
-                    </p>
-                </div>
-            </div>
-
-            <div class="modal-actions">
-                <button class="modal-btn modal-btn-cancel" onclick="closeEditTagsModal()">Cancel</button>
-                <button class="modal-btn modal-btn-save" onclick="saveEditedTags()">Save Changes</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Hidden file input for upload -->
-    <input type="file" id="uploadFileInput" accept="audio/*" multiple style="display: none;">
-
-    <!-- Upload progress bar -->
-
-        <!-- Multi-Stem stacked player container (shows 5 full-featured bars) -->
-        <div id="multiStemPlayer" class="multi-stem-player" style="display:none; position:fixed; left:0; right:0; bottom:100px; max-height:80vh; overflow-y:auto; z-index:2000; background:#181818; border-top:2px solid #333; box-shadow:0 -8px 32px #000a; padding:24px 0 12px 0;">
-            <div id="multiStemError" style="color:#fff; text-align:center; margin:40px 0; display:none;">[Multi-stem player failed to render. Check your script block location and browser console.]</div>
-        </div>
-    <div id="uploadProgressBar" style="position: fixed; top: 0; left: 0; width: 0%; height: 3px; background: linear-gradient(90deg, #f59e0b, #fb923c); z-index: 10000; transition: width 0.3s ease; display: none;"></div>
-
-    <!-- Fixed Bottom Audio Player -->
-    <div class="bottom-player" id="bottomPlayer">
-    <!-- STEMS Toggle Button -->
-    <button class="player-btn" id="stemsToggleBtn" style="position:absolute; right:24px; top:-44px; z-index:1100; background:#3a86ff; color:#fff; border:none; border-radius:6px; padding:8px 16px; font-weight:600; cursor:pointer;" onclick="window.multiStems && window.multiStems.toggleExpand()">STEMS</button>
-    <!-- Row 1: Full-width Waveform -->
-        <div style="width: 100%; padding: 8px 12px; background: #0f0f0f; border-bottom: 1px solid #2a2a2a;">
-            <div class="player-waveform" id="waveform" style="width: 100%; height: 80px;"></div>
-        </div>
-
-        <!-- Row 2: All Controls -->
-        <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; flex-wrap: nowrap; overflow-x: auto;">
-            <!-- Transport Controls with Volume Slider underneath -->
-            <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
-                <div style="text-align: center;">
-                    <span style="color: #999; font-size: 11px;">Transport:</span>
-                </div>
-                <div class="player-controls">
-                    <button class="player-btn" id="prevBtn" onclick="previousTrack()" title="Previous">
-                        <span>◄◄</span>
-                    </button>
-                    <button class="player-btn play-pause" id="playPauseBtn" onclick="playPause()" title="Play/Pause">
-                        <span id="playPauseIcon">▶</span>
-                    </button>
-                    <button class="player-btn" id="nextBtn" onclick="nextTrack()" title="Next">
-                        <span>►►</span>
-                    </button>
-                    <button class="player-btn" id="loopBtn" onclick="toggleLoop()" title="Loop">
-                        <span>LOOP</span>
-                    </button>
-                    <button class="player-btn" id="shuffleBtn" onclick="toggleShuffle()" title="Shuffle">
-                        <span>SHFL</span>
-                    </button>
-                </div>
-                <!-- Volume slider directly under transport controls -->
-                <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                    <button id="muteBtn" onclick="toggleMute()" title="Mute/Unmute"
-                            style="background: transparent; border: none; color: #999; font-size: 14px; cursor: pointer; padding: 0; margin: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">🔊</button>
-                    <input type="range" id="volumeSlider" min="0" max="398" value="100"
-                           style="flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;"
-                           oninput="setVolume(this.value)"
-                           ondblclick="resetVolume()">
-                    <span id="volumePercent" style="color: #999; font-size: 11px; min-width: 95px;">100% (+0.0 dB)</span>
-                </div>
-            </div>
-
-        <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; min-width: 240px;">
-            <div style="text-align: center;">
-                <span style="color: #999; font-size: 11px;">Rate:</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                <button class="player-btn" id="halfRateBtn" onclick="setPlaybackRate(0.5)" title="Half Rate (0.5x - slower + lower pitch)" style="flex: 1;">
-                    <span>0.5x</span>
-                </button>
-                <button class="player-btn active" id="normalRateBtn" onclick="setPlaybackRate(1)" title="Normal Rate (1x)" style="flex: 1;">
-                    <span>1x</span>
-                </button>
-                <button class="player-btn" id="doubleRateBtn" onclick="setPlaybackRate(2)" title="Double Rate (2x - faster + higher pitch)" style="flex: 1;">
-                    <span>2x</span>
-                </button>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                <input type="range" id="rateSlider" min="0.025" max="4.0" step="0.025" value="1.0"
-                       style="flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;"
-                       oninput="setPlaybackRate(parseFloat(this.value))"
-                       ondblclick="resetRate()">
-                <span id="rateValue" style="color: #999; font-size: 11px; min-width: 35px; text-align: right;">1.0x</span>
-            </div>
-        </div>
-
-        <div class="player-info">
-            <div class="player-filename" id="playerFilename">No file selected</div>
-            <div class="player-time" id="playerTime">0:00 / 0:00</div>
-        </div>
-
-        <!-- Marker Controls -->
-        <div style="display: flex; align-items: center; gap: 8px; padding: 0 12px; border-left: 1px solid #333;">
-            <button class="player-btn active" id="markersBtn" onclick="toggleMarkers()" title="Toggle markers (M)">
-                <span>MARKS</span>
-            </button>
-            <select id="markerFrequencySelect" onchange="setMarkerFrequency(this.value)"
-                    style="background: #2a2a2a; color: #999; border: 1px solid #444;
-                           border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; outline: none;">
-                <option value="bar8">Every 8 bars</option>
-                <option value="bar4">Every 4 bars</option>
-                <option value="bar2">Every 2 bars</option>
-                <option value="bar" selected>Every bar</option>
-                <option value="halfbar">Half bar</option>
-                <option value="beat">Every beat</option>
-            </select>
-
-            <!-- Shift Start Controls -->
-            <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #333; padding-left: 8px;">
-                <span style="color: #999; font-size: 10px;">Shift:</span>
-                <button class="player-btn" onclick="shiftBarStartLeft()" title="Shift bar 1 to previous marker"
-                        style="padding: 2px 8px; font-size: 11px;">◀</button>
-                <span id="barStartOffsetDisplay" style="color: #999; font-size: 11px; min-width: 20px; text-align: center;">0</span>
-                <button class="player-btn" onclick="shiftBarStartRight()" title="Shift bar 1 to next marker"
-                        style="padding: 2px 8px; font-size: 11px;">▶</button>
-            </div>
-        </div>
-
-        <!-- Metronome Controls (Compact with dropdown below) -->
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 6px; border-left: 1px solid #333;">
-            <button class="player-btn" id="metronomeBtn" onclick="toggleMetronome()" title="Metronome (K)" style="margin: 0;">
-                <span style="font-size: 12px; line-height: 1;">⏱</span>
-            </button>
-            <select id="metronomeSound" onchange="setMetronomeSound(this.value)"
-                    style="background: #2a2a2a; color: #999; border: 1px solid #444;
-                           border-radius: 3px; padding: 1px 3px; font-size: 9px; cursor: pointer; outline: none; width: 40px; height: 16px;">
-                <option value="click" selected>Clk</option>
-                <option value="beep">Bep</option>
-                <option value="wood">Wod</option>
-                <option value="cowbell">Cow</option>
-            </select>
-        </div>
-
-        <!-- Loop Controls -->
-        <div style="display: flex; align-items: center; gap: 8px; padding: 0 12px; border-left: 1px solid #333;">
-            <button class="player-btn" id="cycleBtn" onclick="toggleCycleMode()" title="Toggle cycle mode - Sets and plays loop (C)">
-                <span style="font-size: 10px;">CYCLE</span>
-            </button>
-            <button class="player-btn" id="seekOnClickBtn" onclick="toggleSeekOnClick()" title="Toggle seek when clicking in Edit mode" style="display: none;">
-                <span style="font-size: 9px;">SEEK</span>
-            </button>
-            <button class="player-btn" id="clearLoopBtn" onclick="clearLoopKeepCycle()" title="Clear loop points (keep cycle mode on)" style="display: none;">
-                <span style="font-size: 9px;">CLEAR</span>
-            </button>
-            <span id="loopStatus" style="color: #666; font-size: 10px; min-width: 90px;">Off</span>
-
-            <!-- Expand/Collapse Loop Controls -->
-            <button class="player-btn" id="expandLoopBtn" onclick="toggleLoopControlsExpanded()" title="Show/hide loop controls" style="display: none;">
-                <span style="font-size: 10px;">▼</span>
-            </button>
-
-            <!-- Loop Manipulation Buttons (Collapsible) -->
-            <div id="loopControlsContainer" style="display: none; align-items: center; gap: 6px;">
-                <button class="player-btn" id="shiftLeftBtn" onclick="shiftLoopLeft()" title="Shift loop left (←)">
-                    <span style="font-size: 10px;">◄</span>
-                </button>
-                <button class="player-btn" id="shiftRightBtn" onclick="shiftLoopRight()" title="Shift loop right (→)">
-                    <span style="font-size: 10px;">►</span>
-                </button>
-                <button class="player-btn" id="moveStartLeftBtn" onclick="moveStartLeft()" title="Expand left (◄S)">
-                    <span style="font-size: 9px;">◄S</span>
-                </button>
-                <button class="player-btn" id="moveEndRightBtn" onclick="moveEndRight()" title="Expand right (E►)">
-                    <span style="font-size: 9px;">E►</span>
-                </button>
-                <button class="player-btn" id="halfLengthBtn" onclick="halfLoopLength()" title="Half (↓)">
-                    <span style="font-size: 10px;">½</span>
-                </button>
-                <button class="player-btn" id="doubleLengthBtn" onclick="doubleLoopLength()" title="Double (↑)">
-                    <span style="font-size: 10px;">2×</span>
-                </button>
-                <button class="player-btn" id="jumpBtn" onclick="toggleImmediateJump()" title="Jump on shift (J)">
-                    <span style="font-size: 10px;">JMP</span>
-                </button>
-                <button class="player-btn" id="fadeBtn" onclick="toggleLoopFades()" title="Loop fades">
-                    <span style="font-size: 10px;">FADE</span>
-                </button>
-                <div style="display: flex; align-items: center; gap: 4px;">
-                    <input type="range" id="fadeTimeSlider" min="1" max="250" step="1" value="15"
-                           style="width: 60px; height: 3px; background: #444; border-radius: 2px; outline: none; cursor: pointer;"
-                           oninput="setFadeTime(parseInt(this.value))">
-                    <span id="fadeTimeValue" style="color: #999; font-size: 9px; min-width: 28px;">15ms</span>
-                </div>
-                <button class="player-btn" id="preserveLoopBtn" onclick="togglePreserveLoop()" title="Preserve loop when changing files">
-                    <span style="font-size: 10px;">KEEP</span>
-                </button>
-                <button class="player-btn" id="bpmLockBtn" onclick="toggleBPMLock()" title="Lock BPM across file changes (auto-adjust playback rate)">
-                    <span style="font-size: 9px;">BPM LOCK</span>
-                </button>
-                <button class="player-btn" id="recordActionsBtn" onclick="toggleRecordActions()" title="Record loop actions (waits for first keypress)">
-                    <span style="font-size: 9px;">RECORD</span>
-                </button>
-                <button class="player-btn" id="playActionsBtn" onclick="playRecordedActions()" title="Play back recorded actions">
-                    <span style="font-size: 9px;">PLAY</span>
-                </button>
-            </div>
-        </div>
-        </div>
-        <!-- End Row 2 -->
-    </div>
-
-        <!-- Place script at end of body to ensure DOM is ready -->
-        <script type="module">
-            // --- Multi-Stem Full Player Bars ---
-                    const multiStemStems = [
-                        { name: 'Drums',  file_url: './media/drums.mp3' },
-                        { name: 'Bass',   file_url: './media/bass.mp3' },
-                        { name: 'Vocals', file_url: './media/vocals.mp3' },
-                        { name: 'Other',  file_url: './media/other.mp3' },
-                        { name: 'Keys',   file_url: './media/other.mp3' }
-                    ];
-
-            const multiStemContainerEl = document.getElementById('multiStemPlayer');
-            let multiStemVisible = false;
-
-                    function createPlayerBar(stem, idx) {
-                        const suf = `-stem${idx}`;
-                        return `
-                        <div class="bottom-player" style="position:relative; margin:0 24px 32px 24px; min-width:600px; background:#232323; border-radius:12px; box-shadow:0 2px 12px #0006;">
-                            <div style="width: 100%; padding: 8px 12px; background: #0f0f0f; border-bottom: 1px solid #2a2a2a; border-radius:12px 12px 0 0;">
-                                <div class="player-waveform" id="waveform${suf}" style="width: 100%; height: 80px;"></div>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; flex-wrap: nowrap; overflow-x: auto;">
-                                <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
-                                    <div style="text-align: center;"><span style="color: #999; font-size: 11px;">Transport:</span></div>
-                                    <div class="player-controls">
-                                        <button class="player-btn" id="prevBtn${suf}" title="Previous"><span>◄◄</span></button>
-                                        <button class="player-btn play-pause" id="playPauseBtn${suf}" title="Play/Pause"><span id="playPauseIcon${suf}">▶</span></button>
-                                        <button class="player-btn" id="nextBtn${suf}" title="Next"><span>►►</span></button>
-                                        <button class="player-btn" id="loopBtn${suf}" title="Loop"><span>LOOP</span></button>
-                                        <button class="player-btn" id="shuffleBtn${suf}" title="Shuffle"><span>SHFL</span></button>
-                                    </div>
-                                    <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                                        <button id="muteBtn${suf}" title="Mute/Unmute" style="background: transparent; border: none; color: #999; font-size: 14px; cursor: pointer; padding: 0; margin: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">🔊</button>
-                                        <input type="range" id="volumeSlider${suf}" min="0" max="398" value="100" style="flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;">
-                                        <span id="volumePercent${suf}" style="color: #999; font-size: 11px; min-width: 95px;">100% (+0.0 dB)</span>
-                                    </div>
-                                </div>
-                                <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; min-width: 240px;">
-                                    <div style="text-align: center;"><span style="color: #999; font-size: 11px;">Rate:</span></div>
-                                    <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                                        <button class="player-btn" id="halfRateBtn${suf}" title="Half Rate (0.5x - slower + lower pitch)" style="flex: 1;"><span>0.5x</span></button>
-                                        <button class="player-btn active" id="normalRateBtn${suf}" title="Normal Rate (1x)" style="flex: 1;"><span>1x</span></button>
-                                        <button class="player-btn" id="doubleRateBtn${suf}" title="Double Rate (2x - faster + higher pitch)" style="flex: 1;"><span>2x</span></button>
-                                    </div>
-                                    <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                                        <input type="range" id="rateSlider${suf}" min="0.025" max="4.0" step="0.025" value="1.0" style="flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;">
-                                        <span id="rateValue${suf}" style="color: #999; font-size: 11px; min-width: 35px; text-align: right;">1.0x</span>
-                                    </div>
-                                </div>
-                                <div class="player-info">
-                                    <div class="player-filename" id="playerFilename${suf}">${stem.name}</div>
-                                    <div class="player-time" id="playerTime${suf}">0:00 / 0:00</div>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 8px; padding: 0 12px; border-left: 1px solid #333;">
-                                    <button class="player-btn active" id="markersBtn${suf}" title="Toggle markers (M)"><span>MARKS</span></button>
-                                    <select id="markerFrequencySelect${suf}" style="background: #2a2a2a; color: #999; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; outline: none;">
-                                        <option value="bar8">Every 8 bars</option>
-                                        <option value="bar4">Every 4 bars</option>
-                                        <option value="bar2">Every 2 bars</option>
-                                        <option value="bar" selected>Every bar</option>
-                                        <option value="halfbar">Half bar</option>
-                                        <option value="beat">Every beat</option>
-                                    </select>
-                                    <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #333; padding-left: 8px;">
-                                        <span style="color: #999; font-size: 10px;">Shift:</span>
-                                        <button class="player-btn" id="shiftBarStartLeftBtn${suf}" title="Shift bar 1 to previous marker" style="padding: 2px 8px; font-size: 11px;">◀</button>
-                                        <span id="barStartOffsetDisplay${suf}" style="color: #999; font-size: 11px; min-width: 20px; text-align: center;">0</span>
-                                        <button class="player-btn" id="shiftBarStartRightBtn${suf}" title="Shift bar 1 to next marker" style="padding: 2px 8px; font-size: 11px;">▶</button>
-                                    </div>
-                                </div>
-                                <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 6px; border-left: 1px solid #333;">
-                                    <button class="player-btn" id="metronomeBtn${suf}" title="Metronome (K)" style="margin: 0;"><span style="font-size: 12px; line-height: 1;">⏱</span></button>
-                                    <select id="metronomeSound${suf}" style="background: #2a2a2a; color: #999; border: 1px solid #444; border-radius: 3px; padding: 1px 3px; font-size: 9px; cursor: pointer; outline: none; width: 40px; height: 16px;">
-                                        <option value="click" selected>Clk</option>
-                                        <option value="beep">Bep</option>
-                                        <option value="wood">Wod</option>
-                                        <option value="cowbell">Cow</option>
-                                    </select>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 8px; padding: 0 12px; border-left: 1px solid #333;">
-                                    <button class="player-btn" id="cycleBtn${suf}" title="Toggle cycle mode - Sets and plays loop (C)"><span style="font-size: 10px;">CYCLE</span></button>
-                                    <button class="player-btn" id="seekOnClickBtn${suf}" title="Toggle seek when clicking in Edit mode" style="display: none;"><span style="font-size: 9px;">SEEK</span></button>
-                                    <button class="player-btn" id="clearLoopBtn${suf}" title="Clear loop points (keep cycle mode on)" style="display: none;"><span style="font-size: 9px;">CLEAR</span></button>
-                                    <span id="loopStatus${suf}" style="color: #666; font-size: 10px; min-width: 90px;">Off</span>
-                                    <button class="player-btn" id="expandLoopBtn${suf}" title="Show/hide loop controls" style="display: none;"><span style="font-size: 10px;">▼</span></button>
-                                    <div id="loopControlsContainer${suf}" style="display: none; align-items: center; gap: 6px;">
-                                        <button class="player-btn" id="shiftLeftBtn${suf}" title="Shift loop left (←)"><span style="font-size: 10px;">◄</span></button>
-                                        <button class="player-btn" id="shiftRightBtn${suf}" title="Shift loop right (→)"><span style="font-size: 10px;">►</span></button>
-                                        <button class="player-btn" id="moveStartLeftBtn${suf}" title="Expand left (◄S)"><span style="font-size: 9px;">◄S</span></button>
-                                        <button class="player-btn" id="moveEndRightBtn${suf}" title="Expand right (E►)"><span style="font-size: 9px;">E►</span></button>
-                                        <button class="player-btn" id="halfLengthBtn${suf}" title="Half (↓)"><span style="font-size: 10px;">½</span></button>
-                                        <button class="player-btn" id="doubleLengthBtn${suf}" title="Double (↑)"><span style="font-size: 10px;">2×</span></button>
-                                        <button class="player-btn" id="jumpBtn${suf}" title="Jump on shift (J)"><span style="font-size: 10px;">JMP</span></button>
-                                        <button class="player-btn" id="fadeBtn${suf}" title="Loop fades"><span style="font-size: 10px;">FADE</span></button>
-                                        <div style="display: flex; align-items: center; gap: 4px;">
-                                            <input type="range" id="fadeTimeSlider${suf}" min="1" max="250" step="1" value="15" style="width: 60px; height: 3px; background: #444; border-radius: 2px; outline: none; cursor: pointer;">
-                                            <span id="fadeTimeValue${suf}" style="color: #999; font-size: 9px; min-width: 28px;">15ms</span>
-                                        </div>
-                                        <button class="player-btn" id="preserveLoopBtn${suf}" title="Preserve loop when changing files"><span style="font-size: 10px;">KEEP</span></button>
-                                        <button class="player-btn" id="bpmLockBtn${suf}" title="Lock BPM across file changes (auto-adjust playback rate)"><span style="font-size: 9px;">BPM LOCK</span></button>
-                                        <button class="player-btn" id="recordActionsBtn${suf}" title="Record loop actions (waits for first keypress)"><span style="font-size: 9px;">RECORD</span></button>
-                                        <button class="player-btn" id="playActionsBtn${suf}" title="Play back recorded actions"><span style="font-size: 9px;">PLAY</span></button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        `;
-                    }
-
-                            function showMultiStemPlayers() {
-                                try {
-                                    multiStemContainerEl.innerHTML = '';
-                                    multiStemStems.forEach((stem, idx) => {
-                                        multiStemContainerEl.innerHTML += createPlayerBar(stem, idx);
-                                    });
-                                    multiStemContainerEl.style.display = 'block';
-                                    document.body.classList.add('multi-stem-active');
-                                } catch (e) {
-                                    document.getElementById('multiStemError').style.display = 'block';
-                                }
-                            }
-
-                    function hideMultiStemPlayers() {
-                        multiStemContainerEl.innerHTML = '';
-                        multiStemContainerEl.style.display = 'none';
-                        document.body.classList.remove('multi-stem-active');
-                    }
-
-            document.getElementById('stemsToggleBtn').onclick = () => {
-                multiStemVisible = !multiStemVisible;
-                if (multiStemVisible) showMultiStemPlayers();
-                else hideMultiStemPlayers();
-            };
-        </script>
+        // Import modules (ROUND 1 - Foundation Modules)
+        import { supabase, PREF_KEYS } from './config.js';
+        import * as Utils from './utils.js';
+
+        // Import modules (ROUND 2 - Audio Core)
+        import * as Metronome from './metronome.js';
+
+        // Import modules (Phase 1 - View Manager)
+        import * as ViewManager from './viewManager.js';
+        import * as LibraryView from '../views/libraryView.js';
+        import * as GalaxyView from '../views/galaxyView.js';
+        import * as SphereView from '../views/sphereView.js';
+
+        // Note: Modules provide:
+        // - config.js: supabase client, PREF_KEYS constants
+        // - utils.js: extractTagsFromFilename(), getAudioDuration(), etc.
+        // - metronome.js: Metronome.toggleMetronome(wavesurfer), Metronome.scheduleMetronome(audioFiles, currentFileId, wavesurfer, barStartOffset, currentRate), etc.
+
+        let audioFiles = [];
+        let wavesurfer = null;
+        let currentFileId = null;
+        let selectedFiles = new Set();
+        let processingFiles = new Set(); // Track files currently being processed
+        let expandedStems = new Set(); // Track files with expanded stems view (Phase 4 Step 1)
+
+        // Stem playback state (Phase 4 Step 2A)
+        let stemWavesurfers = {}; // { vocals: WaveSurfer, drums: WaveSurfer, bass: WaveSurfer, other: WaveSurfer }
+        let stemFiles = {}; // Cached stem file data from audio_files_stems table for CURRENT file
+        let allStemFiles = {}; // Preloaded ALL stem files, keyed by parent audio_file_id (Phase 4 Fix 1)
+        // Phase 4 Fix 2: State keyed by stem file ID instead of stem type
+        let stemMuted = {}; // { stemFileId: true/false }
+        let stemSoloed = {}; // { stemFileId: true/false }
+        let stemVolumes = {}; // { stemFileId: 0.0-1.0 }
+
+        let searchQuery = '';
+        let currentTagMode = null; // Default mode for tag clicks (null = no mode, normal click behavior)
+        let showAllTags = false; // Toggle for showing low-count tags
+        let miniWaveforms = {}; // Track mini waveform instances by file ID
+        let isLooping = false;
+        let isShuffling = false;
+        let markersEnabled = true; // Toggle for bar markers
+        let markerFrequency = 'bar'; // 'bar8', 'bar4', 'bar2', 'bar', 'halfbar', 'beat'
+        let currentMarkers = []; // Store current marker positions for click-to-snap
+
+        // Cycle mode state (combined edit + active loop)
+        let loopStart = null; // Start time in seconds (or null if not set)
+        let loopEnd = null; // End time in seconds (or null if not set)
+        let cycleMode = false; // When true: can edit loop AND loop is active
+        let nextClickSets = 'start'; // Track which point next click sets: 'start' or 'end'
+        let immediateJump = 'off'; // Jump mode: 'off', 'on' (immediate), or 'clock' (quantized to next beat)
+        let pendingJumpTarget = null; // Target time for clock-quantized jump
+        let seekOnClick = 'off'; // Seek mode: 'off', 'seek' (immediate), or 'clock' (jump to loop start after setting end)
+        let loopControlsExpanded = false; // Whether loop control buttons are expanded
+        let loopFadesEnabled = false; // Whether to apply fades at loop boundaries
+        let fadeTime = 0.015; // Fade duration in seconds (15ms default)
+        let isMuted = false; // Track mute state
+        let volumeBeforeMute = 100; // Store volume before muting
+        let userPaused = false; // Track if user manually paused (preserve pause state when scrolling files)
+        let preserveLoopOnFileChange = true; // Whether to keep loop points when switching files (default ON)
+        let preservedLoopStartBar = null; // Bar number for preserved loop start (e.g., bar 17)
+        let preservedLoopEndBar = null; // Bar number for preserved loop end (e.g., bar 25)
+        let preservedCycleMode = false; // Cycle mode state to preserve across file changes
+        let preservedPlaybackPositionInLoop = null; // Relative position within loop (0.0 to 1.0) for seamless swap
+        let bpmLockEnabled = false; // Whether to lock BPM across file changes
+        let lockedBPM = null; // The BPM to maintain when switching files
 
         // Loop action recorder
         let isRecordingActions = false; // Whether recording is active
@@ -1408,13 +72,8 @@
         let isPlayingBackActions = false; // Whether we're currently playing back recorded actions
         let playbackTimeouts = []; // Track all scheduled timeouts for playback so we can cancel them
 
-        // Metronome state
-        let metronomeEnabled = false;
-        let metronomeSound = 'click'; // 'click', 'beep', 'wood', 'cowbell'
-        let metronomeAudioContext = null;
-        let metronomeMasterGain = null; // Master gain to mute all metronome sounds instantly
-        let scheduledMetronomeNotes = []; // Track scheduled audio nodes for cleanup
-        let lastMetronomeScheduleTime = 0; // Track last time we scheduled metronome
+        // Metronome state - MOVED TO metronome.js (ROUND 2)
+        // All metronome state now managed by Metronome module
 
         // Bar start offset for Shift Start feature
         let barStartOffset = 0; // Offset to shift which marker is considered bar 1
@@ -1487,15 +146,287 @@
 
                 audioFiles = data || [];
 
-                renderTags();
-                renderFiles();
+                // Phase 4 Fix 1: Preload ALL stem files for instant access
+                await preloadAllStems();
+
+                // Initialize view manager on first load
+                if (!ViewManager.getCurrentViewName()) {
+                    // Register all views
+                    ViewManager.registerView('library', LibraryView);
+                    ViewManager.registerView('galaxy', GalaxyView);
+                    ViewManager.registerView('sphere', SphereView);
+
+                    // Switch to library view with render functions
+                    await ViewManager.switchView('library', {
+                        renderFunction: renderFiles,
+                        renderTagsFunction: renderTags
+                    });
+                } else {
+                    // Just render if view already initialized
+                    renderTags();
+                    renderFiles();
+                }
             } catch (error) {
                 console.error('Error loading data:', error);
                 alert('Error loading files from Supabase. Check console for details.');
             }
         }
 
+        // Phase 4 Fix 1: Preload all stem files from database
+        async function preloadAllStems() {
+            try {
+                console.log('Preloading all stem files...');
+                const { data, error } = await supabase
+                    .from('audio_files_stems')
+                    .select('*');
+
+                if (error) throw error;
+
+                // Organize stems by parent file ID
+                allStemFiles = {};
+                if (data) {
+                    data.forEach(stem => {
+                        if (!allStemFiles[stem.audio_file_id]) {
+                            allStemFiles[stem.audio_file_id] = {};
+                        }
+                        allStemFiles[stem.audio_file_id][stem.stem_type] = stem;
+                    });
+                }
+
+                console.log(`✅ Preloaded stems for ${Object.keys(allStemFiles).length} files`);
+            } catch (error) {
+                console.error('Error preloading stems:', error);
+            }
+        }
+
         // Polling removed - data refreshes immediately after processing completes
+
+        // ========================================
+        // STEM PLAYBACK FUNCTIONS (Phase 4 Step 2A)
+        // ========================================
+
+        // Fetch stem files for a parent audio file from audio_files_stems table
+        async function fetchStemFiles(parentFileId) {
+            try {
+                const { data, error } = await supabase
+                    .from('audio_files_stems')
+                    .select('*')
+                    .eq('audio_file_id', parentFileId);
+
+                if (error) throw error;
+
+                // Organize stems by type
+                const stems = {};
+                if (data) {
+                    data.forEach(stem => {
+                        stems[stem.stem_type] = stem;
+                    });
+                }
+
+                console.log(`Fetched ${data?.length || 0} stems for file ${parentFileId}:`, stems);
+                return stems;
+            } catch (error) {
+                console.error('Error fetching stem files:', error);
+                return {};
+            }
+        }
+
+        // Destroy all stem WaveSurfer instances
+        function destroyAllStems() {
+            Object.keys(stemWavesurfers).forEach(stemType => {
+                if (stemWavesurfers[stemType]) {
+                    stemWavesurfers[stemType].destroy();
+                }
+            });
+            stemWavesurfers = {};
+            stemFiles = {};
+            console.log('All stem WaveSurfers destroyed');
+        }
+
+        // Create WaveSurfer instance for a single stem (hidden, no container)
+        function createStemWaveSurfer(stemType) {
+            // Create a hidden container for this stem
+            const containerId = `stem-waveform-${stemType}`;
+            let container = document.getElementById(containerId);
+
+            if (!container) {
+                container = document.createElement('div');
+                container.id = containerId;
+                container.style.display = 'none'; // Hidden for now (Step 2A)
+                document.body.appendChild(container);
+            }
+
+            const stemWS = WaveSurfer.create({
+                container: `#${containerId}`,
+                waveColor: '#666666',
+                progressColor: '#4a9eff',
+                cursorColor: '#ffffff',
+                barWidth: 3,
+                barRadius: 3,
+                cursorWidth: 2,
+                height: 40,
+                barGap: 2,
+                responsive: true,
+                normalize: true,
+                backend: 'WebAudio',
+                autoScroll: false
+            });
+
+            // Phase 4 Fix 2: Set initial volume to 1.0 (will be updated by updateStemAudioState)
+            stemWS.setVolume(1.0);
+
+            console.log(`Created WaveSurfer for ${stemType} stem`);
+            return stemWS;
+        }
+
+        // Load and sync all stems for a file
+        async function loadStems(parentFileId, autoplay = true) {
+            console.log(`Loading stems for file ${parentFileId}...`);
+
+            // Destroy any existing stems
+            destroyAllStems();
+
+            // Phase 4 Fix 1: Use preloaded stems instead of fetching
+            const stems = allStemFiles[parentFileId] || {};
+            stemFiles = stems;
+
+            // Check if we have all 4 stems
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            const missingStems = stemTypes.filter(type => !stems[type]);
+
+            if (missingStems.length > 0) {
+                console.warn(`Missing stems: ${missingStems.join(', ')}`);
+                return false; // Don't load stems if any are missing
+            }
+
+            // Create WaveSurfer instance for each stem
+            stemTypes.forEach(stemType => {
+                stemWavesurfers[stemType] = createStemWaveSurfer(stemType);
+            });
+
+            // Load audio for each stem
+            const loadPromises = stemTypes.map(stemType => {
+                return new Promise((resolve) => {
+                    const stemWS = stemWavesurfers[stemType];
+                    stemWS.on('ready', () => {
+                        console.log(`${stemType} stem ready`);
+                        resolve();
+                    });
+                    stemWS.load(stems[stemType].file_url);
+                });
+            });
+
+            // Wait for all stems to be ready
+            await Promise.all(loadPromises);
+            console.log('All stems loaded and ready');
+
+            // Sync stems with main WaveSurfer events
+            syncStemsWithMain(autoplay);
+
+            return true;
+        }
+
+        // Sync all stem WaveSurfers with main WaveSurfer
+        function syncStemsWithMain(autoplay = true) {
+            if (!wavesurfer) return;
+
+            // Track whether stems were playing before seek (fixes seek resume bug)
+            let stemsWerePlaying = false;
+
+            // Sync play/pause
+            wavesurfer.on('play', () => {
+                stemsWerePlaying = true;
+                Object.keys(stemWavesurfers).forEach(stemType => {
+                    const stemWS = stemWavesurfers[stemType];
+                    if (stemWS && !stemWS.isPlaying()) {
+                        stemWS.play();
+                    }
+                });
+            });
+
+            wavesurfer.on('pause', () => {
+                stemsWerePlaying = false;
+                Object.keys(stemWavesurfers).forEach(stemType => {
+                    const stemWS = stemWavesurfers[stemType];
+                    if (stemWS && stemWS.isPlaying()) {
+                        stemWS.pause();
+                    }
+                });
+            });
+
+            // Sync seeking - convert time to progress ratio
+            wavesurfer.on('seeking', (currentTime) => {
+                // The 'seeking' event passes currentTime in seconds, not progress (0-1)
+                // We need to convert to progress ratio for stems
+                const duration = wavesurfer.getDuration();
+                const progress = duration > 0 ? currentTime / duration : 0;
+
+                Object.keys(stemWavesurfers).forEach(stemType => {
+                    const stemWS = stemWavesurfers[stemType];
+                    if (stemWS) {
+                        stemWS.seekTo(progress);
+                    }
+                });
+            });
+
+            // Sync finish
+            wavesurfer.on('finish', () => {
+                Object.keys(stemWavesurfers).forEach(stemType => {
+                    const stemWS = stemWavesurfers[stemType];
+                    if (stemWS) {
+                        stemWS.seekTo(0);
+                    }
+                });
+            });
+
+            console.log('Stems synced with main WaveSurfer');
+
+            // Auto-play if requested
+            if (autoplay) {
+                setTimeout(() => {
+                    wavesurfer.play();
+                }, 100); // Small delay to ensure everything is ready
+            }
+        }
+
+        // Apply solo/mute logic to stems
+        function updateStemAudioState() {
+            // Phase 4 Step 2B: Get master volume from slider
+            const masterVolume = document.getElementById('volumeSlider')?.value / 100 || 1.0;
+
+            // Phase 4 Fix 2: Check if any stems are soloed (using stem file IDs)
+            const stemFileIds = Object.values(stemFiles).map(sf => sf.id);
+            const anySoloed = stemFileIds.some(id => stemSoloed[id]);
+
+            Object.keys(stemWavesurfers).forEach(stemType => {
+                const stemWS = stemWavesurfers[stemType];
+                if (!stemWS) return;
+
+                const stemFileId = stemFiles[stemType]?.id;
+                if (!stemFileId) return;
+
+                // Get state for this specific stem file
+                const isMuted = stemMuted[stemFileId] || false;
+                const isSoloed = stemSoloed[stemFileId] || false;
+                const volume = stemVolumes[stemFileId] || 1.0;
+
+                let finalVolume = 0;
+
+                // If any stems are soloed, only play soloed stems
+                // Otherwise, respect individual mute states
+                if (anySoloed) {
+                    finalVolume = isSoloed ? masterVolume * volume : 0;
+                } else {
+                    finalVolume = isMuted ? 0 : masterVolume * volume;
+                }
+
+                stemWS.setVolume(finalVolume);
+            });
+        }
+
+        // ========================================
+        // END STEM PLAYBACK FUNCTIONS
+        // ========================================
 
         // Initialize WaveSurfer
         function initWaveSurfer() {
@@ -1530,14 +461,14 @@
 
                 wavesurfer.on('pause', () => {
                     // Stop all metronome sounds immediately
-                    stopAllMetronomeSounds();
+                    Metronome.stopAllMetronomeSounds();
                     // Reset metronome scheduling when paused
-                    lastMetronomeScheduleTime = 0;
+                    Metronome.setLastMetronomeScheduleTime(0);
                 });
 
                 wavesurfer.on('play', () => {
                     // Reset metronome scheduling when playback starts
-                    lastMetronomeScheduleTime = 0;
+                    Metronome.setLastMetronomeScheduleTime(0);
                 });
 
                 wavesurfer.on('ready', () => {
@@ -1613,12 +544,12 @@
                     }
 
                     // Schedule metronome clicks (only when playing)
-                    if (metronomeEnabled && wavesurfer.isPlaying()) {
+                    if (Metronome.isMetronomeEnabled() && wavesurfer.isPlaying()) {
                         const now = Date.now();
                         // Schedule every 0.5 seconds
-                        if (now - lastMetronomeScheduleTime > 500) {
-                            scheduleMetronome();
-                            lastMetronomeScheduleTime = now;
+                        if (now - Metronome.getLastMetronomeScheduleTime() > 500) {
+                            Metronome.scheduleMetronome(audioFiles, currentFileId, wavesurfer, barStartOffset, currentRate);
+                            Metronome.setLastMetronomeScheduleTime(now);
                         }
                     }
                 });
@@ -1626,8 +557,8 @@
                 wavesurfer.on('seeking', () => {
                     updatePlayerTime();
                     // Stop all scheduled metronome sounds to prevent double-play
-                    stopAllMetronomeSounds();
-                    lastMetronomeScheduleTime = 0; // Force rescheduling after seek
+                    Metronome.stopAllMetronomeSounds();
+                    Metronome.setLastMetronomeScheduleTime(0); // Force rescheduling after seek
                 });
 
                 wavesurfer.on('error', (error) => {
@@ -1802,16 +733,7 @@
         // Store pending upload files
         let pendingUploadFiles = [];
 
-        // LocalStorage keys for processing preferences
-        const PREF_KEYS = {
-            stems: 'audiolib_process_stems',
-            bpmKey: 'audiolib_process_bpm_key',
-            instruments: 'audiolib_process_instruments',
-            chords: 'audiolib_process_chords',
-            beatmap: 'audiolib_process_beatmap',
-            autoTag: 'audiolib_process_auto_tag',
-            convertMp3: 'audiolib_process_convert_mp3'
-        };
+        // PREF_KEYS now imported from config.js
 
         // Load processing preferences from localStorage
         function loadProcessingPreferences() {
@@ -2866,8 +1788,129 @@
                 return `${mins}:${String(secs).padStart(2, '0')}`;
             };
 
-            const fileRows = sortedFiles.map(file => `
-                <div class="file-item ${currentFileId === file.id ? 'active' : ''}" style="display: grid; grid-template-columns: 16px 1fr 80px 110px 55px 60px 60px 40px 30px; gap: 8px; align-items: center;">
+            const fileRows = sortedFiles.map(file => {
+                // Build stem expansion UI (Phase 4 Step 2B) - Vertical stack layout
+                const stemsExpanded = expandedStems.has(file.id);
+                const stemsHTML = stemsExpanded && file.has_stems ? `
+                    <div class="stems-expansion" style="background: #0f0f0f; border: 1px solid #2a2a2a; border-top: none; border-radius: 0 0 6px 6px; padding: 15px; margin-top: -6px;">
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <!-- Vocals Stem -->
+                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <span style="font-size: 18px;">🎤</span>
+                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Vocals</span>
+                                    <div style="flex: 1;">
+                                        <div id="stem-waveform-vocals-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
+                                    </div>
+                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
+                                        <!-- Volume Slider -->
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="color: #999; font-size: 11px;">Vol</span>
+                                            <input type="range" id="stem-volume-vocals-${file.id}" min="0" max="100" value="100"
+                                                   style="width: 80px;" oninput="handleStemVolumeChange('vocals', this.value)">
+                                            <span id="stem-volume-value-vocals-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
+                                        </div>
+                                        <!-- Mute Button -->
+                                        <button id="stem-mute-vocals-${file.id}" onclick="handleStemMute('vocals')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
+                                                title="Mute Vocals">🔊</button>
+                                        <!-- Solo Button -->
+                                        <button id="stem-solo-vocals-${file.id}" onclick="handleStemSolo('vocals')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
+                                                title="Solo Vocals">S</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Drums Stem -->
+                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <span style="font-size: 18px;">🥁</span>
+                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Drums</span>
+                                    <div style="flex: 1;">
+                                        <div id="stem-waveform-drums-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
+                                    </div>
+                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
+                                        <!-- Volume Slider -->
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="color: #999; font-size: 11px;">Vol</span>
+                                            <input type="range" id="stem-volume-drums-${file.id}" min="0" max="100" value="100"
+                                                   style="width: 80px;" oninput="handleStemVolumeChange('drums', this.value)">
+                                            <span id="stem-volume-value-drums-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
+                                        </div>
+                                        <!-- Mute Button -->
+                                        <button id="stem-mute-drums-${file.id}" onclick="handleStemMute('drums')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
+                                                title="Mute Drums">🔊</button>
+                                        <!-- Solo Button -->
+                                        <button id="stem-solo-drums-${file.id}" onclick="handleStemSolo('drums')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
+                                                title="Solo Drums">S</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bass Stem -->
+                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <span style="font-size: 18px;">🎸</span>
+                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Bass</span>
+                                    <div style="flex: 1;">
+                                        <div id="stem-waveform-bass-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
+                                    </div>
+                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
+                                        <!-- Volume Slider -->
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="color: #999; font-size: 11px;">Vol</span>
+                                            <input type="range" id="stem-volume-bass-${file.id}" min="0" max="100" value="100"
+                                                   style="width: 80px;" oninput="handleStemVolumeChange('bass', this.value)">
+                                            <span id="stem-volume-value-bass-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
+                                        </div>
+                                        <!-- Mute Button -->
+                                        <button id="stem-mute-bass-${file.id}" onclick="handleStemMute('bass')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
+                                                title="Mute Bass">🔊</button>
+                                        <!-- Solo Button -->
+                                        <button id="stem-solo-bass-${file.id}" onclick="handleStemSolo('bass')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
+                                                title="Solo Bass">S</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Other Stem -->
+                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <span style="font-size: 18px;">🎹</span>
+                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Other</span>
+                                    <div style="flex: 1;">
+                                        <div id="stem-waveform-other-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
+                                    </div>
+                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
+                                        <!-- Volume Slider -->
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <span style="color: #999; font-size: 11px;">Vol</span>
+                                            <input type="range" id="stem-volume-other-${file.id}" min="0" max="100" value="100"
+                                                   style="width: 80px;" oninput="handleStemVolumeChange('other', this.value)">
+                                            <span id="stem-volume-value-other-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
+                                        </div>
+                                        <!-- Mute Button -->
+                                        <button id="stem-mute-other-${file.id}" onclick="handleStemMute('other')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
+                                                title="Mute Other">🔊</button>
+                                        <!-- Solo Button -->
+                                        <button id="stem-solo-other-${file.id}" onclick="handleStemSolo('other')"
+                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
+                                                title="Solo Other">S</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ` : '';
+
+                return `
+                <div class="file-item ${currentFileId === file.id ? 'active' : ''}" style="display: grid; grid-template-columns: 16px 1fr 80px 110px 55px 60px 60px 40px 30px; gap: 8px; align-items: center; ${stemsExpanded ? 'border-radius: 6px 6px 0 0;' : ''}">
                     <input type="checkbox" id="checkbox-${file.id}" ${selectedFiles.has(file.id) ? 'checked' : ''}
                            onclick="toggleFileSelection(${file.id}, event)"
                            style="width: 16px; height: 16px; cursor: pointer;">
@@ -2892,7 +1935,7 @@
                     </div>
                     <div style="text-align: center;">
                         ${file.has_stems ?
-                            `<span class="stems-icon active" onclick="openStemsViewer(${file.id}, event)" title="View stems">🎛️</span>` :
+                            `<span class="stems-icon active ${stemsExpanded ? 'expanded' : ''}" onclick="openStemsViewer(${file.id}, event)" title="${stemsExpanded ? 'Hide' : 'View'} stems">🎛️</span>` :
                             `<span class="stems-icon" onclick="generateStems(${file.id}, event)" title="Generate stems">⚙️</span>`
                         }
                     </div>
@@ -2900,7 +1943,9 @@
                         ⋮
                     </button>
                 </div>
-            `).join('');
+                ${stemsHTML}
+            `;
+            }).join('');
 
             // Put headers in sticky section, fileRows in scrollable container
             document.getElementById('columnHeaders').innerHTML = headers;
@@ -3065,10 +2110,668 @@
         }
 
         // Open stems viewer in new window
+        // Toggle stems expansion for a file (Phase 4 Step 1)
         function openStemsViewer(fileId, event) {
             event.preventDefault();
             event.stopPropagation();
-            window.open(`stems-viewer.html?fileId=${fileId}`, '_blank');
+
+            // Toggle expansion state
+            if (expandedStems.has(fileId)) {
+                expandedStems.delete(fileId);
+            } else {
+                expandedStems.add(fileId);
+            }
+
+            // Re-render to show/hide stems
+            renderFiles();
+
+            // Phase 4 Step 2B: Render waveforms in expansion containers if stems are loaded
+            if (expandedStems.has(fileId) && Object.keys(stemWavesurfers).length > 0 && currentFileId === fileId) {
+                setTimeout(() => {
+                    renderStemWaveforms(fileId);
+                    restoreStemControlStates(fileId);
+                }, 100); // Small delay to ensure DOM is ready
+            }
+        }
+
+        // Phase 4: Toggle stems viewer from bottom player bar STEMS button
+        function toggleStemsViewer() {
+            if (!currentFileId) return;
+
+            // Toggle expansion state for current file
+            if (expandedStems.has(currentFileId)) {
+                expandedStems.delete(currentFileId);
+            } else {
+                expandedStems.add(currentFileId);
+            }
+
+            // Re-render to show/hide stems
+            renderFiles();
+
+            // Phase 4 Step 2B: Render waveforms in expansion containers if stems are loaded
+            if (expandedStems.has(currentFileId) && Object.keys(stemWavesurfers).length > 0) {
+                setTimeout(() => {
+                    renderStemWaveforms(currentFileId);
+                    restoreStemControlStates(currentFileId);
+                }, 100); // Small delay to ensure DOM is ready
+            }
+
+            // Update STEMS button appearance
+            updateStemsButton();
+        }
+
+        // Update STEMS button visibility and active state
+        function updateStemsButton() {
+            const stemsBtn = document.getElementById('stemsBtn');
+            if (!stemsBtn) return;
+
+            // Get current file
+            const currentFile = audioFiles.find(f => f.id === currentFileId);
+
+            // Show button only if current file has stems
+            if (currentFile && currentFile.has_stems) {
+                stemsBtn.style.display = 'block';
+                // Toggle active class and text based on multi-stem player state
+                if (multiStemPlayerExpanded) {
+                    stemsBtn.classList.add('active');
+                    stemsBtn.innerHTML = '<span>▼ STEMS</span>';
+                } else {
+                    stemsBtn.classList.remove('active');
+                    stemsBtn.innerHTML = '<span>▲ STEMS</span>';
+                }
+            } else {
+                stemsBtn.style.display = 'none';
+                // Close multi-stem player if it's open and file has no stems
+                if (multiStemPlayerExpanded) {
+                    toggleMultiStemPlayer();
+                }
+            }
+        }
+
+        // Multi-Stem Player Functions (Galaxy View Style)
+        let multiStemPlayerExpanded = false;
+        let stemPlayerWavesurfers = {}; // Separate WaveSurfer instances for multi-stem player
+        let multiStemReadyCount = 0; // Track how many stems are loaded and ready
+        let multiStemAutoPlayOnReady = false; // Whether to auto-play stems when all are ready
+
+        function toggleMultiStemPlayer() {
+            console.log('toggleMultiStemPlayer called, currentFileId:', currentFileId);
+            if (!currentFileId) {
+                console.log('No current file, returning');
+                return;
+            }
+
+            const multiStemPlayer = document.getElementById('multiStemPlayer');
+            if (!multiStemPlayer) {
+                console.log('multiStemPlayer element not found');
+                return;
+            }
+
+            multiStemPlayerExpanded = !multiStemPlayerExpanded;
+            console.log('multiStemPlayerExpanded:', multiStemPlayerExpanded);
+
+            if (multiStemPlayerExpanded) {
+                console.log('Expanding multi-stem player');
+                // Fetch and generate stem bars asynchronously
+                generateMultiStemPlayerBars().then(() => {
+                    // Small delay to ensure DOM is ready before removing collapsed class for smooth animation
+                    setTimeout(() => {
+                        multiStemPlayer.classList.remove('collapsed');
+                    }, 10);
+                }).catch(err => {
+                    console.error('Error generating stem player bars:', err);
+                });
+            } else {
+                console.log('Collapsing multi-stem player');
+                multiStemPlayer.classList.add('collapsed');
+                // Destroy waveforms after animation completes
+                setTimeout(() => {
+                    destroyMultiStemPlayerWavesurfers();
+                }, 300); // Match CSS transition duration
+            }
+
+            // Update STEMS button text
+            const stemsBtn = document.getElementById('stemsBtn');
+            if (stemsBtn) {
+                stemsBtn.innerHTML = multiStemPlayerExpanded ? '<span>▼ STEMS</span>' : '<span>▲ STEMS</span>';
+                if (multiStemPlayerExpanded) {
+                    stemsBtn.classList.add('active');
+                } else {
+                    stemsBtn.classList.remove('active');
+                }
+            }
+        }
+
+        async function generateMultiStemPlayerBars() {
+            console.log('generateMultiStemPlayerBars called');
+            const multiStemPlayer = document.getElementById('multiStemPlayer');
+            console.log('multiStemPlayer element:', multiStemPlayer);
+            console.log('currentFileId:', currentFileId);
+
+            if (!multiStemPlayer || !currentFileId) {
+                console.log('Returning early - multiStemPlayer:', multiStemPlayer, 'currentFileId:', currentFileId);
+                return;
+            }
+
+            // Fetch stem files for current file
+            console.log('Fetching stem files from database for file:', currentFileId);
+            try {
+                const { data, error } = await supabase
+                    .from('audio_files_stems')
+                    .select('*')
+                    .eq('audio_file_id', currentFileId);
+
+                if (error) {
+                    console.error('Error fetching stem files:', error);
+                    return;
+                }
+
+                if (!data || data.length === 0) {
+                    console.log('No stem files found for this file');
+                    return;
+                }
+
+                // Organize stems by type
+                stemFiles = {};
+                data.forEach(stem => {
+                    stemFiles[stem.stem_type] = stem;
+                });
+
+                console.log('Fetched stem files:', stemFiles);
+            } catch (err) {
+                console.error('Exception fetching stems:', err);
+                return;
+            }
+
+            // Clear existing content
+            multiStemPlayer.innerHTML = '';
+            console.log('Cleared multiStemPlayer innerHTML');
+
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            const stemIcons = { vocals: '🎤', drums: '🥁', bass: '🎸', other: '🎹' };
+            console.log('stemFiles:', stemFiles);
+
+            stemTypes.forEach((stemType, index) => {
+                const stemFile = stemFiles[stemType];
+                console.log(`stemFile for ${stemType}:`, stemFile);
+                if (!stemFile) {
+                    console.log(`No stem file for ${stemType}, skipping`);
+                    return;
+                }
+
+                // Truncate filename if too long (use stem_file_name from database)
+                const fileName = stemFile.stem_file_name || stemType;
+                const displayName = fileName.length > 30
+                    ? fileName.substring(0, 30) + '...'
+                    : fileName;
+
+                const stemBarHTML = `
+                    <div class="stem-player-bar" id="stem-player-${stemType}">
+                        <div class="stem-player-controls">
+                            <button class="stem-player-btn play-pause" onclick="toggleMultiStemPlay('${stemType}')" id="stem-play-pause-${stemType}">
+                                <span id="stem-play-pause-icon-${stemType}">||</span>
+                            </button>
+                            <button class="stem-player-btn" onclick="toggleMultiStemMute('${stemType}')" id="stem-mute-${stemType}" title="Mute">
+                                <span>🔊</span>
+                            </button>
+                            <button class="stem-player-btn" onclick="toggleMultiStemLoop('${stemType}')" id="stem-loop-${stemType}" title="Loop">
+                                <span>LOOP</span>
+                            </button>
+                        </div>
+
+                        <div class="stem-player-waveform" id="multi-stem-waveform-${stemType}"></div>
+
+                        <div class="stem-player-info">
+                            <div class="stem-player-filename">${displayName}</div>
+                            <div class="stem-player-time" id="multi-stem-time-${stemType}">0:00 / 0:00</div>
+                        </div>
+
+                        <div class="stem-player-volume">
+                            <span>🔊</span>
+                            <input type="range" min="0" max="100" value="100"
+                                   oninput="handleMultiStemVolumeChange('${stemType}', this.value)" id="stem-volume-${stemType}">
+                            <span id="stem-volume-percent-${stemType}">100%</span>
+                        </div>
+                    </div>
+                `;
+
+                multiStemPlayer.insertAdjacentHTML('beforeend', stemBarHTML);
+            });
+
+            // Initialize WaveSurfer instances after DOM is ready
+            setTimeout(() => {
+                initializeMultiStemPlayerWavesurfers();
+            }, 50);
+        }
+
+        async function initializeMultiStemPlayerWavesurfers() {
+            console.log('=== Initializing Multi-Stem Player Wavesurfers ===');
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            multiStemReadyCount = 0;
+
+            // Capture parent state BEFORE loading stems
+            if (!wavesurfer) {
+                console.log('No parent wavesurfer - cannot load stems');
+                return;
+            }
+
+            const parentWasPlaying = wavesurfer.isPlaying();
+            const parentCurrentTime = wavesurfer.getCurrentTime();
+            const parentDuration = wavesurfer.getDuration();
+            const parentProgress = parentDuration > 0 ? parentCurrentTime / parentDuration : 0;
+
+            console.log(`Parent state: ${parentWasPlaying ? 'playing' : 'paused'} at ${parentCurrentTime.toFixed(2)}s (${(parentProgress * 100).toFixed(1)}%)`);
+
+            multiStemAutoPlayOnReady = parentWasPlaying;
+
+            for (const stemType of stemTypes) {
+                const stemFile = stemFiles[stemType];
+                if (!stemFile) {
+                    console.log(`No stem file for ${stemType}, skipping`);
+                    continue;
+                }
+
+                const containerId = `multi-stem-waveform-${stemType}`;
+                const container = document.getElementById(containerId);
+                if (!container) {
+                    console.log(`No container found for ${stemType}`);
+                    continue;
+                }
+
+                try {
+                    console.log(`Creating WaveSurfer for ${stemType}: ${stemFile.stem_file_name}`);
+                    const ws = WaveSurfer.create({
+                        container: `#${containerId}`,
+                        waveColor: '#555',
+                        progressColor: '#667eea',
+                        cursorColor: '#ffffff',
+                        height: 50,
+                        barWidth: 2,
+                        barGap: 1,
+                        barRadius: 2,
+                        cursorWidth: 1,
+                        normalize: true,
+                        responsive: true,
+                        backend: 'WebAudio',
+                        interact: true,
+                        hideScrollbar: true
+                    });
+
+                    // Store reference to stem data
+                    ws._stemFile = stemFile;
+                    ws._stemType = stemType;
+
+                    // Load the stem file
+                    ws.load(stemFile.file_url);
+
+                    // Store instance BEFORE ready event
+                    stemPlayerWavesurfers[stemType] = ws;
+
+                    // Handle ready event
+                    ws.once('ready', () => {
+                        multiStemReadyCount++;
+                        console.log(`Stem ${multiStemReadyCount}/${stemTypes.length} ready: ${stemType}`);
+
+                        // When all stems are ready - perform seamless switch
+                        if (multiStemReadyCount === stemTypes.length) {
+                            console.log('All stems ready - performing seamless audio switch');
+
+                            // Step 1: Seek all stems to parent's current position
+                            console.log(`Syncing all stems to parent position: ${parentProgress.toFixed(3)}`);
+                            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+                            stemTypes.forEach(type => {
+                                const stemWS = stemPlayerWavesurfers[type];
+                                if (stemWS) {
+                                    stemWS.seekTo(parentProgress);
+                                }
+                            });
+
+                            // Step 2: Mute parent player FIRST (avoid double audio)
+                            console.log('Muting parent player');
+                            wavesurfer.setVolume(0);
+
+                            // Step 3: If parent was playing, start all stems at synchronized position
+                            if (multiStemAutoPlayOnReady) {
+                                console.log('Parent was playing - starting all stems in sync');
+                                // Small delay to ensure seek completes before playing
+                                setTimeout(() => {
+                                    playAllStems();
+                                }, 50);
+                            } else {
+                                console.log('Parent was paused - keeping stems paused at position');
+                            }
+
+                            // Step 4: Set up ongoing sync between parent and stems
+                            setupParentStemSync();
+                        }
+                    });
+
+                    // Update time display
+                    ws.on('timeupdate', (currentTime) => {
+                        const duration = ws.getDuration();
+                        const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
+                        if (timeDisplay) {
+                            timeDisplay.textContent = `${Utils.formatTime(currentTime)} / ${Utils.formatTime(duration)}`;
+                        }
+                    });
+
+                } catch (error) {
+                    console.error(`Error loading multi-stem waveform for ${stemType}:`, error);
+                }
+            }
+        }
+
+        // Play all stems in sync
+        function playAllStems() {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            stemTypes.forEach(stemType => {
+                const ws = stemPlayerWavesurfers[stemType];
+                if (ws) {
+                    ws.play();
+                    // Update play button icon
+                    const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
+                    if (icon) icon.textContent = '||';
+                }
+            });
+        }
+
+        // Pause all stems
+        function pauseAllStems() {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            stemTypes.forEach(stemType => {
+                const ws = stemPlayerWavesurfers[stemType];
+                if (ws) {
+                    ws.pause();
+                    // Update play button icon
+                    const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
+                    if (icon) icon.textContent = '▶';
+                }
+            });
+        }
+
+        // Set up synchronization between parent player and stems
+        function setupParentStemSync() {
+            if (!wavesurfer) return;
+
+            console.log('Setting up parent-stem synchronization');
+
+            // When parent plays, play all stems
+            wavesurfer.on('play', () => {
+                if (multiStemPlayerExpanded) {
+                    console.log('Parent play event - syncing stems');
+                    playAllStems();
+                }
+            });
+
+            // When parent pauses, pause all stems
+            wavesurfer.on('pause', () => {
+                if (multiStemPlayerExpanded) {
+                    console.log('Parent pause event - syncing stems');
+                    pauseAllStems();
+                }
+            });
+
+            // When parent seeks, seek all stems
+            wavesurfer.on('seeking', (currentTime) => {
+                if (multiStemPlayerExpanded) {
+                    const seekPosition = currentTime / wavesurfer.getDuration();
+                    console.log('Parent seek event - syncing stems to:', seekPosition);
+
+                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+                    stemTypes.forEach(stemType => {
+                        const ws = stemPlayerWavesurfers[stemType];
+                        if (ws) {
+                            ws.seekTo(seekPosition);
+                        }
+                    });
+                }
+            });
+
+            // Keep stems in sync during playback (use first stem as reference)
+            const firstStem = stemPlayerWavesurfers['vocals'] || stemPlayerWavesurfers['drums'] ||
+                             stemPlayerWavesurfers['bass'] || stemPlayerWavesurfers['other'];
+
+            if (firstStem) {
+                firstStem.on('audioprocess', () => {
+                    if (!multiStemPlayerExpanded || !wavesurfer) return;
+
+                    const stemPosition = firstStem.getCurrentTime() / firstStem.getDuration();
+                    const parentPosition = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
+
+                    // If parent and stems drift more than 0.1 seconds apart, resync
+                    if (Math.abs(stemPosition - parentPosition) > 0.01) {
+                        wavesurfer.seekTo(stemPosition);
+                    }
+                });
+            }
+        }
+
+        function destroyMultiStemPlayerWavesurfers() {
+            console.log('Destroying multi-stem player wavesurfers');
+
+            // Clean up event listeners before destroying
+            if (wavesurfer) {
+                wavesurfer.un('play');
+                wavesurfer.un('pause');
+                wavesurfer.un('seeking');
+            }
+
+            // Destroy all stem wavesurfers
+            Object.values(stemPlayerWavesurfers).forEach(ws => {
+                if (ws) {
+                    ws.destroy();
+                }
+            });
+            stemPlayerWavesurfers = {};
+            multiStemReadyCount = 0;
+
+            // Restore parent player volume if it was muted
+            if (wavesurfer && wavesurfer.getVolume() === 0) {
+                const volumeSlider = document.getElementById('volumeSlider');
+                const volume = volumeSlider ? volumeSlider.value / 100 : 1;
+                wavesurfer.setVolume(volume);
+                console.log('Restored parent player volume to:', volume);
+            }
+        }
+
+        function toggleMultiStemPlay(stemType) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) {
+                console.log(`No WaveSurfer instance for ${stemType}`);
+                return;
+            }
+
+            const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
+
+            if (ws.isPlaying()) {
+                ws.pause();
+                if (icon) icon.textContent = '▶';
+                console.log(`Paused ${stemType} stem`);
+            } else {
+                ws.play();
+                if (icon) icon.textContent = '||';
+                console.log(`Playing ${stemType} stem`);
+            }
+        }
+
+        function toggleMultiStemMute(stemType) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) {
+                console.log(`No WaveSurfer instance for ${stemType}`);
+                return;
+            }
+
+            const muteBtn = document.getElementById(`stem-mute-${stemType}`);
+            const volumeSlider = document.getElementById(`stem-volume-${stemType}`);
+            const currentVolume = ws.getVolume();
+
+            if (currentVolume > 0) {
+                // Mute - save current volume first
+                ws._savedVolume = currentVolume;
+                ws.setVolume(0);
+                if (muteBtn) {
+                    muteBtn.classList.add('active');
+                    const icon = muteBtn.querySelector('span');
+                    if (icon) icon.textContent = '🔇';
+                }
+                if (volumeSlider) volumeSlider.value = 0;
+                const percentDisplay = document.getElementById(`stem-volume-percent-${stemType}`);
+                if (percentDisplay) percentDisplay.textContent = '0%';
+                console.log(`Muted ${stemType} stem`);
+            } else {
+                // Unmute - restore previous volume
+                const restoredVolume = ws._savedVolume || 1.0;
+                ws.setVolume(restoredVolume);
+                if (muteBtn) {
+                    muteBtn.classList.remove('active');
+                    const icon = muteBtn.querySelector('span');
+                    if (icon) icon.textContent = '🔊';
+                }
+                if (volumeSlider) volumeSlider.value = restoredVolume * 100;
+                const percentDisplay = document.getElementById(`stem-volume-percent-${stemType}`);
+                if (percentDisplay) percentDisplay.textContent = `${Math.round(restoredVolume * 100)}%`;
+                console.log(`Unmuted ${stemType} stem to ${Math.round(restoredVolume * 100)}%`);
+            }
+        }
+
+        function toggleMultiStemLoop(stemType) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const loopBtn = document.getElementById(`stem-loop-${stemType}`);
+            const currentLoop = ws.options.interact;
+
+            // Toggle loop - WaveSurfer v7 doesn't have built-in loop, so we use finish event
+            if (loopBtn.classList.contains('active')) {
+                loopBtn.classList.remove('active');
+                ws.un('finish'); // Remove finish event
+            } else {
+                loopBtn.classList.add('active');
+                ws.on('finish', () => {
+                    if (loopBtn.classList.contains('active')) {
+                        ws.seekTo(0);
+                        ws.play();
+                    }
+                });
+            }
+        }
+
+        function handleMultiStemVolumeChange(stemType, value) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) {
+                console.log(`No WaveSurfer instance for ${stemType}`);
+                return;
+            }
+
+            const volume = value / 100;
+            ws.setVolume(volume);
+
+            // Update percentage display
+            const percentDisplay = document.getElementById(`stem-volume-percent-${stemType}`);
+            if (percentDisplay) {
+                percentDisplay.textContent = `${value}%`;
+            }
+
+            // Update mute button icon based on volume
+            const muteBtn = document.getElementById(`stem-mute-${stemType}`);
+            if (muteBtn) {
+                const icon = muteBtn.querySelector('span');
+                if (icon) {
+                    icon.textContent = volume === 0 ? '🔇' : '🔊';
+                }
+                if (volume === 0) {
+                    muteBtn.classList.add('active');
+                } else {
+                    muteBtn.classList.remove('active');
+                }
+            }
+
+            console.log(`Set ${stemType} volume to ${value}%`);
+        }
+
+        // Phase 4 Step 2B: Render visual waveforms in expansion containers
+        function renderStemWaveforms(fileId) {
+            if (!stemFiles || Object.keys(stemFiles).length === 0) {
+                console.log('No stem files loaded, skipping waveform render');
+                return;
+            }
+
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+
+            stemTypes.forEach(stemType => {
+                const containerId = `stem-waveform-${stemType}-${fileId}`;
+                const container = document.getElementById(containerId);
+
+                if (!container) {
+                    console.warn(`Container ${containerId} not found`);
+                    return;
+                }
+
+                // Clear any existing content
+                container.innerHTML = '';
+
+                // Create a visual-only WaveSurfer instance for this stem
+                const visualWS = WaveSurfer.create({
+                    container: `#${containerId}`,
+                    waveColor: '#666666',
+                    progressColor: '#4a9eff',
+                    cursorColor: 'transparent', // No cursor for visual-only
+                    barWidth: 2,
+                    barRadius: 3,
+                    cursorWidth: 0,
+                    height: 60,
+                    barGap: 2,
+                    responsive: true,
+                    normalize: true,
+                    backend: 'WebAudio',
+                    autoScroll: false,
+                    interact: false // Visual only, no interaction
+                });
+
+                // Load the stem audio file (visual only, no playback)
+                if (stemFiles[stemType] && stemFiles[stemType].file_url) {
+                    visualWS.load(stemFiles[stemType].file_url);
+                    console.log(`Rendered visual waveform for ${stemType} stem`);
+                } else {
+                    console.warn(`No stem file found for ${stemType}`);
+                }
+            });
+        }
+
+        // Phase 4 Step 2B: Restore control states after re-expansion
+        function restoreStemControlStates(fileId) {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+
+            stemTypes.forEach(stemType => {
+                // Phase 4 Fix 2: Get stem file ID
+                const stemFileId = stemFiles[stemType]?.id;
+                if (!stemFileId) return;
+
+                // Restore volume slider
+                const volumeSlider = document.getElementById(`stem-volume-${stemType}-${fileId}`);
+                const volumeValue = document.getElementById(`stem-volume-value-${stemType}-${fileId}`);
+                if (volumeSlider && volumeValue) {
+                    const currentVolume = Math.round((stemVolumes[stemFileId] || 1.0) * 100);
+                    volumeSlider.value = currentVolume;
+                    volumeValue.textContent = `${currentVolume}%`;
+                }
+
+                // Restore mute button
+                const muteBtn = document.getElementById(`stem-mute-${stemType}-${fileId}`);
+                if (muteBtn) {
+                    const isMuted = stemMuted[stemFileId] || false;
+                    muteBtn.textContent = isMuted ? '🔇' : '🔊';
+                    muteBtn.style.background = isMuted ? '#8b0000' : '#2a2a2a';
+                }
+
+                // Restore solo button
+                const soloBtn = document.getElementById(`stem-solo-${stemType}-${fileId}`);
+                if (soloBtn) {
+                    const isSoloed = stemSoloed[stemFileId] || false;
+                    soloBtn.style.background = isSoloed ? '#00aa00' : '#2a2a2a';
+                    soloBtn.style.borderColor = isSoloed ? '#00ff00' : '#3a3a3a';
+                }
+            });
         }
 
         // Generate stems for a file
@@ -4355,234 +4058,16 @@
             updateLoopVisuals();
         }
 
-        // Metronome functions
-        function initMetronomeAudioContext() {
-            if (!metronomeAudioContext) {
-                metronomeAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-                // Create master gain node for instant muting
-                metronomeMasterGain = metronomeAudioContext.createGain();
-                metronomeMasterGain.connect(metronomeAudioContext.destination);
-                metronomeMasterGain.gain.value = 1.0;
-            }
-            return metronomeAudioContext;
-        }
-
-        function stopAllMetronomeSounds() {
-            // Stop ALL scheduled audio nodes immediately
-            scheduledMetronomeNotes.forEach(node => {
-                try {
-                    if (node.stop) {
-                        node.stop(0);
-                    }
-                    if (node.disconnect) {
-                        node.disconnect();
-                    }
-                } catch (e) {
-                    // Node may have already stopped, ignore error
-                }
-            });
-            scheduledMetronomeNotes = [];
-            lastMetronomeScheduleTime = 0; // Reset scheduling
-        }
-
-        function playMetronomeSound(time, isDownbeat = false) {
-            const ctx = initMetronomeAudioContext();
-
-            switch(metronomeSound) {
-                case 'click':
-                    playClickSound(ctx, time, isDownbeat);
-                    break;
-                case 'beep':
-                    playBeepSound(ctx, time, isDownbeat);
-                    break;
-                case 'wood':
-                    playWoodSound(ctx, time, isDownbeat);
-                    break;
-                case 'cowbell':
-                    playCowbellSound(ctx, time, isDownbeat);
-                    break;
-            }
-        }
-
-        function playClickSound(ctx, time, isDownbeat) {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-
-            osc.connect(gain);
-            gain.connect(metronomeMasterGain);
-
-            // Higher pitch for downbeat, lower for other beats
-            osc.frequency.value = isDownbeat ? 1200 : 800;
-
-            // Short, sharp click
-            gain.gain.setValueAtTime(0.3, time);
-            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.02);
-
-            osc.start(time);
-            osc.stop(time + 0.02);
-
-            // Track nodes for cleanup
-            scheduledMetronomeNotes.push(osc);
-            scheduledMetronomeNotes.push(gain);
-        }
-
-        function playBeepSound(ctx, time, isDownbeat) {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-
-            osc.connect(gain);
-            gain.connect(metronomeMasterGain);
-
-            osc.type = 'sine';
-            osc.frequency.value = isDownbeat ? 880 : 440; // A5 for downbeat, A4 for beats
-
-            gain.gain.setValueAtTime(0.2, time);
-            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
-
-            osc.start(time);
-            osc.stop(time + 0.08);
-
-            // Track nodes for cleanup
-            scheduledMetronomeNotes.push(osc);
-            scheduledMetronomeNotes.push(gain);
-        }
-
-        function playWoodSound(ctx, time, isDownbeat) {
-            const noise = ctx.createBufferSource();
-            const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate);
-            const data = buffer.getChannelData(0);
-
-            // Generate noise
-            for (let i = 0; i < buffer.length; i++) {
-                data[i] = Math.random() * 2 - 1;
-            }
-
-            noise.buffer = buffer;
-
-            const filter = ctx.createBiquadFilter();
-            filter.type = 'bandpass';
-            filter.frequency.value = isDownbeat ? 800 : 600;
-            filter.Q.value = 10;
-
-            const gain = ctx.createGain();
-
-            noise.connect(filter);
-            filter.connect(gain);
-            gain.connect(metronomeMasterGain);
-
-            gain.gain.setValueAtTime(isDownbeat ? 0.35 : 0.25, time);
-            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
-
-            noise.start(time);
-            noise.stop(time + 0.05);
-
-            // Track nodes for cleanup
-            scheduledMetronomeNotes.push(noise);
-            scheduledMetronomeNotes.push(filter);
-            scheduledMetronomeNotes.push(gain);
-        }
-
-        function playCowbellSound(ctx, time, isDownbeat) {
-            // Cowbell uses two square waves at specific frequencies
-            const osc1 = ctx.createOscillator();
-            const osc2 = ctx.createOscillator();
-            const gain = ctx.createGain();
-
-            osc1.type = 'square';
-            osc2.type = 'square';
-
-            if (isDownbeat) {
-                osc1.frequency.value = 800;
-                osc2.frequency.value = 540;
-            } else {
-                osc1.frequency.value = 700;
-                osc2.frequency.value = 470;
-            }
-
-            osc1.connect(gain);
-            osc2.connect(gain);
-            gain.connect(metronomeMasterGain);
-
-            gain.gain.setValueAtTime(0.15, time);
-            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
-
-            osc1.start(time);
-            osc2.start(time);
-            osc1.stop(time + 0.1);
-            osc2.stop(time + 0.1);
-
-            // Track nodes for cleanup
-            scheduledMetronomeNotes.push(osc1);
-            scheduledMetronomeNotes.push(osc2);
-            scheduledMetronomeNotes.push(gain);
-        }
-
-        function scheduleMetronome() {
-            if (!metronomeEnabled || !wavesurfer) return;
-
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (!file || !file.beatmap || file.beatmap.length === 0) {
-                console.log('No beatmap data for metronome');
-                return;
-            }
-
-            const ctx = initMetronomeAudioContext();
-            const currentTime = ctx.currentTime;
-            const audioCurrentTime = wavesurfer.getCurrentTime();
-            const playbackRate = currentRate; // Use current playback rate
-
-            // Apply the same beat rotation as markers
-            const barOffset = Math.floor(barStartOffset);
-            const fractionalBeats = Math.round((barStartOffset - barOffset) * 4);
-
-            // Schedule clicks for upcoming beats
-            file.beatmap.forEach(beat => {
-                const timeUntilBeat = beat.time - audioCurrentTime; // Time in audio seconds
-
-                // Convert audio time to wallclock time by dividing by playback rate
-                // At 2x rate, 1 audio second = 0.5 wallclock seconds
-                const wallclockTimeUntilBeat = timeUntilBeat / playbackRate;
-
-                // Schedule 2 wallclock seconds ahead
-                if (wallclockTimeUntilBeat >= 0 && wallclockTimeUntilBeat < 2) {
-                    const scheduleTime = currentTime + wallclockTimeUntilBeat;
-
-                    // Apply beat rotation to determine if this is a downbeat
-                    let rotatedBeatNum = beat.beatNum;
-                    if (fractionalBeats !== 0) {
-                        rotatedBeatNum = beat.beatNum - fractionalBeats;
-                        while (rotatedBeatNum < 1) rotatedBeatNum += 4;
-                        while (rotatedBeatNum > 4) rotatedBeatNum -= 4;
-                    }
-
-                    const isDownbeat = rotatedBeatNum === 1;
-                    playMetronomeSound(scheduleTime, isDownbeat);
-                }
-            });
-        }
+        // Metronome functions - EXTRACTED TO metronome.js (ROUND 2)
+        // All metronome functionality now handled by Metronome module
+        // Wrapper functions below for window object exposure
 
         function toggleMetronome() {
-            metronomeEnabled = !metronomeEnabled;
-            console.log(`Metronome: ${metronomeEnabled ? 'ON' : 'OFF'}`);
-
-            // Update button state
-            const btn = document.getElementById('metronomeBtn');
-            if (btn) {
-                if (metronomeEnabled) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            }
-
-            if (metronomeEnabled && wavesurfer && wavesurfer.isPlaying()) {
-                scheduleMetronome();
-            }
+            return Metronome.toggleMetronome(wavesurfer);
         }
 
         function setMetronomeSound(sound) {
-            metronomeSound = sound;
-            console.log(`Metronome sound: ${sound}`);
+            return Metronome.setMetronomeSound(sound);
         }
 
         function loadAudio(fileId, autoplay = true) {
@@ -4648,6 +4133,9 @@
                 wavesurfer = null;
             }
 
+            // Destroy any existing stems (Phase 4 Step 2A)
+            destroyAllStems();
+
             initWaveSurfer();
 
             // Apply current volume to new wavesurfer instance
@@ -4665,7 +4153,13 @@
             document.getElementById('playPauseIcon').textContent = '▶';
 
             // Add bar markers when waveform is ready
-            wavesurfer.once('ready', () => {
+            wavesurfer.once('ready', async () => {
+                // Ensure parent volume is restored (in case it was muted by stems)
+                const volumeSlider = document.getElementById('volumeSlider');
+                const currentVolume = volumeSlider ? volumeSlider.value / 100 : 1;
+                wavesurfer.setVolume(currentVolume);
+                console.log(`Restored parent volume to ${(currentVolume * 100).toFixed(0)}%`);
+
                 addBarMarkers(file);
 
                 // BPM Lock: Auto-adjust playback rate to match locked BPM
@@ -4703,10 +4197,37 @@
                     }
                 }
 
-                // Auto-play if requested
-                if (autoplay) {
-                    wavesurfer.play();
-                    document.getElementById('playPauseIcon').textContent = '⏸';
+                // Phase 4 Step 2A: Load stems if file has stems
+                // DISABLED - Now using multi-stem player (STEMS button) instead
+                // This old auto-load system was causing double audio with the new system
+                if (false && file.has_stems) {
+                    console.log(`File has stems - loading stem files in background...`);
+                    const stemsLoaded = await loadStems(fileId, false); // Don't autoplay stems yet
+
+                    if (stemsLoaded) {
+                        console.log('✅ Stems loaded successfully - muting main WaveSurfer');
+                        // Mute main WaveSurfer since we're playing stems instead
+                        wavesurfer.setVolume(0);
+
+                        // Auto-play stems if requested (this will trigger all stems to play)
+                        if (autoplay) {
+                            wavesurfer.play(); // This will trigger stem sync via event handlers
+                            document.getElementById('playPauseIcon').textContent = '⏸';
+                        }
+                    } else {
+                        console.warn('⚠️ Failed to load stems - playing main file instead');
+                        // Auto-play main file if requested
+                        if (autoplay) {
+                            wavesurfer.play();
+                            document.getElementById('playPauseIcon').textContent = '⏸';
+                        }
+                    }
+                } else {
+                    // No stems - play main file normally
+                    if (autoplay) {
+                        wavesurfer.play();
+                        document.getElementById('playPauseIcon').textContent = '⏸';
+                    }
                 }
             });
 
@@ -4718,6 +4239,9 @@
             if (currentFileItem) {
                 currentFileItem.classList.add('active');
             }
+
+            // Phase 4: Update STEMS button visibility/state
+            updateStemsButton();
         }
 
         // Play/Pause audio
@@ -4795,6 +4319,9 @@
                 wavesurfer.setVolume(volume);
             }
 
+            // Phase 4 Step 2B: Update all stem volumes
+            updateStemAudioState();
+
             // Calculate decibels (relative to 100% = 0dB)
             let db;
             if (value === 0) {
@@ -4837,14 +4364,64 @@
         function setPlaybackRate(rate) {
             currentRate = rate;
 
+            // Phase 4 Step 2A: Prevent phase drift when changing rate
+            // If stems are loaded, we need to synchronize them during rate change
+            const hasStemWavesurfers = Object.keys(stemWavesurfers).length > 0;
+            const wasPlaying = wavesurfer && wavesurfer.isPlaying();
+
+            if (hasStemWavesurfers && wasPlaying) {
+                // 1. Pause all stems to prevent drift
+                Object.keys(stemWavesurfers).forEach(stemType => {
+                    const stemWS = stemWavesurfers[stemType];
+                    if (stemWS && stemWS.isPlaying()) {
+                        stemWS.pause();
+                    }
+                });
+            }
+
             if (wavesurfer) {
                 wavesurfer.setPlaybackRate(rate, false); // false = natural analog (speed+pitch)
             }
 
+            // Phase 4 Step 2A: Also set playback rate for all stem WaveSurfers
+            Object.keys(stemWavesurfers).forEach(stemType => {
+                const stemWS = stemWavesurfers[stemType];
+                if (stemWS) {
+                    stemWS.setPlaybackRate(rate, false);
+                }
+            });
+
+            if (hasStemWavesurfers && wasPlaying) {
+                // 2. Re-sync all stems to main WaveSurfer position
+                const currentProgress = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
+                Object.keys(stemWavesurfers).forEach(stemType => {
+                    const stemWS = stemWavesurfers[stemType];
+                    if (stemWS) {
+                        stemWS.seekTo(currentProgress);
+                    }
+                });
+
+                // 3. Resume playback on all stems
+                setTimeout(() => {
+                    Object.keys(stemWavesurfers).forEach(stemType => {
+                        const stemWS = stemWavesurfers[stemType];
+                        if (stemWS && !stemWS.isPlaying()) {
+                            stemWS.play();
+                        }
+                    });
+                }, 50); // Small delay to ensure all rate changes are applied
+            }
+
             // Clear any scheduled metronome notes when rate changes
             // This prevents "copies" of metronome sounds at different rates
-            stopAllMetronomeSounds();
-            lastMetronomeScheduleTime = 0; // Force rescheduling
+            Metronome.stopAllMetronomeSounds();
+            Metronome.setLastMetronomeScheduleTime(0); // Force rescheduling
+
+            // Immediately reschedule metronome if it's enabled and playing
+            if (Metronome.isMetronomeEnabled() && wavesurfer && wavesurfer.isPlaying()) {
+                Metronome.scheduleMetronome(audioFiles, currentFileId, wavesurfer, barStartOffset, currentRate);
+                Metronome.setLastMetronomeScheduleTime(Date.now());
+            }
 
             // Update slider and display
             document.getElementById('rateSlider').value = rate;
@@ -4862,6 +4439,63 @@
         // Reset rate to 1.0x
         function resetRate() {
             setPlaybackRate(1.0);
+        }
+
+        // Phase 4 Step 2B: Stem volume control
+        function handleStemVolumeChange(stemType, value) {
+            // Phase 4 Fix 2: Use stem file ID instead of stem type
+            const stemFileId = stemFiles[stemType]?.id;
+            if (!stemFileId) return;
+
+            const volume = value / 100;
+            stemVolumes[stemFileId] = volume;
+
+            // Update the volume value display
+            const valueDisplay = document.getElementById(`stem-volume-value-${stemType}-${currentFileId}`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${value}%`;
+            }
+
+            // Update actual audio volume
+            updateStemAudioState();
+        }
+
+        // Phase 4 Step 2B: Stem mute toggle
+        function handleStemMute(stemType) {
+            // Phase 4 Fix 2: Use stem file ID instead of stem type
+            const stemFileId = stemFiles[stemType]?.id;
+            if (!stemFileId) return;
+
+            stemMuted[stemFileId] = !stemMuted[stemFileId];
+
+            // Update button appearance
+            const muteBtn = document.getElementById(`stem-mute-${stemType}-${currentFileId}`);
+            if (muteBtn) {
+                muteBtn.textContent = stemMuted[stemFileId] ? '🔇' : '🔊';
+                muteBtn.style.background = stemMuted[stemFileId] ? '#8b0000' : '#2a2a2a';
+            }
+
+            // Update actual audio volume
+            updateStemAudioState();
+        }
+
+        // Phase 4 Step 2B: Stem solo toggle
+        function handleStemSolo(stemType) {
+            // Phase 4 Fix 2: Use stem file ID instead of stem type
+            const stemFileId = stemFiles[stemType]?.id;
+            if (!stemFileId) return;
+
+            stemSoloed[stemFileId] = !stemSoloed[stemFileId];
+
+            // Update button appearance
+            const soloBtn = document.getElementById(`stem-solo-${stemType}-${currentFileId}`);
+            if (soloBtn) {
+                soloBtn.style.background = stemSoloed[stemFileId] ? '#00aa00' : '#2a2a2a';
+                soloBtn.style.borderColor = stemSoloed[stemFileId] ? '#00ff00' : '#3a3a3a';
+            }
+
+            // Update actual audio volume
+            updateStemAudioState();
         }
 
         // Next track
@@ -5531,7 +5165,7 @@
                     isPlaying: isCurrentlyPlaying,
                     currentFileId: currentFileId,
                     markersEnabled: markersEnabled,
-                    metronomeEnabled: metronomeEnabled,
+                    metronomeEnabled: Metronome.isMetronomeEnabled(),
                     loopFadesEnabled: loopFadesEnabled,
                     immediateJump: immediateJump,
                     seekOnClick: seekOnClick
@@ -5633,7 +5267,7 @@
                 case 'k':
                     e.preventDefault();
                     // Toggle metronome
-                    toggleMetronome();
+                    Metronome.toggleMetronome(wavesurfer);
                     break;
 
                 case 'enter':
@@ -5751,139 +5385,75 @@
 
         // Initialize on load
         loadData();
-    </script>
-</body>
-        <script type="module">
-                    // --- Multi-Stem Full Player Bars ---
-                    const stems = [
-                        { name: 'Drums',  file_url: './media/drums.mp3' },
-                        { name: 'Bass',   file_url: './media/bass.mp3' },
-                        { name: 'Vocals', file_url: './media/vocals.mp3' },
-                        { name: 'Other',  file_url: './media/other.mp3' },
-                        { name: 'Keys',   file_url: './media/other.mp3' }
-                    ];
 
-                    const multiStemContainer = document.getElementById('multiStemPlayer');
-                    let multiStemVisible = false;
+        // Initialize view tab click handlers
+        ViewManager.initViewTabs();
 
-                    // Template for a full player bar (clone from bottom bar, but with unique IDs per stem)
-                    function createPlayerBar(stem, idx) {
-                        // Unique suffix for IDs
-                        const suf = `-stem${idx}`;
-                        return `
-                        <div class="bottom-player" style="position:relative; margin:0 24px 32px 24px; min-width:600px; background:#232323; border-radius:12px; box-shadow:0 2px 12px #0006;">
-                            <div style="width: 100%; padding: 8px 12px; background: #0f0f0f; border-bottom: 1px solid #2a2a2a; border-radius:12px 12px 0 0;">
-                                <div class="player-waveform" id="waveform${suf}" style="width: 100%; height: 80px;"></div>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; flex-wrap: nowrap; overflow-x: auto;">
-                                <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
-                                    <div style="text-align: center;"><span style="color: #999; font-size: 11px;">Transport:</span></div>
-                                    <div class="player-controls">
-                                        <button class="player-btn" id="prevBtn${suf}" title="Previous"><span>◄◄</span></button>
-                                        <button class="player-btn play-pause" id="playPauseBtn${suf}" title="Play/Pause"><span id="playPauseIcon${suf}">▶</span></button>
-                                        <button class="player-btn" id="nextBtn${suf}" title="Next"><span>►►</span></button>
-                                        <button class="player-btn" id="loopBtn${suf}" title="Loop"><span>LOOP</span></button>
-                                        <button class="player-btn" id="shuffleBtn${suf}" title="Shuffle"><span>SHFL</span></button>
-                                    </div>
-                                    <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                                        <button id="muteBtn${suf}" title="Mute/Unmute" style="background: transparent; border: none; color: #999; font-size: 14px; cursor: pointer; padding: 0; margin: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">🔊</button>
-                                        <input type="range" id="volumeSlider${suf}" min="0" max="398" value="100" style="flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;">
-                                        <span id="volumePercent${suf}" style="color: #999; font-size: 11px; min-width: 95px;">100% (+0.0 dB)</span>
-                                    </div>
-                                </div>
-                                <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; min-width: 240px;">
-                                    <div style="text-align: center;"><span style="color: #999; font-size: 11px;">Rate:</span></div>
-                                    <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                                        <button class="player-btn" id="halfRateBtn${suf}" title="Half Rate (0.5x - slower + lower pitch)" style="flex: 1;"><span>0.5x</span></button>
-                                        <button class="player-btn active" id="normalRateBtn${suf}" title="Normal Rate (1x)" style="flex: 1;"><span>1x</span></button>
-                                        <button class="player-btn" id="doubleRateBtn${suf}" title="Double Rate (2x - faster + higher pitch)" style="flex: 1;"><span>2x</span></button>
-                                    </div>
-                                    <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                                        <input type="range" id="rateSlider${suf}" min="0.025" max="4.0" step="0.025" value="1.0" style="flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;">
-                                        <span id="rateValue${suf}" style="color: #999; font-size: 11px; min-width: 35px; text-align: right;">1.0x</span>
-                                    </div>
-                                </div>
-                                <div class="player-info">
-                                    <div class="player-filename" id="playerFilename${suf}">${stem.name}</div>
-                                    <div class="player-time" id="playerTime${suf}">0:00 / 0:00</div>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 8px; padding: 0 12px; border-left: 1px solid #333;">
-                                    <button class="player-btn active" id="markersBtn${suf}" title="Toggle markers (M)"><span>MARKS</span></button>
-                                    <select id="markerFrequencySelect${suf}" style="background: #2a2a2a; color: #999; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; outline: none;">
-                                        <option value="bar8">Every 8 bars</option>
-                                        <option value="bar4">Every 4 bars</option>
-                                        <option value="bar2">Every 2 bars</option>
-                                        <option value="bar" selected>Every bar</option>
-                                        <option value="halfbar">Half bar</option>
-                                        <option value="beat">Every beat</option>
-                                    </select>
-                                    <div style="display: flex; align-items: center; gap: 4px; border-left: 1px solid #333; padding-left: 8px;">
-                                        <span style="color: #999; font-size: 10px;">Shift:</span>
-                                        <button class="player-btn" id="shiftBarStartLeftBtn${suf}" title="Shift bar 1 to previous marker" style="padding: 2px 8px; font-size: 11px;">◀</button>
-                                        <span id="barStartOffsetDisplay${suf}" style="color: #999; font-size: 11px; min-width: 20px; text-align: center;">0</span>
-                                        <button class="player-btn" id="shiftBarStartRightBtn${suf}" title="Shift bar 1 to next marker" style="padding: 2px 8px; font-size: 11px;">▶</button>
-                                    </div>
-                                </div>
-                                <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 6px; border-left: 1px solid #333;">
-                                    <button class="player-btn" id="metronomeBtn${suf}" title="Metronome (K)" style="margin: 0;"><span style="font-size: 12px; line-height: 1;">⏱</span></button>
-                                    <select id="metronomeSound${suf}" style="background: #2a2a2a; color: #999; border: 1px solid #444; border-radius: 3px; padding: 1px 3px; font-size: 9px; cursor: pointer; outline: none; width: 40px; height: 16px;">
-                                        <option value="click" selected>Clk</option>
-                                        <option value="beep">Bep</option>
-                                        <option value="wood">Wod</option>
-                                        <option value="cowbell">Cow</option>
-                                    </select>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 8px; padding: 0 12px; border-left: 1px solid #333;">
-                                    <button class="player-btn" id="cycleBtn${suf}" title="Toggle cycle mode - Sets and plays loop (C)"><span style="font-size: 10px;">CYCLE</span></button>
-                                    <button class="player-btn" id="seekOnClickBtn${suf}" title="Toggle seek when clicking in Edit mode" style="display: none;"><span style="font-size: 9px;">SEEK</span></button>
-                                    <button class="player-btn" id="clearLoopBtn${suf}" title="Clear loop points (keep cycle mode on)" style="display: none;"><span style="font-size: 9px;">CLEAR</span></button>
-                                    <span id="loopStatus${suf}" style="color: #666; font-size: 10px; min-width: 90px;">Off</span>
-                                    <button class="player-btn" id="expandLoopBtn${suf}" title="Show/hide loop controls" style="display: none;"><span style="font-size: 10px;">▼</span></button>
-                                    <div id="loopControlsContainer${suf}" style="display: none; align-items: center; gap: 6px;">
-                                        <button class="player-btn" id="shiftLeftBtn${suf}" title="Shift loop left (←)"><span style="font-size: 10px;">◄</span></button>
-                                        <button class="player-btn" id="shiftRightBtn${suf}" title="Shift loop right (→)"><span style="font-size: 10px;">►</span></button>
-                                        <button class="player-btn" id="moveStartLeftBtn${suf}" title="Expand left (◄S)"><span style="font-size: 9px;">◄S</span></button>
-                                        <button class="player-btn" id="moveEndRightBtn${suf}" title="Expand right (E►)"><span style="font-size: 9px;">E►</span></button>
-                                        <button class="player-btn" id="halfLengthBtn${suf}" title="Half (↓)"><span style="font-size: 10px;">½</span></button>
-                                        <button class="player-btn" id="doubleLengthBtn${suf}" title="Double (↑)"><span style="font-size: 10px;">2×</span></button>
-                                        <button class="player-btn" id="jumpBtn${suf}" title="Jump on shift (J)"><span style="font-size: 10px;">JMP</span></button>
-                                        <button class="player-btn" id="fadeBtn${suf}" title="Loop fades"><span style="font-size: 10px;">FADE</span></button>
-                                        <div style="display: flex; align-items: center; gap: 4px;">
-                                            <input type="range" id="fadeTimeSlider${suf}" min="1" max="250" step="1" value="15" style="width: 60px; height: 3px; background: #444; border-radius: 2px; outline: none; cursor: pointer;">
-                                            <span id="fadeTimeValue${suf}" style="color: #999; font-size: 9px; min-width: 28px;">15ms</span>
-                                        </div>
-                                        <button class="player-btn" id="preserveLoopBtn${suf}" title="Preserve loop when changing files"><span style="font-size: 10px;">KEEP</span></button>
-                                        <button class="player-btn" id="bpmLockBtn${suf}" title="Lock BPM across file changes (auto-adjust playback rate)"><span style="font-size: 9px;">BPM LOCK</span></button>
-                                        <button class="player-btn" id="recordActionsBtn${suf}" title="Record loop actions (waits for first keypress)"><span style="font-size: 9px;">RECORD</span></button>
-                                        <button class="player-btn" id="playActionsBtn${suf}" title="Play back recorded actions"><span style="font-size: 9px;">PLAY</span></button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        `;
-                    }
-
-                    function showMultiStemPlayers() {
-                        multiStemContainer.innerHTML = '';
-                        stems.forEach((stem, idx) => {
-                            multiStemContainer.innerHTML += createPlayerBar(stem, idx);
-                        });
-                        multiStemContainer.style.display = 'block';
-                        document.body.classList.add('multi-stem-active');
-                        // TODO: Wire up each bar's controls and waveform independently here
-                    }
-
-                    function hideMultiStemPlayers() {
-                        multiStemContainer.innerHTML = '';
-                        multiStemContainer.style.display = 'none';
-                        document.body.classList.remove('multi-stem-active');
-                    }
-
-                    // STEMS button toggles the multi-stem container
-                    document.getElementById('stemsToggleBtn').onclick = () => {
-                        multiStemVisible = !multiStemVisible;
-                        if (multiStemVisible) showMultiStemPlayers();
-                        else hideMultiStemPlayers();
-                    };
-        </script>
-</html>
+// Expose functions to global scope for HTML onclick handlers
+window.handleFileClick = handleFileClick;
+window.handleTagClick = handleTagClick;
+window.toggleShowAllTags = toggleShowAllTags;
+window.handleBPMClick = handleBPMClick;
+window.handleKeyClick = handleKeyClick;
+window.handleSort = handleSort;
+window.toggleFileSelection = toggleFileSelection;
+window.openStemsViewer = openStemsViewer;
+window.generateStems = generateStems;
+window.quickEditFile = quickEditFile;
+window.addModalTag = addModalTag;
+window.setTagMode = setTagMode;
+window.handleSearch = handleSearch;
+window.handleSearchKeydown = handleSearchKeydown;
+window.selectAllVisibleTags = selectAllVisibleTags;
+window.deselectAllTags = deselectAllTags;
+window.openUploadFlow = openUploadFlow;
+window.selectAll = selectAll;
+window.deselectAll = deselectAll;
+window.batchDelete = batchDelete;
+window.batchEditTags = batchEditTags;
+window.batchDetect = batchDetect;
+window.batchSeparateStems = batchSeparateStems;
+window.closeEditTagsModal = closeEditTagsModal;
+window.saveEditedTags = saveEditedTags;
+window.previousTrack = previousTrack;
+window.playPause = playPause;
+window.nextTrack = nextTrack;
+window.toggleLoop = toggleLoop;
+window.toggleShuffle = toggleShuffle;
+window.setVolume = setVolume;
+window.toggleMute = toggleMute;
+window.resetVolume = resetVolume;
+window.setPlaybackRate = setPlaybackRate;
+window.resetRate = resetRate;
+window.toggleMarkers = toggleMarkers;
+window.setMarkerFrequency = setMarkerFrequency;
+window.shiftBarStartLeft = shiftBarStartLeft;
+window.shiftBarStartRight = shiftBarStartRight;
+window.toggleMetronome = toggleMetronome;
+window.setMetronomeSound = setMetronomeSound;
+window.toggleCycleMode = toggleCycleMode;
+window.toggleSeekOnClick = toggleSeekOnClick;
+window.clearLoopKeepCycle = clearLoopKeepCycle;
+window.toggleLoopControlsExpanded = toggleLoopControlsExpanded;
+window.shiftLoopLeft = shiftLoopLeft;
+window.shiftLoopRight = shiftLoopRight;
+window.moveStartLeft = moveStartLeft;
+window.moveEndRight = moveEndRight;
+window.halfLoopLength = halfLoopLength;
+window.doubleLoopLength = doubleLoopLength;
+window.toggleImmediateJump = toggleImmediateJump;
+window.toggleLoopFades = toggleLoopFades;
+window.setFadeTime = setFadeTime;
+window.togglePreserveLoop = togglePreserveLoop;
+window.toggleBPMLock = toggleBPMLock;
+window.toggleRecordActions = toggleRecordActions;
+window.playRecordedActions = playRecordedActions;
+window.handleStemVolumeChange = handleStemVolumeChange;
+window.handleStemMute = handleStemMute;
+window.handleStemSolo = handleStemSolo;
+window.toggleStemsViewer = toggleStemsViewer;
+window.toggleMultiStemPlayer = toggleMultiStemPlayer;
+window.toggleMultiStemPlay = toggleMultiStemPlay;
+window.toggleMultiStemMute = toggleMultiStemMute;
+window.toggleMultiStemLoop = toggleMultiStemLoop;
+window.handleMultiStemVolumeChange = handleMultiStemVolumeChange;

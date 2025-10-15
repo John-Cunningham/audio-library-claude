@@ -794,6 +794,70 @@ Muting parent player
 Parent was playing - starting all stems in sync
 ```
 
+Git Commits: d44ceaa
+Result: ✅ IMPLEMENTED - Seamless audio switching (ready for testing)
+
+=== Version 22 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix double audio issue - old and new stem systems conflicting"
+
+User Testing Results (Version 21):
+❌ Scenario 1 (Playing): "I am still hearing double playback. Parent file + all four stems. They are also not exactly aligned."
+✅ Scenario 2 (Paused): "Yes that works, and I do not hear double playback"
+❌ Scenario 3 (Cycle mode): "STEMS played back, but I heard double playback, and one was slightly behind the other"
+
+Root Cause Analysis:
+Found TWO separate stem systems running simultaneously:
+1. **OLD system** (lines 235-400): `stemWavesurfers` - Auto-loads stems when file clicked
+   - Line 4163: `await loadStems(fileId, false)` called automatically
+   - Line 4168: `wavesurfer.setVolume(0)` mutes parent
+   - These stems play in hidden containers
+2. **NEW system** (lines 2313+): `stemPlayerWavesurfers` - Multi-stem player (STEMS button)
+   - Loads stems when STEMS button clicked
+   - Also mutes parent and plays stems
+Result: Both systems load stems → Double audio!
+
+Changes (Disable Old System):
+- Disabled auto-loading of old stem system (line 4163):
+  - Changed `if (file.has_stems)` to `if (false && file.has_stems)`
+  - Added comment explaining why it's disabled
+  - Old system was causing double audio with new multi-stem player
+- Added parent volume restoration when loading new file (lines 4123-4127):
+  - Reads current volume from slider
+  - Restores parent volume on 'ready' event
+  - Ensures parent plays normally when stems are not expanded
+  - Prevents parent from staying muted after collapsing stems
+- Created backup: app_v4.js
+
+Before (Two Systems Active):
+```
+User clicks file with stems:
+  ├─ OLD system loads 4 stems (hidden)
+  ├─ OLD system mutes parent
+  └─ User clicks STEMS button:
+      ├─ NEW system loads 4 stems (visible)
+      ├─ NEW system tries to mute parent (already muted)
+      └─ RESULT: 8 audio streams playing! (4 old + 4 new)
+```
+
+After (Only New System):
+```
+User clicks file with stems:
+  ├─ OLD system DISABLED
+  ├─ Parent plays normally with full volume
+  └─ User clicks STEMS button:
+      ├─ NEW system loads 4 stems (visible)
+      ├─ NEW system mutes parent
+      └─ RESULT: 4 audio streams (stems only) ✓
+```
+
+Implementation Notes:
+- Old stem system still exists in codebase (lines 235-400)
+- Could be useful for future features (e.g., inline stem expansion)
+- For now, only multi-stem player (STEMS button) loads stems
+- This ensures no conflicts and clean audio switching
+
 Git Commits: [pending]
-Result: ⏳ READY FOR TESTING - Seamless audio switching implemented
+Result: ⏳ READY FOR TESTING - Double audio should be fixed
 

@@ -2134,6 +2134,54 @@
             }
         }
 
+        // Phase 4: Toggle stems viewer from bottom player bar STEMS button
+        function toggleStemsViewer() {
+            if (!currentFileId) return;
+
+            // Toggle expansion state for current file
+            if (expandedStems.has(currentFileId)) {
+                expandedStems.delete(currentFileId);
+            } else {
+                expandedStems.add(currentFileId);
+            }
+
+            // Re-render to show/hide stems
+            renderFiles();
+
+            // Phase 4 Step 2B: Render waveforms in expansion containers if stems are loaded
+            if (expandedStems.has(currentFileId) && Object.keys(stemWavesurfers).length > 0) {
+                setTimeout(() => {
+                    renderStemWaveforms(currentFileId);
+                    restoreStemControlStates(currentFileId);
+                }, 100); // Small delay to ensure DOM is ready
+            }
+
+            // Update STEMS button appearance
+            updateStemsButton();
+        }
+
+        // Update STEMS button visibility and active state
+        function updateStemsButton() {
+            const stemsBtn = document.getElementById('stemsBtn');
+            if (!stemsBtn) return;
+
+            // Get current file
+            const currentFile = audioFiles.find(f => f.id === currentFileId);
+
+            // Show button only if current file has stems
+            if (currentFile && currentFile.has_stems) {
+                stemsBtn.style.display = 'block';
+                // Toggle active class based on expansion state
+                if (expandedStems.has(currentFileId)) {
+                    stemsBtn.classList.add('active');
+                } else {
+                    stemsBtn.classList.remove('active');
+                }
+            } else {
+                stemsBtn.style.display = 'none';
+            }
+        }
+
         // Phase 4 Step 2B: Render visual waveforms in expansion containers
         function renderStemWaveforms(fileId) {
             if (!stemFiles || Object.keys(stemFiles).length === 0) {
@@ -3676,6 +3724,9 @@
             if (currentFileItem) {
                 currentFileItem.classList.add('active');
             }
+
+            // Phase 4: Update STEMS button visibility/state
+            updateStemsButton();
         }
 
         // Play/Pause audio
@@ -4885,3 +4936,4 @@ window.playRecordedActions = playRecordedActions;
 window.handleStemVolumeChange = handleStemVolumeChange;
 window.handleStemMute = handleStemMute;
 window.handleStemSolo = handleStemSolo;
+window.toggleStemsViewer = toggleStemsViewer;

@@ -2241,7 +2241,6 @@
         // Phase 2A: Individual Rate Controls
         let stemIndependentRates = {}; // {vocals: 1.0, drums: 1.25, ...} - user's rate multiplier per stem
         let stemRateLocked = {}; // {vocals: true, drums: false, ...} - whether stem follows parent rate
-        let stemPlaybackIndependent = {}; // {vocals: false, drums: false, ...} - whether stem has independent playback control
         let currentParentFileBPM = null; // Store parent file's original BPM for calculations
 
         // Phase 1: Pre-load stems silently in background when file loads
@@ -2692,41 +2691,19 @@
 
             console.log('Setting up parent-stem synchronization');
 
-            // When parent plays, play all NON-INDEPENDENT stems
+            // When parent plays, play all stems
             wavesurfer.on('play', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent play event - syncing non-independent stems');
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                    stemTypes.forEach(stemType => {
-                        // Only sync stems that are NOT independent
-                        if (!stemPlaybackIndependent[stemType]) {
-                            const ws = stemPlayerWavesurfers[stemType];
-                            if (ws && !ws.isPlaying()) {
-                                ws.play();
-                                const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                                if (icon) icon.textContent = '||';
-                            }
-                        }
-                    });
+                    console.log('Parent play event - syncing stems');
+                    playAllStems();
                 }
             });
 
-            // When parent pauses, pause all NON-INDEPENDENT stems
+            // When parent pauses, pause all stems
             wavesurfer.on('pause', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent pause event - syncing non-independent stems');
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                    stemTypes.forEach(stemType => {
-                        // Only sync stems that are NOT independent
-                        if (!stemPlaybackIndependent[stemType]) {
-                            const ws = stemPlayerWavesurfers[stemType];
-                            if (ws && ws.isPlaying()) {
-                                ws.pause();
-                                const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                                if (icon) icon.textContent = '▶';
-                            }
-                        }
-                    });
+                    console.log('Parent pause event - syncing stems');
+                    pauseAllStems();
                 }
             });
 
@@ -2800,19 +2777,16 @@
                 return;
             }
 
-            // Mark this stem as independent (user is manually controlling it)
-            stemPlaybackIndependent[stemType] = true;
-
             const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
 
             if (ws.isPlaying()) {
                 ws.pause();
                 if (icon) icon.textContent = '▶';
-                console.log(`Paused ${stemType} stem (now independent)`);
+                console.log(`Paused ${stemType} stem`);
             } else {
                 ws.play();
                 if (icon) icon.textContent = '||';
-                console.log(`Playing ${stemType} stem (now independent)`);
+                console.log(`Playing ${stemType} stem`);
             }
         }
 

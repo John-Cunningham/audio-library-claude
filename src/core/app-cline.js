@@ -1,16 +1,15 @@
         // Import modules (ROUND 1 - Foundation Modules)
         import { supabase, PREF_KEYS } from './config.js';
         import * as Utils from './utils.js';
-        import { generateStemPlayerBar } from './playerTemplate.js';
 
         // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
 
         // Import modules (Phase 1 - View Manager)
-        import * as ViewManager from './viewManager.js';
-        import * as LibraryView from '../views/libraryView.js';
-        import * as GalaxyView from '../views/galaxyView.js';
-        import * as SphereView from '../views/sphereView.js';
+import * as ViewManager from './viewManager-cline.js';
+import * as LibraryView from '../views/libraryView.js';
+import * as GalaxyView from '../views/galaxyView-cline.js';
+import * as SphereView from '../views/sphereView.js';
 
         // Note: Modules provide:
         // - config.js: supabase client, PREF_KEYS constants
@@ -2241,7 +2240,6 @@
         // Phase 2A: Individual Rate Controls
         let stemIndependentRates = {}; // {vocals: 1.0, drums: 1.25, ...} - user's rate multiplier per stem
         let stemRateLocked = {}; // {vocals: true, drums: false, ...} - whether stem follows parent rate
-        let stemPlaybackIndependent = {}; // {vocals: false, drums: false, ...} - whether stem has independent playback control
         let currentParentFileBPM = null; // Store parent file's original BPM for calculations
 
         // Phase 1: Pre-load stems silently in background when file loads
@@ -2315,8 +2313,81 @@
                 const initialRate = currentRate || 1.0;
                 const initialBPM = currentParentFileBPM ? (currentParentFileBPM * initialRate).toFixed(1) : '---';
 
-                // Generate stem UI HTML using template system (Phase 4: Template Refactoring)
-                const stemBarHTML = generateStemPlayerBar(stemType, displayName, initialRate, initialBPM);
+                // Create stem UI HTML (Phase 2A: Added rate controls row beneath waveform)
+                const stemBarHTML = `
+                    <div class="stem-player-bar" id="stem-player-${stemType}">
+                        <!-- Top Row: Play/Mute/Loop + Waveform + Info + Volume -->
+                        <div class="stem-player-main-row">
+                            <div class="stem-player-controls">
+                                <button class="stem-player-btn play-pause" onclick="toggleMultiStemPlay('${stemType}')" id="stem-play-pause-${stemType}">
+                                    <span id="stem-play-pause-icon-${stemType}">||</span>
+                                </button>
+                                <button class="stem-player-btn" onclick="toggleMultiStemMute('${stemType}')" id="stem-mute-${stemType}" title="Mute">
+                                    <span>🔊</span>
+                                </button>
+                                <button class="stem-player-btn" onclick="toggleMultiStemLoop('${stemType}')" id="stem-loop-${stemType}" title="Loop">
+                                    <span>LOOP</span>
+                                </button>
+                            </div>
+
+                            <div class="stem-player-waveform" id="multi-stem-waveform-${stemType}"></div>
+
+                            <div class="stem-player-info">
+                                <div class="stem-player-filename">${displayName}</div>
+                                <div class="stem-player-time" id="multi-stem-time-${stemType}">0:00 / 0:00</div>
+                            </div>
+
+                            <div class="stem-player-volume">
+                                <span>🔊</span>
+                                <input type="range" min="0" max="100" value="100"
+                                       oninput="handleMultiStemVolumeChange('${stemType}', this.value)" id="stem-volume-${stemType}">
+                                <span id="stem-volume-percent-${stemType}">100%</span>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Row: Rate Controls (Phase 2A) -->
+                        <div class="stem-player-rate-row">
+                            <!-- Lock Toggle Button -->
+                            <button class="stem-lock-btn locked"
+                                    onclick="toggleStemRateLock('${stemType}')"
+                                    id="stem-lock-${stemType}"
+                                    title="Lock to Parent Rate">
+                                <span class="lock-icon">🔒</span>
+                                <span class="lock-text">LOCK</span>
+                            </button>
+
+                            <!-- Rate Preset Buttons -->
+                            <div class="stem-rate-presets">
+                                <button class="stem-rate-preset-btn" onclick="setStemRatePreset('${stemType}', 0.5)" title="Half Speed">0.5x</button>
+                                <button class="stem-rate-preset-btn" onclick="setStemRatePreset('${stemType}', 1.0)" title="Normal Speed">1x</button>
+                                <button class="stem-rate-preset-btn" onclick="setStemRatePreset('${stemType}', 2.0)" title="Double Speed">2x</button>
+                            </div>
+
+                            <!-- Rate Slider with Label -->
+                            <div class="stem-rate-control">
+                                <label class="stem-rate-label">Rate:</label>
+                                <input type="range"
+                                       min="50"
+                                       max="200"
+                                       value="100"
+                                       step="1"
+                                       class="stem-rate-slider"
+                                       oninput="handleStemRateChange('${stemType}', this.value)"
+                                       id="stem-rate-slider-${stemType}">
+                                <span class="stem-rate-display" id="stem-rate-display-${stemType}">1.00x @ ${initialBPM} BPM</span>
+                            </div>
+
+                            <!-- Placeholder for future: Radio buttons for Rate/Speed/Pitch -->
+                            <!--
+                            <div class="stem-playback-mode">
+                                <label><input type="radio" name="mode-${stemType}" value="rate" checked> Rate</label>
+                                <label><input type="radio" name="mode-${stemType}" value="speed"> Speed</label>
+                                <label><input type="radio" name="mode-${stemType}" value="pitch"> Pitch</label>
+                            </div>
+                            -->
+                        </div>
+                    </div>
+                `;
 
                 multiStemPlayer.insertAdjacentHTML('beforeend', stemBarHTML);
             }
@@ -2692,41 +2763,19 @@
 
             console.log('Setting up parent-stem synchronization');
 
-            // When parent plays, play all NON-INDEPENDENT stems
+            // When parent plays, play all stems
             wavesurfer.on('play', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent play event - syncing non-independent stems');
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                    stemTypes.forEach(stemType => {
-                        // Only sync stems that are NOT independent
-                        if (!stemPlaybackIndependent[stemType]) {
-                            const ws = stemPlayerWavesurfers[stemType];
-                            if (ws && !ws.isPlaying()) {
-                                ws.play();
-                                const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                                if (icon) icon.textContent = '||';
-                            }
-                        }
-                    });
+                    console.log('Parent play event - syncing stems');
+                    playAllStems();
                 }
             });
 
-            // When parent pauses, pause all NON-INDEPENDENT stems
+            // When parent pauses, pause all stems
             wavesurfer.on('pause', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent pause event - syncing non-independent stems');
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                    stemTypes.forEach(stemType => {
-                        // Only sync stems that are NOT independent
-                        if (!stemPlaybackIndependent[stemType]) {
-                            const ws = stemPlayerWavesurfers[stemType];
-                            if (ws && ws.isPlaying()) {
-                                ws.pause();
-                                const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                                if (icon) icon.textContent = '▶';
-                            }
-                        }
-                    });
+                    console.log('Parent pause event - syncing stems');
+                    pauseAllStems();
                 }
             });
 
@@ -2800,19 +2849,16 @@
                 return;
             }
 
-            // Mark this stem as independent (user is manually controlling it)
-            stemPlaybackIndependent[stemType] = true;
-
             const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
 
             if (ws.isPlaying()) {
                 ws.pause();
                 if (icon) icon.textContent = '▶';
-                console.log(`Paused ${stemType} stem (now independent)`);
+                console.log(`Paused ${stemType} stem`);
             } else {
                 ws.play();
                 if (icon) icon.textContent = '||';
-                console.log(`Playing ${stemType} stem (now independent)`);
+                console.log(`Playing ${stemType} stem`);
             }
         }
 

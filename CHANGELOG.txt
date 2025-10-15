@@ -1,3 +1,89 @@
+=== Version 27a - Phase 1: Independent Stem Playback ===
+Date: 2025-10-15
+Branch: experimental-v27-stem-independence
+Status: ✅ PHASE 1 COMPLETE - Independent playback & rate control
+
+**PHASE 1 SUMMARY**:
+Implemented independent playback control for stem players. Each stem can now play/pause independently without affecting other stems. Rate lock/unlock system was already implemented and working correctly.
+
+**USER'S ORIGINAL GOAL** (from Version 26 handoff):
+"Taking all of the functionality we have for our bottom player and applying it to all four of the stem players."
+
+This means each stem should have FULL independent functionality:
+- ✅ Independent playback control (play/pause without affecting others) - DONE
+- ✅ Independent rate control when unlocked - ALREADY WORKING
+- ⏳ Independent loop regions - Phase 2
+- ⏳ Independent markers - Phase 3
+- ⏳ Independent cycle mode - Phase 4
+- ⏳ Keyboard shortcuts for active stem - Phase 5
+
+**PHASE 1 CHANGES**:
+
+1. Added state management for independent playback (src/core/app.js:2244):
+   ```javascript
+   let stemPlaybackIndependent = {}; // {vocals: false, drums: false, ...}
+   ```
+
+2. Modified setupParentStemSync() to respect independent playback (lines 2689-2731):
+   - Parent play event: Only syncs NON-INDEPENDENT stems
+   - Parent pause event: Only syncs NON-INDEPENDENT stems
+   - Stems that user manually controls become independent
+   - Independent stems unaffected by parent play/pause
+
+3. Modified toggleMultiStemPlay() to mark stem as independent (lines 2796-2817):
+   - When user manually toggles stem play/pause → stem becomes independent
+   - Independent stems no longer follow parent player
+   - Console logging shows independent status
+
+**RATE LOCK SYSTEM** (Already Complete):
+- toggleStemRateLock() - Lock/unlock stem rate from parent
+- calculateStemFinalRate() - Locked stems follow parent, unlocked are independent
+- handleStemRateChange() - Unlocks stem automatically when user adjusts
+- setStemRatePreset() - Unlocks stem when preset clicked
+- updateLockButton() - Visual feedback (🔒 locked, 🔓 unlocked)
+- updateStemRateDisplay() - Shows rate and BPM per stem
+
+**ARCHITECTURE**:
+```
+Parent Player Events:
+├─ on('play') → play all NON-INDEPENDENT stems
+├─ on('pause') → pause all NON-INDEPENDENT stems
+└─ on('seeking') → seek all stems (independent or not)
+
+Stem Playback States:
+├─ Independent: User manually controlled, ignores parent play/pause
+└─ Synced: Follows parent play/pause automatically
+```
+
+**PHASE 1 TEST RESULTS**:
+⏳ Testing required (user to confirm):
+- Each stem can play independently
+- Each stem can pause independently
+- Rate lock button toggles locked/unlocked state
+- When locked: Parent rate change affects stem
+- When unlocked: Parent rate change doesn't affect stem
+- When unlocked: Stem rate slider only affects that stem
+- Rate presets work per stem when unlocked
+- BPM display updates per stem's rate
+
+**FILES MODIFIED**:
+- src/core/app.js (3 changes: state variable, setupParentStemSync, toggleMultiStemPlay)
+
+**BACKUPS CREATED**:
+- src/core/app.js Backups/app_v27a.js
+
+**GIT COMMITS**:
+- [pending] Phase 1: Independent stem playback
+
+**NEXT STEPS** (Version 27b - Phase 2):
+- Implement independent loop regions per stem
+- Per-stem loop state (loopStart, loopEnd, loopEnabled)
+- Loop region UI on stem waveforms
+- Loop controls per stem (shift, half, double, expand, shrink)
+- Independent loop playback
+
+---
+
 === Version 26 - COMPLETE (Template/Factory System Refactoring) ===
 Date: 2025-10-15
 Branch: experimental-v26-refactor

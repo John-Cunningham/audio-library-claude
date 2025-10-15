@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audio Library Manager</title>
+    <link rel="stylesheet" href="styles/stems.css">
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -1152,6 +1153,11 @@
     <!-- Upload progress bar -->
     <div id="uploadProgressBar" style="position: fixed; top: 0; left: 0; width: 0%; height: 3px; background: linear-gradient(90deg, #f59e0b, #fb923c); z-index: 10000; transition: width 0.3s ease; display: none;"></div>
 
+    <!-- Multi-Stem Player (slides up from bottom) - MUST be outside container, at same level as bottom player -->
+    <div class="multi-stem-player collapsed" id="multiStemPlayer">
+        <!-- Individual stem player bars will be added here dynamically -->
+    </div>
+
     <!-- Fixed Bottom Audio Player -->
     <div class="bottom-player" id="bottomPlayer">
         <!-- Row 1: Full-width Waveform -->
@@ -1229,8 +1235,8 @@
             <button class="player-btn active" id="markersBtn" onclick="toggleMarkers()" title="Toggle markers (M)">
                 <span>MARKS</span>
             </button>
-            <button class="player-btn" id="stemsBtn" onclick="toggleStemsViewer()" title="Toggle stems viewer" style="display: none;">
-                <span>STEMS</span>
+            <button class="player-btn" id="stemsBtn" onclick="toggleMultiStemPlayer()" title="Toggle stems viewer" style="display: none;">
+                <span>▲ STEMS</span>
             </button>
             <select id="markerFrequencySelect" onchange="setMarkerFrequency(this.value)"
                     style="background: #2a2a2a; color: #999; border: 1px solid #444;

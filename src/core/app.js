@@ -2171,14 +2171,264 @@
             // Show button only if current file has stems
             if (currentFile && currentFile.has_stems) {
                 stemsBtn.style.display = 'block';
-                // Toggle active class based on expansion state
-                if (expandedStems.has(currentFileId)) {
+                // Toggle active class and text based on multi-stem player state
+                if (multiStemPlayerExpanded) {
+                    stemsBtn.classList.add('active');
+                    stemsBtn.innerHTML = '<span>▼ STEMS</span>';
+                } else {
+                    stemsBtn.classList.remove('active');
+                    stemsBtn.innerHTML = '<span>▲ STEMS</span>';
+                }
+            } else {
+                stemsBtn.style.display = 'none';
+                // Close multi-stem player if it's open and file has no stems
+                if (multiStemPlayerExpanded) {
+                    toggleMultiStemPlayer();
+                }
+            }
+        }
+
+        // Multi-Stem Player Functions (Galaxy View Style)
+        let multiStemPlayerExpanded = false;
+        let stemPlayerWavesurfers = {}; // Separate WaveSurfer instances for multi-stem player
+
+        function toggleMultiStemPlayer() {
+            console.log('toggleMultiStemPlayer called, currentFileId:', currentFileId);
+            if (!currentFileId) {
+                console.log('No current file, returning');
+                return;
+            }
+
+            const multiStemPlayer = document.getElementById('multiStemPlayer');
+            if (!multiStemPlayer) {
+                console.log('multiStemPlayer element not found');
+                return;
+            }
+
+            multiStemPlayerExpanded = !multiStemPlayerExpanded;
+            console.log('multiStemPlayerExpanded:', multiStemPlayerExpanded);
+
+            if (multiStemPlayerExpanded) {
+                console.log('Expanding multi-stem player');
+                generateMultiStemPlayerBars();
+                // Small delay to ensure DOM is ready before removing collapsed class for smooth animation
+                setTimeout(() => {
+                    multiStemPlayer.classList.remove('collapsed');
+                }, 10);
+            } else {
+                console.log('Collapsing multi-stem player');
+                multiStemPlayer.classList.add('collapsed');
+                // Destroy waveforms after animation completes
+                setTimeout(() => {
+                    destroyMultiStemPlayerWavesurfers();
+                }, 300); // Match CSS transition duration
+            }
+
+            // Update STEMS button text
+            const stemsBtn = document.getElementById('stemsBtn');
+            if (stemsBtn) {
+                stemsBtn.innerHTML = multiStemPlayerExpanded ? '<span>▼ STEMS</span>' : '<span>▲ STEMS</span>';
+                if (multiStemPlayerExpanded) {
                     stemsBtn.classList.add('active');
                 } else {
                     stemsBtn.classList.remove('active');
                 }
+            }
+        }
+
+        function generateMultiStemPlayerBars() {
+            console.log('generateMultiStemPlayerBars called');
+            const multiStemPlayer = document.getElementById('multiStemPlayer');
+            console.log('multiStemPlayer element:', multiStemPlayer);
+            console.log('currentFileId:', currentFileId);
+
+            if (!multiStemPlayer || !currentFileId) {
+                console.log('Returning early - multiStemPlayer:', multiStemPlayer, 'currentFileId:', currentFileId);
+                return;
+            }
+
+            // Clear existing content
+            multiStemPlayer.innerHTML = '<div class="multi-stem-player-container" id="multiStemPlayerContainer"></div>';
+            console.log('Set innerHTML');
+
+            const container = document.getElementById('multiStemPlayerContainer');
+            console.log('container:', container);
+            if (!container) {
+                console.log('Container not found, returning');
+                return;
+            }
+
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            console.log('stemFiles:', stemFiles);
+
+            stemTypes.forEach(stemType => {
+                const stemFile = stemFiles[stemType];
+                console.log(`stemFile for ${stemType}:`, stemFile);
+                if (!stemFile) {
+                    console.log(`No stem file for ${stemType}, skipping`);
+                    return;
+                }
+
+                const stemBarHTML = `
+                    <div class="stem-player-bar" id="stem-player-${stemType}">
+                        <div class="stem-player-header">
+                            <div class="stem-player-title">${stemType}</div>
+                            <div class="stem-player-controls">
+                                <button class="stem-player-btn" id="stem-play-${stemType}" onclick="toggleMultiStemPlay('${stemType}')">
+                                    ▶
+                                </button>
+                                <button class="stem-player-btn" id="stem-mute-${stemType}" onclick="toggleMultiStemMute('${stemType}')">
+                                    MUTE
+                                </button>
+                                <button class="stem-player-btn" id="stem-loop-${stemType}" onclick="toggleMultiStemLoop('${stemType}')">
+                                    LOOP
+                                </button>
+                            </div>
+                        </div>
+                        <div class="stem-player-waveform-container">
+                            <div id="multi-stem-waveform-${stemType}" style="width: 100%; height: 80px;"></div>
+                        </div>
+                        <div class="stem-player-footer">
+                            <div class="stem-player-volume">
+                                <span style="font-size: 11px; color: #999;">VOL</span>
+                                <input type="range" min="0" max="100" value="100"
+                                    oninput="handleMultiStemVolumeChange('${stemType}', this.value)">
+                                <span id="multi-stem-volume-value-${stemType}" style="font-size: 11px; color: #999; min-width: 35px;">100%</span>
+                            </div>
+                            <div class="stem-player-time" id="multi-stem-time-${stemType}">0:00 / 0:00</div>
+                        </div>
+                    </div>
+                `;
+
+                container.insertAdjacentHTML('beforeend', stemBarHTML);
+            });
+
+            // Initialize WaveSurfer instances after DOM is ready
+            setTimeout(() => {
+                initializeMultiStemPlayerWavesurfers();
+            }, 50);
+        }
+
+        async function initializeMultiStemPlayerWavesurfers() {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+
+            for (const stemType of stemTypes) {
+                const stemFile = stemFiles[stemType];
+                if (!stemFile) continue;
+
+                const containerId = `multi-stem-waveform-${stemType}`;
+                const container = document.getElementById(containerId);
+                if (!container) continue;
+
+                try {
+                    const ws = WaveSurfer.create({
+                        container: `#${containerId}`,
+                        waveColor: '#4a5568',
+                        progressColor: '#f59e0b',
+                        cursorColor: '#f59e0b',
+                        height: 80,
+                        barWidth: 2,
+                        barGap: 1,
+                        barRadius: 2,
+                        normalize: true,
+                        backend: 'WebAudio'
+                    });
+
+                    // Use file_url directly (already a public URL)
+                    await ws.load(stemFile.file_url);
+
+                    // Store instance
+                    stemPlayerWavesurfers[stemType] = ws;
+
+                    // Update time display on timeupdate
+                    ws.on('timeupdate', (currentTime) => {
+                        const duration = ws.getDuration();
+                        const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
+                        if (timeDisplay) {
+                            timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+                        }
+                    });
+
+                } catch (error) {
+                    console.error(`Error loading multi-stem waveform for ${stemType}:`, error);
+                }
+            }
+        }
+
+        function destroyMultiStemPlayerWavesurfers() {
+            Object.values(stemPlayerWavesurfers).forEach(ws => {
+                if (ws) {
+                    ws.destroy();
+                }
+            });
+            stemPlayerWavesurfers = {};
+        }
+
+        function toggleMultiStemPlay(stemType) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const playBtn = document.getElementById(`stem-play-${stemType}`);
+
+            if (ws.isPlaying()) {
+                ws.pause();
+                if (playBtn) playBtn.textContent = '▶';
             } else {
-                stemsBtn.style.display = 'none';
+                ws.play();
+                if (playBtn) playBtn.textContent = '⏸';
+            }
+        }
+
+        function toggleMultiStemMute(stemType) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const muteBtn = document.getElementById(`stem-mute-${stemType}`);
+            const currentVolume = ws.getVolume();
+
+            if (currentVolume > 0) {
+                ws.setVolume(0);
+                if (muteBtn) muteBtn.classList.add('active');
+            } else {
+                const slider = document.querySelector(`#stem-player-${stemType} input[type="range"]`);
+                const sliderValue = slider ? slider.value / 100 : 1.0;
+                ws.setVolume(sliderValue);
+                if (muteBtn) muteBtn.classList.remove('active');
+            }
+        }
+
+        function toggleMultiStemLoop(stemType) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const loopBtn = document.getElementById(`stem-loop-${stemType}`);
+            const currentLoop = ws.options.interact;
+
+            // Toggle loop - WaveSurfer v7 doesn't have built-in loop, so we use finish event
+            if (loopBtn.classList.contains('active')) {
+                loopBtn.classList.remove('active');
+                ws.un('finish'); // Remove finish event
+            } else {
+                loopBtn.classList.add('active');
+                ws.on('finish', () => {
+                    if (loopBtn.classList.contains('active')) {
+                        ws.seekTo(0);
+                        ws.play();
+                    }
+                });
+            }
+        }
+
+        function handleMultiStemVolumeChange(stemType, value) {
+            const ws = stemPlayerWavesurfers[stemType];
+            if (!ws) return;
+
+            const volume = value / 100;
+            ws.setVolume(volume);
+
+            const valueDisplay = document.getElementById(`multi-stem-volume-value-${stemType}`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${value}%`;
             }
         }
 
@@ -4937,3 +5187,8 @@ window.handleStemVolumeChange = handleStemVolumeChange;
 window.handleStemMute = handleStemMute;
 window.handleStemSolo = handleStemSolo;
 window.toggleStemsViewer = toggleStemsViewer;
+window.toggleMultiStemPlayer = toggleMultiStemPlayer;
+window.toggleMultiStemPlay = toggleMultiStemPlay;
+window.toggleMultiStemMute = toggleMultiStemMute;
+window.toggleMultiStemLoop = toggleMultiStemLoop;
+window.handleMultiStemVolumeChange = handleMultiStemVolumeChange;

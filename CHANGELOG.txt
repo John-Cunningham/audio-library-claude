@@ -1,3 +1,88 @@
+=== Version 26a (Template Refactoring - Phase 3.2a) ===
+Date: 2025-10-15
+Files: src/core/playerTemplate.js, test-template.html, index.html
+Branch: experimental-v26-refactor
+Prompt: "Continue Audio Library Claude project on experimental-v26-refactor branch - implement template/factory pattern refactoring for multi-stem player controls"
+
+Context:
+Starting Version 26 refactoring to implement template/factory pattern where player controls are defined once and auto-generated for all 5 players (1 parent + 4 stems). This eliminates HTML duplication and makes adding/modifying controls much easier.
+
+Changes (Phase 3.2a - Template Function Name Fixes):
+- Fixed playerTemplate.js to match existing function names from app.js:
+  1. playPause button (lines 33-58):
+     - Changed onclick from `togglePlayPause()` to `playPause()`
+     - Changed classes from 'control-btn' to 'player-btn play-pause'
+     - Changed innerHTML to '<span id="playPauseIcon">▶</span>'
+     - Added title attribute: 'Play/Pause'
+  2. volumeSlider (lines 123-148):
+     - Changed max from '200' to '398' for parent player
+     - Changed oninput from `changeVolume()` to `setVolume()`
+     - Added ondblclick: 'resetVolume()' for parent player
+     - Updated style to match existing inline styles
+  3. rateSlider (lines 288-314):
+     - Changed min from '0.25' to '0.025' for parent player
+     - Changed max from '2.0' to '4.0' for parent player
+     - Changed step from '0.01' to '0.025' for parent player
+     - Changed oninput from `changePlaybackRate()` to `setPlaybackRate(parseFloat(this.value))`
+     - Added ondblclick: 'resetRate()' for parent player
+     - Updated style to match existing inline styles
+  4. rateDisplay (lines 316-335):
+     - Changed htmlId from 'rateDisplay' to 'rateValue' for parent player
+     - Changed innerHTML from '1.00x (120 BPM)' to '1.0x'
+     - Updated style to match existing display format
+  5. fileName (lines 171-186):
+     - Changed htmlId from 'fileNameDisplay' to 'playerFilename'
+     - Changed tag from 'span' to 'div'
+     - Added classes: 'player-filename' for parent player
+     - Changed innerHTML from 'No file loaded' to 'No file selected'
+  6. timeDisplay (lines 188-199):
+     - Changed htmlId from 'timeDisplay' to 'playerTime'
+     - Changed tag from 'span' to 'div'
+     - Added classes: 'player-time'
+     - Changed innerHTML from '00:00 / 00:00' to '0:00 / 0:00'
+
+Refactoring Strategy:
+- Phase 1: Design template schema (COMPLETED - Phases 1.1-1.3)
+- Phase 2: Complete control definitions (COMPLETED - Phases 2.1-2.2)
+- **Phase 3.2a: Fix template to match existing function names (CURRENT)**
+- Phase 3.2b: Refactor parent player HTML to use template
+- Phase 3.3: Test parent player functionality
+- Phase 4: Refactor stem players to use template
+- Phase 5: Test all functionality
+- Phase 6: Split app.js into modules (keyboard.js, playerControls.js, etc.)
+- Phase 7: Add remaining parent-only controls to template
+- Phase 8: Update documentation
+
+Template Scope (Conservative Approach):
+✅ Common controls in template (refactored):
+- Play/Pause, Mute, Loop buttons
+- Waveform display
+- Volume slider + display
+- Rate presets (0.5x/1x/2x) + slider + display
+- File name + time display
+
+❌ Parent-only controls (hard-coded for now, Phase 7):
+- Previous/Next/Shuffle buttons
+- STEMS button
+- Markers section (frequency selector, shift controls)
+- Metronome section
+- Cycle/Loop section (15+ controls)
+
+Files Created/Modified:
+- src/core/playerTemplate.js - Updated control definitions to match app.js
+- test-template.html - Created for template validation (all 4 tests passing ✅)
+- index.html - Added template import and console logging
+- Backups created: index_v26a_pre_template_refactor.html, app_v26a_pre_template_refactor.js
+
+Testing Status:
+- ✅ test-template.html shows all 4 tests passing
+- ✅ Console shows correctly generated parent player HTML
+- ⏳ Phase 3.2b (actual HTML refactoring) pending
+- ⏳ Phase 3.3 (user testing) pending
+
+Git Commits: [pending - will commit after Phase 3.2b complete]
+Result: ✅ SUCCESS - Template definitions now match existing function names and attributes
+
 === Version 25d ===
 Date: 2025-10-14
 Files: src/core/app.js

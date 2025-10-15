@@ -2719,10 +2719,16 @@
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
-                        if (ws && ws.isPlaying()) {
-                            ws.pause();
-                            const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                            if (icon) icon.textContent = '▶';
+                        if (ws) {
+                            // Remember which stems were playing BEFORE parent pause
+                            if (ws.isPlaying()) {
+                                stemPlaybackIndependent[stemType] = true; // Mark as active
+                                ws.pause();
+                                const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
+                                if (icon) icon.textContent = '▶';
+                            } else {
+                                stemPlaybackIndependent[stemType] = false; // Mark as inactive
+                            }
                         }
                     });
                 }

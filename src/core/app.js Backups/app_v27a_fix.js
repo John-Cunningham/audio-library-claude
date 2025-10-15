@@ -2241,7 +2241,7 @@
         // Phase 2A: Individual Rate Controls
         let stemIndependentRates = {}; // {vocals: 1.0, drums: 1.25, ...} - user's rate multiplier per stem
         let stemRateLocked = {}; // {vocals: true, drums: false, ...} - whether stem follows parent rate
-        let stemPlaybackIndependent = {}; // {vocals: true, drums: false, ...} - whether stem should play when parent plays (user's active selection)
+        let stemPlaybackIndependent = {}; // {vocals: false, drums: false, ...} - whether stem has independent playback control
         let currentParentFileBPM = null; // Store parent file's original BPM for calculations
 
         // Phase 1: Pre-load stems silently in background when file loads
@@ -2604,9 +2604,6 @@
                     // Store instance BEFORE ready event
                     stemPlayerWavesurfers[stemType] = ws;
 
-                    // Initialize all stems as "active" (they should play when parent plays)
-                    stemPlaybackIndependent[stemType] = true;
-
                     // Handle ready event
                     ws.once('ready', () => {
                         multiStemReadyCount++;
@@ -2695,34 +2692,39 @@
 
             console.log('Setting up parent-stem synchronization');
 
-            // When parent plays, resume all stems that were playing before pause
+            // When parent plays, play all NON-INDEPENDENT stems
             wavesurfer.on('play', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent play event - resuming stems that were playing');
+                    console.log('Parent play event - syncing non-independent stems');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
-                        const ws = stemPlayerWavesurfers[stemType];
-                        // Only play stems that were marked as playing (not manually paused by user)
-                        if (ws && stemPlaybackIndependent[stemType]) {
-                            ws.play();
-                            const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                            if (icon) icon.textContent = '||';
+                        // Only sync stems that are NOT independent
+                        if (!stemPlaybackIndependent[stemType]) {
+                            const ws = stemPlayerWavesurfers[stemType];
+                            if (ws && !ws.isPlaying()) {
+                                ws.play();
+                                const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
+                                if (icon) icon.textContent = '||';
+                            }
                         }
                     });
                 }
             });
 
-            // When parent pauses, pause ALL stems (master control)
+            // When parent pauses, pause all NON-INDEPENDENT stems
             wavesurfer.on('pause', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent pause event - pausing all stems (master control)');
+                    console.log('Parent pause event - syncing non-independent stems');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
-                        const ws = stemPlayerWavesurfers[stemType];
-                        if (ws && ws.isPlaying()) {
-                            ws.pause();
-                            const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                            if (icon) icon.textContent = '▶';
+                        // Only sync stems that are NOT independent
+                        if (!stemPlaybackIndependent[stemType]) {
+                            const ws = stemPlayerWavesurfers[stemType];
+                            if (ws && ws.isPlaying()) {
+                                ws.pause();
+                                const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
+                                if (icon) icon.textContent = '▶';
+                            }
                         }
                     });
                 }
@@ -2798,20 +2800,19 @@
                 return;
             }
 
+            // Mark this stem as independent (user is manually controlling it)
+            stemPlaybackIndependent[stemType] = true;
+
             const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
 
             if (ws.isPlaying()) {
                 ws.pause();
                 if (icon) icon.textContent = '▶';
-                // Mark as NOT active (user paused it)
-                stemPlaybackIndependent[stemType] = false;
-                console.log(`Paused ${stemType} stem - marked as inactive`);
+                console.log(`Paused ${stemType} stem (now independent)`);
             } else {
                 ws.play();
                 if (icon) icon.textContent = '||';
-                // Mark as active (user wants it playing)
-                stemPlaybackIndependent[stemType] = true;
-                console.log(`Playing ${stemType} stem - marked as active`);
+                console.log(`Playing ${stemType} stem (now independent)`);
             }
         }
 

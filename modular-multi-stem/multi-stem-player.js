@@ -70,7 +70,18 @@ export default class MultiStemPlayer {
         height: 48,
         normalize: true,
       })
-      ws.load(stem.file_url)
+      try {
+        ws.load(stem.file_url)
+      } catch (e) {
+        console.warn('Stem failed to start loading', stem, e)
+      }
+
+      ws.on('error', (err) => {
+        console.error('WaveSurfer error for stem', stem?.name, err)
+        const info = bar.querySelector('.stem-info')
+        if (info) info.textContent = `${this.#escape(stem?.name || 'Stem')} (failed to load)`
+        bar.querySelector('.stem-play').disabled = true
+      })
 
       // Wire controls
       bar.querySelector('.stem-play').onclick = () => ws.playPause()

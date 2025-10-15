@@ -858,6 +858,74 @@ Implementation Notes:
 - For now, only multi-stem player (STEMS button) loads stems
 - This ensures no conflicts and clean audio switching
 
+Git Commits: c763f3c
+Result: ✅ FIXED - Double audio eliminated (only one stem system active)
+
+=== Version 23 ===
+Date: 2025-10-14
+Files: src/core/app.js
+Prompt: "Fix stemFiles empty - multi-stem player needs to fetch its own stem files"
+
+User Testing Result (Version 22):
+❌ Console showed: `stemFiles: {}` and "No stem file for vocals/drums/bass/other, skipping"
+❌ No stems loaded even though file had stems
+❌ Could not test any scenarios
+
+Root Cause:
+- `stemFiles` was being populated by the OLD stem system's `loadStems()` function
+- We disabled the OLD system to fix double audio (Version 22)
+- But the NEW multi-stem player was still trying to READ from `stemFiles`
+- Result: Empty object, no stems found
+
+Changes (Fetch Stems in Multi-Stem Player):
+- Made `generateMultiStemPlayerBars()` async (line 2241)
+- Added Supabase query to fetch stems when STEMS button clicked (lines 2252-2280):
+  ```javascript
+  const { data, error } = await supabase
+      .from('audio_files_stems')
+      .select('*')
+      .eq('audio_file_id', currentFileId);
+
+  // Organize stems by type
+  stemFiles = {};
+  data.forEach(stem => {
+      stemFiles[stem.stem_type] = stem;
+  });
+  ```
+- Updated `toggleMultiStemPlayer()` to await async function (lines 2216-2223):
+  - Uses `.then()` to handle promise
+  - Catches errors gracefully
+  - Animation happens after fetch completes
+- Created backup: app_v5.js
+
+Flow Now:
+```
+1. User clicks STEMS button
+   └─ toggleMultiStemPlayer() called
+       └─ generateMultiStemPlayerBars() async
+           ├─ Fetch stems from Supabase
+           ├─ Populate stemFiles object
+           ├─ Generate HTML for 4 stem bars
+           └─ initializeMultiStemPlayerWavesurfers()
+               ├─ Create WaveSurfer for each stem
+               └─ Set up sync with parent
+```
+
+Expected Console Output:
+```
+toggleMultiStemPlayer called
+Expanding multi-stem player
+generateMultiStemPlayerBars called
+Fetching stem files from database for file: 153
+Fetched stem files: {vocals: {...}, drums: {...}, bass: {...}, other: {...}}
+Cleared multiStemPlayer innerHTML
+stemFile for vocals: {id: 123, stem_type: "vocals", file_url: "..."}
+stemFile for drums: {id: 124, stem_type: "drums", file_url: "..."}
+stemFile for bass: {id: 125, stem_type: "bass", file_url: "..."}
+stemFile for other: {id: 126, stem_type: "other", file_url: "..."}
+=== Initializing Multi-Stem Player Wavesurfers ===
+```
+
 Git Commits: [pending]
-Result: ⏳ READY FOR TESTING - Double audio should be fixed
+Result: ⏳ READY FOR TESTING - Stems should now load properly
 

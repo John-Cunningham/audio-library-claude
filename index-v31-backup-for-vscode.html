@@ -5665,12 +5665,12 @@
             // Expose for button
             window.multiStems = new MultiStemPlayer({ containerId: 'multiStemPlayer' });
             // Example stems (replace with real URLs as needed)
-            const stems = [
-                { name: 'Drums',  file_url: 'https://wavesurfer-js.org/example/media/demo.wav' },
-                { name: 'Bass',   file_url: 'https://wavesurfer-js.org/example/media/demo.wav' },
-                { name: 'Vocals', file_url: 'https://wavesurfer-js.org/example/media/demo.wav' },
-                { name: 'Other',  file_url: 'https://wavesurfer-js.org/example/media/demo.wav' }
-            ];
+                    const stems = [
+                        { name: 'Drums',  file_url: './media/drums.mp3' },
+                        { name: 'Bass',   file_url: './media/bass.mp3' },
+                        { name: 'Vocals', file_url: './media/vocals.mp3' },
+                        { name: 'Other',  file_url: './media/other.mp3' }
+                    ];
             await window.multiStems.loadStems(stems);
             window.multiStems.show();
         </script>

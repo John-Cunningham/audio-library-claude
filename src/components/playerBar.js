@@ -69,6 +69,7 @@ export class PlayerBarComponent {
 
         // Bind all control event handlers
         this.setupMarkerControls();
+        this.setupWaveformClickHandler(); // Install click handler for snap-to-marker and cycle mode
         this.setupTransportControls();
         this.setupRateControls();
         this.setupVolumeControls();
@@ -121,6 +122,146 @@ export class PlayerBarComponent {
         // Note: Don't bind shift buttons here - they already have onclick="shiftBarStartLeft()" in HTML
         // which calls the window wrapper that delegates to this.shiftBarStartLeft()
         // Adding another addEventListener would cause double-firing
+    }
+
+    /**
+     * Setup waveform click handler for snap-to-marker and cycle mode
+     * This handler intercepts clicks on the waveform to provide:
+     * 1. Snap-to-marker functionality (when markers enabled)
+     * 2. Cycle mode loop point setting (when in cycle mode)
+     */
+    setupWaveformClickHandler() {
+        // Only setup for parent player (not stems)
+        if (this.playerType !== 'parent') {
+            return;
+        }
+
+        const waveformContainer = document.getElementById('waveform');
+        if (!waveformContainer) {
+            console.warn(`[${this.getLogPrefix()}] Waveform container not found`);
+            return;
+        }
+
+        // Remove old click handler if it exists
+        if (waveformContainer._clickHandler) {
+            waveformContainer.removeEventListener('click', waveformContainer._clickHandler, true);
+        }
+
+        // Create click handler with closure over component instance
+        const clickHandler = (e) => {
+            // If markers are disabled, let WaveSurfer handle click normally
+            if (!this.markersEnabled || this.currentMarkers.length === 0 || !this.waveform) {
+                return;
+            }
+
+            // Get click position relative to waveform container
+            const rect = waveformContainer.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const relativeX = clickX / rect.width;
+
+            // Calculate time at click position
+            const duration = this.waveform.getDuration();
+            const clickTime = relativeX * duration;
+
+            // Find nearest marker to the left
+            const snapTime = this.findNearestMarkerToLeft(clickTime);
+
+            // Access global loop/cycle state from app.js
+            // TODO: Move these into component state when refactoring loop controls
+            const cycleMode = window.cycleMode || false;
+            const seekOnClick = window.seekOnClick || false;
+
+            // AUTO-SET LOOP POINTS (only if in cycle mode)
+            if (cycleMode) {
+                // CRITICAL: Stop event propagation BEFORE WaveSurfer handles it (unless seek mode is 'seek')
+                if (seekOnClick !== 'seek') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                }
+
+                // Check if clicking left of loop start (reset start) or right of loop end (reset end)
+                if (window.loopStart !== null && window.loopEnd !== null) {
+                    if (snapTime < window.loopStart) {
+                        // Clicking left of loop start: reset loop start
+                        window.loopStart = snapTime;
+                        console.log(`Loop start moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                        if (window.updateLoopVisuals) window.updateLoopVisuals();
+                        if (seekOnClick === 'seek') {
+                            this.waveform.seekTo(snapTime / duration);
+                        }
+                        return false;
+                    } else if (snapTime > window.loopEnd) {
+                        // Clicking right of loop end: reset loop end
+                        window.loopEnd = snapTime;
+                        console.log(`Loop end moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                        if (window.updateLoopVisuals) window.updateLoopVisuals();
+                        if (seekOnClick === 'seek') {
+                            this.waveform.seekTo(snapTime / duration);
+                        }
+                        return false;
+                    }
+                }
+
+                // Normal loop setting flow
+                let justSetLoopEnd = false;
+
+                if (window.nextClickSets === 'start') {
+                    window.loopStart = snapTime;
+                    window.loopEnd = null;
+                    window.nextClickSets = 'end';
+                    console.log(`Loop start set to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                    if (window.recordAction) {
+                        window.recordAction('setLoopStart', { loopStart: snapTime });
+                    }
+                } else if (window.nextClickSets === 'end') {
+                    if (snapTime <= window.loopStart) {
+                        console.log('Loop end must be after loop start - ignoring click');
+                        return;
+                    }
+                    window.loopEnd = snapTime;
+                    window.cycleMode = true;
+                    justSetLoopEnd = true;
+                    console.log(`Loop end set to ${snapTime.toFixed(2)}s - Loop active! ${seekOnClick === 'clock' ? '(seeking to loop start)' : seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                    if (window.recordAction) {
+                        window.recordAction('setLoopEnd', {
+                            loopStart: window.loopStart,
+                            loopEnd: snapTime,
+                            loopDuration: snapTime - window.loopStart
+                        });
+                    }
+                }
+
+                if (window.updateLoopVisuals) window.updateLoopVisuals();
+
+                // Handle seeking based on mode
+                if (seekOnClick === 'seek') {
+                    // Seek mode: jump to clicked position
+                    this.waveform.seekTo(snapTime / duration);
+                } else if (seekOnClick === 'clock' && justSetLoopEnd) {
+                    // Clock mode: ONLY after setting loop end, jump to loop start
+                    this.waveform.seekTo(window.loopStart / duration);
+                }
+
+                // Important: return early to prevent any seeking (if seekOnClick is off)
+                return false;
+            } else {
+                // Normal mode: Markers enabled, not in cycle mode
+                // Seek to the nearest marker and prevent WaveSurfer from handling
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                this.waveform.seekTo(snapTime / duration);
+                console.log(`Snapped to marker at ${snapTime.toFixed(2)}s`);
+                return false;
+            }
+        };
+
+        // Add listener in CAPTURE phase to intercept before WaveSurfer's handler
+        waveformContainer.addEventListener('click', clickHandler, true);
+        waveformContainer._clickHandler = clickHandler; // Store reference for cleanup
+
+        console.log(`[${this.getLogPrefix()}] Waveform click handler installed`);
     }
 
     /**

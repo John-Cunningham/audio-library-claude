@@ -490,6 +490,8 @@ export class PlayerBarComponent {
         const barOffset = Math.floor(this.barStartOffset);
         const fractionalBeats = Math.round((this.barStartOffset - barOffset) * 4);
 
+        console.log(`[SHIFT DEBUG] barStartOffset: ${this.barStartOffset}, barOffset: ${barOffset}, fractionalBeats: ${fractionalBeats}`);
+
         // Calculate original bar numbers
         let barNumber = 0;
         const beatmapWithOriginalBars = normalizedBeatmap.map(beat => {
@@ -521,6 +523,14 @@ export class PlayerBarComponent {
             return { ...beat, barNumber: beat.barNumber - barOffset };
         });
 
+        // Debug: Log first 3 beats after all transformations
+        console.log(`[SHIFT DEBUG] First 3 beats after transformations:`, beatmapWithBars.slice(0, 3).map(b => ({
+            time: b.time.toFixed(2),
+            beatNum: b.beatNum,
+            barNumber: b.barNumber,
+            originalIndex: b.originalIndex
+        })));
+
         // Filter based on frequency
         let filteredBeats = [];
         switch (this.markerFrequency) {
@@ -545,6 +555,15 @@ export class PlayerBarComponent {
         }
 
         console.log(`[${this.getLogPrefix()}] Adding ${filteredBeats.length} markers (frequency: ${this.markerFrequency}, barOffset: ${barOffset}, beatOffset: ${fractionalBeats})`);
+
+        // Debug: Show first 5 filtered beats that will be displayed
+        console.log(`[SHIFT DEBUG] First 5 FILTERED beats (frequency=${this.markerFrequency}):`, filteredBeats.slice(0, 5).map(b => ({
+            time: b.time.toFixed(2),
+            beatNum: b.beatNum,
+            barNumber: b.barNumber,
+            isBar: b.beatNum === 1,
+            isEmphasisBar: b.beatNum === 1 && b.barNumber % 4 === 1
+        })));
 
         // Add a marker div for each filtered beat
         filteredBeats.forEach((beat) => {

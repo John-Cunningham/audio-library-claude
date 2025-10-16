@@ -6448,33 +6448,38 @@ window.toggleMute = toggleMute;
 window.resetVolume = resetVolume;
 window.setPlaybackRate = setPlaybackRate;
 window.resetRate = resetRate;
+// Store references to old functions before overwriting
+        const _oldToggleMarkers = toggleMarkers;
+        const _oldSetMarkerFrequency = setMarkerFrequency;
+        const _oldShiftBarStartLeft = shiftBarStartLeft;
+        const _oldShiftBarStartRight = shiftBarStartRight;
 // Wrapper functions that delegate to PlayerBarComponent
         window.toggleMarkers = () => {
             if (parentPlayerComponent) {
                 parentPlayerComponent.toggleMarkers();
             } else {
-                toggleMarkers(); // Fallback to old function
+                _oldToggleMarkers(); // Fallback to old function
             }
         };
         window.setMarkerFrequency = (freq) => {
             if (parentPlayerComponent) {
                 parentPlayerComponent.setMarkerFrequency(freq);
             } else {
-                setMarkerFrequency(freq); // Fallback
+                _oldSetMarkerFrequency(freq); // Fallback
             }
         };
         window.shiftBarStartLeft = () => {
             if (parentPlayerComponent) {
                 parentPlayerComponent.shiftBarStartLeft();
             } else {
-                shiftBarStartLeft(); // Fallback
+                _oldShiftBarStartLeft(); // Fallback
             }
         };
         window.shiftBarStartRight = () => {
             if (parentPlayerComponent) {
                 parentPlayerComponent.shiftBarStartRight();
             } else {
-                shiftBarStartRight(); // Fallback
+                _oldShiftBarStartRight(); // Fallback
             }
         };
 window.toggleMetronome = toggleMetronome;

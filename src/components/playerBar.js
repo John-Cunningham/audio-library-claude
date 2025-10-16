@@ -462,12 +462,34 @@ export class PlayerBarComponent {
     }
 
     // ============================================
-    // TRANSPORT CONTROLS (PLACEHOLDER)
+    // TRANSPORT CONTROLS
     // ============================================
 
     setupTransportControls() {
-        // TODO: Implement transport controls (play, pause, prev, next)
-        // These are mostly parent-only
+        // Note: Transport controls have onclick handlers in HTML that call window wrappers
+        // Window wrappers delegate to these component methods
+        // No need to add addEventListener here to avoid double-firing
+    }
+
+    /**
+     * Play/Pause toggle
+     * Called from window.playPause() wrapper
+     */
+    playPause() {
+        if (!this.waveform) {
+            console.warn(`[${this.getLogPrefix()}] No waveform instance`);
+            return;
+        }
+
+        this.waveform.playPause();
+
+        // Update play/pause icon
+        const icon = document.getElementById('playPauseIcon');
+        if (icon) {
+            icon.textContent = this.waveform.isPlaying() ? '⏸' : '▶';
+        }
+
+        console.log(`[${this.getLogPrefix()}] ${this.waveform.isPlaying() ? 'Playing' : 'Paused'}`);
     }
 
     // ============================================

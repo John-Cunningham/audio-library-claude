@@ -110,29 +110,17 @@ export class PlayerBarComponent {
             ? 'barStartOffsetDisplay'
             : `stem-bar-offset-${this.stemType}`;
 
-        // Bind markers toggle button
-        const markersBtn = document.getElementById(markersBtnId);
-        if (markersBtn) {
-            markersBtn.addEventListener('click', () => this.toggleMarkers());
-        }
+        // Note: Don't bind markersBtn here - it already has onclick="toggleMarkers()" in HTML
+        // which calls the window wrapper that delegates to this.toggleMarkers()
+        // Adding another addEventListener would cause double-firing
 
-        // Bind marker frequency selector
-        const markerFreqSelect = document.getElementById(markerFreqId);
-        if (markerFreqSelect) {
-            markerFreqSelect.addEventListener('change', (e) => this.setMarkerFrequency(e.target.value));
-        }
+        // Note: Don't bind markerFreqSelect here - it already has onchange="setMarkerFrequency(this.value)" in HTML
+        // which calls the window wrapper that delegates to this.setMarkerFrequency()
+        // Adding another addEventListener would cause double-firing
 
-        // Bind shift left button (using template's existing onclick or adding listener)
-        const shiftLeftBtn = this.getShiftLeftButton();
-        if (shiftLeftBtn) {
-            shiftLeftBtn.addEventListener('click', () => this.shiftBarStartLeft());
-        }
-
-        // Bind shift right button
-        const shiftRightBtn = this.getShiftRightButton();
-        if (shiftRightBtn) {
-            shiftRightBtn.addEventListener('click', () => this.shiftBarStartRight());
-        }
+        // Note: Don't bind shift buttons here - they already have onclick="shiftBarStartLeft()" in HTML
+        // which calls the window wrapper that delegates to this.shiftBarStartLeft()
+        // Adding another addEventListener would cause double-firing
     }
 
     /**

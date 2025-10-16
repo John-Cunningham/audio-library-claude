@@ -149,10 +149,20 @@ export class PlayerBarComponent {
 
         // Create click handler with closure over component instance
         const clickHandler = (e) => {
-            // If markers are disabled, let WaveSurfer handle click normally
-            if (!this.markersEnabled || this.currentMarkers.length === 0 || !this.waveform) {
-                return;
+            // Access global loop/cycle state from app.js
+            // TODO: Move these into component state when refactoring loop controls
+            const cycleMode = window.cycleMode || false;
+            const seekOnClick = window.seekOnClick || false;
+
+            // If markers are disabled AND not in cycle mode, let WaveSurfer handle click normally
+            if (!this.markersEnabled || this.currentMarkers.length === 0) {
+                // If cycle mode is ON, we still need to handle clicks even if markers are off
+                if (!cycleMode) {
+                    return; // Let WaveSurfer handle normal click (no snap, no loop setting)
+                }
             }
+
+            if (!this.waveform) return;
 
             // Get click position relative to waveform container
             const rect = waveformContainer.getBoundingClientRect();
@@ -163,13 +173,10 @@ export class PlayerBarComponent {
             const duration = this.waveform.getDuration();
             const clickTime = relativeX * duration;
 
-            // Find nearest marker to the left
-            const snapTime = this.findNearestMarkerToLeft(clickTime);
-
-            // Access global loop/cycle state from app.js
-            // TODO: Move these into component state when refactoring loop controls
-            const cycleMode = window.cycleMode || false;
-            const seekOnClick = window.seekOnClick || false;
+            // Find nearest marker to the left (or use exact click time if no markers)
+            const snapTime = this.currentMarkers.length > 0
+                ? this.findNearestMarkerToLeft(clickTime)
+                : clickTime;
 
             // AUTO-SET LOOP POINTS (only if in cycle mode)
             if (cycleMode) {

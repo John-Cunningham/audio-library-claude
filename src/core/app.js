@@ -6465,6 +6465,38 @@ window.resetRate = resetRate;
             markersEnabled = enabled;
             console.log(`[Global] markersEnabled updated: ${enabled}`);
         };
+
+        // Expose loop/cycle state variables for component click handler
+        // Using getters/setters so component can read AND write the module-scoped variables
+        Object.defineProperty(window, 'cycleMode', {
+            get: () => cycleMode,
+            set: (value) => { cycleMode = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'loopStart', {
+            get: () => loopStart,
+            set: (value) => { loopStart = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'loopEnd', {
+            get: () => loopEnd,
+            set: (value) => { loopEnd = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'nextClickSets', {
+            get: () => nextClickSets,
+            set: (value) => { nextClickSets = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'seekOnClick', {
+            get: () => seekOnClick,
+            set: (value) => { seekOnClick = value; },
+            configurable: true
+        });
+
+        // Expose helper functions for component
+        window.updateLoopVisuals = updateLoopVisuals;
+        window.recordAction = recordAction;
 // Wrapper functions that delegate to PlayerBarComponent
         window.toggleMarkers = () => {
             if (parentPlayerComponent) {

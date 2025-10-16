@@ -603,6 +603,80 @@ export class PlayerBarComponent {
                 console.error(`[${this.getLogPrefix()}] window.updateCurrentMarkers is not defined!`);
             }
         }
+
+        // Add hover preview for loop selection (only for parent player)
+        if (this.playerType === 'parent') {
+            this.setupHoverPreview(waveformContainer);
+        }
+    }
+
+    /**
+     * Setup hover preview handlers for cycle mode
+     * Shows blue preview of loop region as you move mouse (before clicking to set end)
+     */
+    setupHoverPreview(waveformContainer) {
+        const mousemoveHandler = (e) => {
+            // Only show preview when in edit mode and start is set but end is not
+            if (!window.cycleMode || window.loopStart === null || window.loopEnd !== null) {
+                // Remove any existing preview
+                const existingPreview = waveformContainer.querySelector('.loop-preview');
+                if (existingPreview) existingPreview.remove();
+                return;
+            }
+
+            if (!this.waveform || this.currentMarkers.length === 0) return;
+
+            // Get mouse position
+            const rect = waveformContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const relativeX = mouseX / rect.width;
+            const duration = this.waveform.getDuration();
+            const mouseTime = relativeX * duration;
+
+            // Find nearest marker to the left
+            const hoverSnapTime = this.findNearestMarkerToLeft(mouseTime);
+
+            // Only show preview if hover position is after loop start
+            if (hoverSnapTime <= window.loopStart) {
+                const existingPreview = waveformContainer.querySelector('.loop-preview');
+                if (existingPreview) existingPreview.remove();
+                return;
+            }
+
+            // Remove existing preview
+            const existingPreview = waveformContainer.querySelector('.loop-preview');
+            if (existingPreview) existingPreview.remove();
+
+            // Create new preview
+            const startPercent = (window.loopStart / duration) * 100;
+            const hoverPercent = (hoverSnapTime / duration) * 100;
+            const widthPercent = hoverPercent - startPercent;
+
+            const preview = document.createElement('div');
+            preview.className = 'loop-preview';
+            preview.style.left = `${startPercent}%`;
+            preview.style.width = `${widthPercent}%`;
+            waveformContainer.appendChild(preview);
+        };
+
+        const mouseoutHandler = () => {
+            // Remove preview when mouse leaves waveform
+            const existingPreview = waveformContainer.querySelector('.loop-preview');
+            if (existingPreview) existingPreview.remove();
+        };
+
+        // Remove old handlers if they exist
+        if (waveformContainer._mousemoveHandler) {
+            waveformContainer.removeEventListener('mousemove', waveformContainer._mousemoveHandler);
+        }
+        if (waveformContainer._mouseoutHandler) {
+            waveformContainer.removeEventListener('mouseout', waveformContainer._mouseoutHandler);
+        }
+
+        waveformContainer.addEventListener('mousemove', mousemoveHandler);
+        waveformContainer.addEventListener('mouseout', mouseoutHandler);
+        waveformContainer._mousemoveHandler = mousemoveHandler;
+        waveformContainer._mouseoutHandler = mouseoutHandler;
     }
 
     /**

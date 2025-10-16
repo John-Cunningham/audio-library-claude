@@ -42,7 +42,8 @@ export class PlayerBarComponent {
         this.loopControlsExpanded = false;
 
         // Marker State (per-instance)
-        this.markersEnabled = false;
+        // Note: HTML button starts with class="active", so markers are enabled by default
+        this.markersEnabled = true;   // Match HTML button's initial "active" state
         this.markerFrequency = 'bar'; // 'bar8', 'bar4', 'bar2', 'bar', 'halfbar', 'beat'
         this.barStartOffset = 0;      // Bar number shift (can be fractional: 2.75 = 2 bars + 3 beats)
         this.currentMarkers = [];     // Array of marker times in seconds

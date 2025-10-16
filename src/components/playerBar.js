@@ -15,7 +15,8 @@
  *   });
  */
 
-import { state } from '../core/state.js';
+// Note: state.js doesn't export a 'state' object, it exports individual variables
+// We don't need to import state here since we manage our own instance state
 import { formatTime } from '../utils/formatting.js';
 
 export class PlayerBarComponent {

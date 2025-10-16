@@ -1,353 +1,529 @@
-// Player Bar Component - All transport, loop, and playback controls
+/**
+ * PlayerBarComponent - Reusable player control component
+ * Can be instantiated for parent player OR stem players
+ *
+ * Usage:
+ *   const parentPlayer = new PlayerBarComponent({
+ *     playerType: 'parent',
+ *     waveform: parentWaveform
+ *   });
+ *
+ *   const vocalsPlayer = new PlayerBarComponent({
+ *     playerType: 'stem',
+ *     stemType: 'vocals',
+ *     waveform: vocalsWaveform
+ *   });
+ */
+
 import { state } from '../core/state.js';
 import { formatTime } from '../utils/formatting.js';
 
 export class PlayerBarComponent {
-    constructor(waveformComponent) {
-        this.waveform = waveformComponent;
+    constructor(options = {}) {
+        // Configuration
+        this.playerType = options.playerType; // 'parent' or 'stem'
+        this.stemType = options.stemType;     // 'vocals', 'drums', 'bass', 'other' (required if stem)
+        this.waveform = options.waveform;     // WaveformComponent instance
+        this.container = options.container;   // Optional: container element for rendering HTML
+        this.currentFile = null;              // Current audio file object
+
+        // Validate configuration
+        if (this.playerType === 'stem' && !this.stemType) {
+            throw new Error('stemType is required for stem players');
+        }
+
+        // Loop/Cycle State
         this.loopStart = null;
         this.loopEnd = null;
         this.cycleMode = false;
         this.nextClickSets = 'start';
         this.seekOnClick = false;
         this.loopControlsExpanded = false;
+
+        // Marker State (per-instance)
+        this.markersEnabled = false;
+        this.markerFrequency = 'bar'; // 'bar8', 'bar4', 'bar2', 'bar', 'halfbar', 'beat'
+        this.barStartOffset = 0;      // Bar number shift (can be fractional: 2.75 = 2 bars + 3 beats)
+        this.currentMarkers = [];     // Array of marker times in seconds
+
+        // Metronome State
+        this.metronomeEnabled = false;
+        this.metronomeSound = 'click';
+
+        // Rate/Volume State
+        this.rate = 1.0;
+        this.volume = 1.0;
+        this.muted = false;
+
+        console.log(`[PlayerBarComponent] Created ${this.playerType}${this.stemType ? ' (' + this.stemType + ')' : ''} player`);
     }
 
+    /**
+     * Initialize the player component
+     * Binds all event handlers to DOM elements
+     */
     init() {
+        console.log(`[PlayerBarComponent] Initializing ${this.playerType}${this.stemType ? ' (' + this.stemType + ')' : ''} player`);
+
+        // Bind all control event handlers
+        this.setupMarkerControls();
         this.setupTransportControls();
-        this.setupPlaybackControls();
         this.setupRateControls();
         this.setupVolumeControls();
         this.setupLoopControls();
-        this.setupMarkerControls();
+        this.setupMetronomeControls();
 
-        // Listen for waveform events
-        state.on('waveformTimeUpdate', ({ currentTime, duration }) => {
-            this.updateTimeDisplay(currentTime, duration);
-        });
+        // Listen for waveform events (if waveform exists)
+        if (this.waveform) {
+            // These would come from waveform component
+            // For now, placeholder
+        }
 
-        state.on('waveformClick', ({ time }) => {
-            this.handleWaveformClick(time);
-        });
-
-        console.log('Player bar component initialized');
+        console.log(`[PlayerBarComponent] ${this.playerType}${this.stemType ? ' (' + this.stemType + ')' : ''} player initialized`);
     }
 
-    // Transport Controls (Play, Pause, Prev, Next, Restart)
-    setupTransportControls() {
-        const playPauseBtn = document.getElementById('playPauseBtn');
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const restartBtn = document.getElementById('restartBtn');
+    // ============================================
+    // MARKER CONTROLS
+    // ============================================
 
-        if (playPauseBtn) {
-            playPauseBtn.addEventListener('click', () => {
-                if (this.waveform.isPlaying()) {
-                    this.waveform.pause();
-                    playPauseBtn.textContent = '▶';
-                    state.setPlaying(false);
-                } else {
-                    this.waveform.play();
-                    playPauseBtn.textContent = '❚❚';
-                    state.setPlaying(true);
-                }
-            });
-        }
-
-        if (restartBtn) {
-            restartBtn.addEventListener('click', () => {
-                this.waveform.seekTo(0);
-            });
-        }
-
-        if (prevBtn) {
-            prevBtn.addEventListener('click', () => {
-                state.emit('prevTrack');
-            });
-        }
-
-        if (nextBtn) {
-            nextBtn.addEventListener('click', () => {
-                state.emit('nextTrack');
-            });
-        }
-    }
-
-    // Playback Controls (Markers, Frequency)
-    setupPlaybackControls() {
-        const markersBtn = document.getElementById('markersBtn');
-        const markerFrequency = document.getElementById('markerFrequency');
-
-        if (markersBtn) {
-            markersBtn.addEventListener('click', () => {
-                markersBtn.classList.toggle('active');
-                state.setMarkersEnabled(markersBtn.classList.contains('active'));
-            });
-        }
-
-        if (markerFrequency) {
-            markerFrequency.addEventListener('change', (e) => {
-                state.setMarkerFrequency(e.target.value);
-            });
-        }
-    }
-
-    // Rate/Speed Controls
-    setupRateControls() {
-        const rateSlider = document.getElementById('rateSlider');
-        const rateValue = document.getElementById('rateValue');
-
-        if (rateSlider && rateValue) {
-            rateSlider.addEventListener('input', (e) => {
-                const rate = parseFloat(e.target.value);
-                this.waveform.setPlaybackRate(rate);
-                rateValue.textContent = rate.toFixed(2) + 'x';
-                state.setRate(rate);
-
-                // Update preset buttons
-                document.querySelectorAll('.rate-preset-btn').forEach(btn => {
-                    btn.classList.toggle('active', parseFloat(btn.dataset.rate) === rate);
-                });
-            });
-        }
-
-        // Rate preset buttons
-        document.querySelectorAll('.rate-preset-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const rate = parseFloat(btn.dataset.rate);
-                if (rateSlider) rateSlider.value = rate;
-                if (rateValue) rateValue.textContent = rate.toFixed(2) + 'x';
-                this.waveform.setPlaybackRate(rate);
-                state.setRate(rate);
-
-                document.querySelectorAll('.rate-preset-btn').forEach(b => {
-                    b.classList.remove('active');
-                });
-                btn.classList.add('active');
-            });
-        });
-    }
-
-    // Volume Controls
-    setupVolumeControls() {
-        const volumeSlider = document.getElementById('volumeSlider');
-        const volumePercent = document.getElementById('volumePercent');
-
-        if (volumeSlider && volumePercent) {
-            volumeSlider.addEventListener('input', (e) => {
-                const volume = parseInt(e.target.value) / 100;
-                this.waveform.setVolume(volume);
-                volumePercent.textContent = e.target.value + '%';
-                state.setVolume(volume);
-            });
-        }
-    }
-
-    // Loop/Cycle Controls (Main implementation matching v31)
-    setupLoopControls() {
-        const cycleBtn = document.getElementById('cycleBtn');
-        const seekBtn = document.getElementById('seekBtn');
-        const clearLoopBtn = document.getElementById('clearLoopBtn');
-        const expandLoopBtn = document.getElementById('expandLoopBtn');
-
-        // CYCLE button - toggles cycle mode (edit + active loop)
-        if (cycleBtn) {
-            cycleBtn.addEventListener('click', () => {
-                this.cycleMode = !this.cycleMode;
-                cycleBtn.classList.toggle('active', this.cycleMode);
-
-                // Show/hide additional buttons
-                if (seekBtn) seekBtn.style.display = this.cycleMode ? 'inline-block' : 'none';
-                if (clearLoopBtn) clearLoopBtn.style.display = this.cycleMode ? 'inline-block' : 'none';
-
-                // Update state
-                state.setEditLoopMode(this.cycleMode);
-                this.nextClickSets = 'start';
-
-                console.log(`CYCLE MODE ${this.cycleMode ? 'ON' : 'OFF'}`);
-                this.updateLoopStatus();
-            });
-
-            // Keyboard shortcut: C key
-            document.addEventListener('keydown', (e) => {
-                if (e.key.toLowerCase() === 'c' && !e.ctrlKey && !e.metaKey) {
-                    e.preventDefault();
-                    cycleBtn.click();
-                }
-            });
-        }
-
-        // SEEK button - toggle seeking on waveform click
-        if (seekBtn) {
-            seekBtn.addEventListener('click', () => {
-                this.seekOnClick = !this.seekOnClick;
-                seekBtn.classList.toggle('active', this.seekOnClick);
-                console.log(`Seek on click: ${this.seekOnClick ? 'ON' : 'OFF'}`);
-            });
-        }
-
-        // CLEAR button - clear loop points but keep cycle mode on
-        if (clearLoopBtn) {
-            clearLoopBtn.addEventListener('click', () => {
-                this.loopStart = null;
-                this.loopEnd = null;
-                this.nextClickSets = 'start';
-                state.emit('loopStartChanged', null);
-                state.emit('loopEndChanged', null);
-                this.waveform.loopStart = null;
-                this.waveform.loopEnd = null;
-                this.waveform.updateLoopRegion();
-                console.log('Loop cleared (cycle mode still ON)');
-                this.updateLoopStatus();
-            });
-        }
-
-        // EXPAND button - show/hide loop manipulation controls
-        if (expandLoopBtn) {
-            expandLoopBtn.addEventListener('click', () => {
-                this.loopControlsExpanded = !this.loopControlsExpanded;
-                const loopControlsContainer = document.getElementById('loopControlsContainer');
-                if (loopControlsContainer) {
-                    loopControlsContainer.style.display = this.loopControlsExpanded ? 'flex' : 'none';
-                }
-                expandLoopBtn.querySelector('span').textContent = this.loopControlsExpanded ? '▲' : '▼';
-            });
-        }
-
-        // Set up loop manipulation buttons
-        this.setupLoopManipulationControls();
-    }
-
-    setupLoopManipulationControls() {
-        // These would be buttons like shift left/right, half/double, etc.
-        // Placeholder for now - will implement based on v31 if needed
-        const shiftLeftBtn = document.getElementById('shiftLeftBtn');
-        const shiftRightBtn = document.getElementById('shiftRightBtn');
-
-        if (shiftLeftBtn) {
-            shiftLeftBtn.addEventListener('click', () => {
-                console.log('TODO: Shift loop left');
-            });
-        }
-
-        if (shiftRightBtn) {
-            shiftRightBtn.addEventListener('click', () => {
-                console.log('TODO: Shift loop right');
-            });
-        }
-    }
-
-    // Marker Controls
     setupMarkerControls() {
-        // Placeholder for bar shift controls, metronome, etc.
-    }
+        // Get element IDs based on player type
+        const markersBtnId = this.playerType === 'parent'
+            ? 'markersBtn'
+            : `stem-markers-btn-${this.stemType}`;
 
-    // Handle waveform clicks for setting loop points
-    handleWaveformClick(time) {
-        if (!this.cycleMode) return;
+        const markerFreqId = this.playerType === 'parent'
+            ? 'markerFrequencySelect'
+            : `stem-marker-freq-${this.stemType}`;
 
-        const duration = this.waveform.getDuration();
+        const shiftLeftBtnId = this.playerType === 'parent'
+            ? 'shiftBarStartLeftBtn'  // This might not exist yet, need to check template
+            : `stem-shift-left-${this.stemType}`;
 
-        // Check if we're resetting existing points
-        if (this.loopStart !== null && this.loopEnd !== null) {
-            if (time < this.loopStart) {
-                // Click left of start - reset start
-                this.loopStart = time;
-                console.log(`Loop start moved to ${time.toFixed(2)}s`);
-                state.emit('loopStartChanged', this.loopStart);
-                this.waveform.loopStart = this.loopStart;
-                this.waveform.updateLoopRegion();
-                if (this.seekOnClick) {
-                    this.waveform.seekTo(time / duration);
-                }
-                this.updateLoopStatus();
-                return;
-            } else if (time > this.loopEnd) {
-                // Click right of end - reset end
-                this.loopEnd = time;
-                console.log(`Loop end moved to ${time.toFixed(2)}s`);
-                state.emit('loopEndChanged', this.loopEnd);
-                this.waveform.loopEnd = this.loopEnd;
-                this.waveform.updateLoopRegion();
-                if (this.seekOnClick) {
-                    this.waveform.seekTo(time / duration);
-                }
-                this.updateLoopStatus();
-                return;
-            }
+        const shiftRightBtnId = this.playerType === 'parent'
+            ? 'shiftBarStartRightBtn'
+            : `stem-shift-right-${this.stemType}`;
+
+        const barOffsetDisplayId = this.playerType === 'parent'
+            ? 'barStartOffsetDisplay'
+            : `stem-bar-offset-${this.stemType}`;
+
+        // Bind markers toggle button
+        const markersBtn = document.getElementById(markersBtnId);
+        if (markersBtn) {
+            markersBtn.addEventListener('click', () => this.toggleMarkers());
         }
 
-        // Normal loop setting flow
-        if (this.nextClickSets === 'start') {
-            this.loopStart = time;
-            this.loopEnd = null;
-            this.nextClickSets = 'end';
-            console.log(`Loop start set to ${time.toFixed(2)}s`);
-            state.emit('loopStartChanged', this.loopStart);
-            this.waveform.loopStart = this.loopStart;
-            this.waveform.updateLoopRegion();
-        } else if (this.nextClickSets === 'end') {
-            if (time <= this.loopStart) {
-                console.log('Loop end must be after loop start - ignoring click');
-                return;
-            }
-            this.loopEnd = time;
-            this.nextClickSets = 'start';
-            console.log(`Loop end set to ${time.toFixed(2)}s - Loop active!`);
-            state.emit('loopEndChanged', this.loopEnd);
-            this.waveform.loopEnd = this.loopEnd;
-            this.waveform.updateLoopRegion();
-
-            // Show expand button when loop is fully set
-            const expandLoopBtn = document.getElementById('expandLoopBtn');
-            if (expandLoopBtn) {
-                expandLoopBtn.style.display = 'inline-block';
-            }
+        // Bind marker frequency selector
+        const markerFreqSelect = document.getElementById(markerFreqId);
+        if (markerFreqSelect) {
+            markerFreqSelect.addEventListener('change', (e) => this.setMarkerFrequency(e.target.value));
         }
 
-        this.updateLoopStatus();
+        // Bind shift left button (using template's existing onclick or adding listener)
+        const shiftLeftBtn = this.getShiftLeftButton();
+        if (shiftLeftBtn) {
+            shiftLeftBtn.addEventListener('click', () => this.shiftBarStartLeft());
+        }
 
-        if (this.seekOnClick) {
-            this.waveform.seekTo(time / duration);
+        // Bind shift right button
+        const shiftRightBtn = this.getShiftRightButton();
+        if (shiftRightBtn) {
+            shiftRightBtn.addEventListener('click', () => this.shiftBarStartRight());
         }
     }
 
-    // Update loop status display
-    updateLoopStatus() {
-        const loopStatus = document.getElementById('loopStatus');
-        if (!loopStatus) return;
-
-        if (!this.cycleMode) {
-            loopStatus.textContent = 'Off';
-            loopStatus.classList.remove('active');
-        } else if (this.loopStart === null) {
-            loopStatus.textContent = 'Click start';
-            loopStatus.classList.add('active');
-        } else if (this.loopEnd === null) {
-            loopStatus.textContent = 'Click end →';
-            loopStatus.classList.add('active');
+    /**
+     * Get shift left button from template-generated HTML
+     * The template uses onclick, so we need to find by looking for the button with that onclick
+     */
+    getShiftLeftButton() {
+        if (this.playerType === 'parent') {
+            // Find button with onclick="shiftBarStartLeft()"
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.getAttribute('onclick') === 'shiftBarStartLeft()') {
+                    return btn;
+                }
+            }
         } else {
-            const duration = this.loopEnd - this.loopStart;
-            loopStatus.textContent = `${duration.toFixed(1)}s`;
-            loopStatus.classList.add('active');
+            // Find button with onclick="shiftStemBarStartLeft('vocals')" etc
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.getAttribute('onclick') === `shiftStemBarStartLeft('${this.stemType}')`) {
+                    return btn;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get shift right button from template-generated HTML
+     */
+    getShiftRightButton() {
+        if (this.playerType === 'parent') {
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.getAttribute('onclick') === 'shiftBarStartRight()') {
+                    return btn;
+                }
+            }
+        } else {
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.getAttribute('onclick') === `shiftStemBarStartRight('${this.stemType}')`) {
+                    return btn;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Toggle bar markers on/off
+     */
+    toggleMarkers() {
+        this.markersEnabled = !this.markersEnabled;
+        console.log(`[${this.getLogPrefix()}] Bar markers: ${this.markersEnabled ? 'ON' : 'OFF'}`);
+
+        // Update button state
+        const btnId = this.playerType === 'parent' ? 'markersBtn' : `stem-markers-btn-${this.stemType}`;
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            if (this.markersEnabled) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+
+        // Re-render markers (or clear them)
+        if (this.currentFile) {
+            this.addBarMarkers(this.currentFile);
         }
     }
 
-    // Update time display
-    updateTimeDisplay(currentTime, duration) {
-        const playerTime = document.getElementById('playerTime');
-        if (playerTime) {
-            playerTime.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+    /**
+     * Set marker frequency (bar8, bar4, bar2, bar, halfbar, beat)
+     */
+    setMarkerFrequency(freq) {
+        this.markerFrequency = freq;
+        console.log(`[${this.getLogPrefix()}] Marker frequency: ${freq}`);
+
+        // Re-render current file's markers
+        if (this.currentFile) {
+            this.addBarMarkers(this.currentFile);
         }
     }
 
-    // Update file info display
-    updateFileInfo(filename, metadata = {}) {
-        const playerFilename = document.getElementById('playerFilename');
-        if (playerFilename) {
-            playerFilename.textContent = filename || 'No file loaded';
+    /**
+     * Get shift increment based on marker frequency
+     */
+    getShiftIncrement() {
+        switch (this.markerFrequency) {
+            case 'bar8': return 8;
+            case 'bar4': return 4;
+            case 'bar2': return 2;
+            case 'bar': return 1;
+            case 'halfbar': return 0.5;
+            case 'beat': return 0.25;
+            default: return 1;
+        }
+    }
+
+    /**
+     * Shift bar start left
+     */
+    shiftBarStartLeft() {
+        const increment = this.getShiftIncrement();
+        this.barStartOffset -= increment;
+        console.log(`[${this.getLogPrefix()}] Bar start offset: ${this.barStartOffset} (shifted by -${increment})`);
+
+        // Update display
+        const displayId = this.playerType === 'parent'
+            ? 'barStartOffsetDisplay'
+            : `stem-bar-offset-${this.stemType}`;
+        const display = document.getElementById(displayId);
+        if (display) {
+            display.textContent = this.barStartOffset.toFixed(2).replace(/\.?0+$/, '');
         }
 
-        // Could add more metadata display here
+        // Re-render markers
+        if (this.currentFile) {
+            this.addBarMarkers(this.currentFile);
+        }
+    }
+
+    /**
+     * Shift bar start right
+     */
+    shiftBarStartRight() {
+        const increment = this.getShiftIncrement();
+        this.barStartOffset += increment;
+        console.log(`[${this.getLogPrefix()}] Bar start offset: ${this.barStartOffset} (shifted by +${increment})`);
+
+        // Update display
+        const displayId = this.playerType === 'parent'
+            ? 'barStartOffsetDisplay'
+            : `stem-bar-offset-${this.stemType}`;
+        const display = document.getElementById(displayId);
+        if (display) {
+            display.textContent = this.barStartOffset.toFixed(2).replace(/\.?0+$/, '');
+        }
+
+        // Re-render markers
+        if (this.currentFile) {
+            this.addBarMarkers(this.currentFile);
+        }
+    }
+
+    /**
+     * Add bar markers to waveform
+     * Adapted from app.js addBarMarkers() and addStemBarMarkers()
+     */
+    addBarMarkers(file) {
+        // Get waveform container based on player type
+        const waveformContainerId = this.playerType === 'parent'
+            ? 'waveform'
+            : `multi-stem-waveform-${this.stemType}`;
+
+        const waveformContainer = document.getElementById(waveformContainerId);
+        if (!waveformContainer) {
+            console.warn(`[${this.getLogPrefix()}] Waveform container not found: ${waveformContainerId}`);
+            return;
+        }
+
+        // Get wavesurfer instance (parent or stem)
+        const ws = this.waveform; // This should be the wavesurfer instance
+        if (!ws) {
+            console.warn(`[${this.getLogPrefix()}] Waveform instance not found`);
+            return;
+        }
+
+        // Don't add markers if disabled or no beatmap data
+        if (!this.markersEnabled || !file.beatmap) {
+            // Clear any existing markers if disabled
+            const existingContainer = waveformContainer.querySelector('.marker-container');
+            if (existingContainer) existingContainer.remove();
+            this.currentMarkers = [];
+            return;
+        }
+
+        // Get the duration to calculate marker positions
+        const duration = ws.getDuration();
+        if (!duration) return;
+
+        // Get or create marker container
+        let markerContainer = waveformContainer.querySelector('.marker-container');
+        if (!markerContainer) {
+            markerContainer = document.createElement('div');
+            markerContainer.className = 'marker-container';
+            waveformContainer.appendChild(markerContainer);
+        }
+
+        // Clear existing markers
+        const existingMarkers = markerContainer.querySelectorAll('.bar-marker, .beat-marker');
+        existingMarkers.forEach(marker => marker.remove());
+        this.currentMarkers = [];
+
+        // Marker container fills the full width
+        markerContainer.style.width = '100%';
+
+        // Normalize beatmap (force first beat to be bar 1, beat 1)
+        const normalizedBeatmap = file.beatmap.map((beat, index) => {
+            if (index === 0) {
+                return { ...beat, beatNum: 1, originalIndex: index };
+            }
+            return { ...beat, originalIndex: index };
+        });
+
+        // Split barStartOffset into integer bars and fractional beats
+        const barOffset = Math.floor(this.barStartOffset);
+        const fractionalBeats = Math.round((this.barStartOffset - barOffset) * 4);
+
+        // Calculate original bar numbers
+        let barNumber = 0;
+        const beatmapWithOriginalBars = normalizedBeatmap.map(beat => {
+            if (beat.beatNum === 1) barNumber++;
+            return { ...beat, originalBarNumber: barNumber };
+        });
+
+        // Rotate beatNum values for fractional beat shifts
+        const beatmapWithRotatedBeats = beatmapWithOriginalBars.map(beat => {
+            if (fractionalBeats === 0) {
+                return { ...beat };
+            } else {
+                let newBeatNum = beat.beatNum - fractionalBeats;
+                while (newBeatNum < 1) newBeatNum += 4;
+                while (newBeatNum > 4) newBeatNum -= 4;
+                return { ...beat, beatNum: newBeatNum };
+            }
+        });
+
+        // Recalculate bar numbers after beat rotation
+        barNumber = 0;
+        const beatmapWithNewBars = beatmapWithRotatedBeats.map(beat => {
+            if (beat.beatNum === 1) barNumber++;
+            return { ...beat, barNumber };
+        });
+
+        // Shift bar numbers by integer bar offset
+        const beatmapWithBars = beatmapWithNewBars.map(beat => {
+            return { ...beat, barNumber: beat.barNumber - barOffset };
+        });
+
+        // Filter based on frequency
+        let filteredBeats = [];
+        switch (this.markerFrequency) {
+            case 'bar8':
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 8 === 1);
+                break;
+            case 'bar4':
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 4 === 1);
+                break;
+            case 'bar2':
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 2 === 1);
+                break;
+            case 'bar':
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1);
+                break;
+            case 'halfbar':
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 || b.beatNum === 3);
+                break;
+            case 'beat':
+                filteredBeats = beatmapWithBars;
+                break;
+        }
+
+        console.log(`[${this.getLogPrefix()}] Adding ${filteredBeats.length} markers (frequency: ${this.markerFrequency}, barOffset: ${barOffset}, beatOffset: ${fractionalBeats})`);
+
+        // Add a marker div for each filtered beat
+        filteredBeats.forEach((beat) => {
+            const marker = document.createElement('div');
+            const isBar = beat.beatNum === 1;
+            const isEmphasisBar = isBar && (beat.barNumber % 4 === 1);
+
+            if (isEmphasisBar) {
+                marker.className = 'bar-marker';
+                marker.title = `Bar ${beat.barNumber}`;
+            } else if (isBar) {
+                marker.className = 'beat-marker';
+                marker.title = `Bar ${beat.barNumber}`;
+            } else {
+                marker.className = 'beat-marker';
+                marker.title = `Beat ${beat.beatNum}`;
+            }
+
+            // Calculate position as percentage of duration
+            const position = (beat.time / duration) * 100;
+            marker.style.left = `${position}%`;
+
+            // Add bar number label at bottom for bars (beatNum === 1)
+            if (isBar) {
+                const barLabel = document.createElement('span');
+                barLabel.textContent = beat.barNumber;
+                barLabel.style.cssText = `
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    transform: translateX(-50%);
+                    font-size: 9px;
+                    color: rgba(255, 255, 255, 0.5);
+                    pointer-events: none;
+                    white-space: nowrap;
+                `;
+                marker.appendChild(barLabel);
+            }
+
+            markerContainer.appendChild(marker);
+
+            // Store marker time for snap-to-marker functionality
+            this.currentMarkers.push(beat.time);
+        });
+    }
+
+    /**
+     * Find nearest marker to the left of click time
+     */
+    findNearestMarkerToLeft(clickTime) {
+        if (this.currentMarkers.length === 0) return clickTime;
+
+        let nearestMarker = 0;
+        for (let markerTime of this.currentMarkers) {
+            if (markerTime <= clickTime && markerTime > nearestMarker) {
+                nearestMarker = markerTime;
+            }
+        }
+
+        return nearestMarker;
+    }
+
+    /**
+     * Load a file into this player
+     */
+    loadFile(file) {
+        this.currentFile = file;
+
+        // Add markers if enabled
+        if (this.markersEnabled && file.beatmap) {
+            this.addBarMarkers(file);
+        }
+    }
+
+    // ============================================
+    // TRANSPORT CONTROLS (PLACEHOLDER)
+    // ============================================
+
+    setupTransportControls() {
+        // TODO: Implement transport controls (play, pause, prev, next)
+        // These are mostly parent-only
+    }
+
+    // ============================================
+    // RATE CONTROLS (PLACEHOLDER)
+    // ============================================
+
+    setupRateControls() {
+        // TODO: Implement rate controls
+    }
+
+    // ============================================
+    // VOLUME CONTROLS (PLACEHOLDER)
+    // ============================================
+
+    setupVolumeControls() {
+        // TODO: Implement volume controls
+    }
+
+    // ============================================
+    // LOOP CONTROLS (PLACEHOLDER)
+    // ============================================
+
+    setupLoopControls() {
+        // TODO: Implement loop/cycle controls
+    }
+
+    // ============================================
+    // METRONOME CONTROLS (PLACEHOLDER)
+    // ============================================
+
+    setupMetronomeControls() {
+        // TODO: Implement metronome controls
+    }
+
+    // ============================================
+    // HELPER METHODS
+    // ============================================
+
+    /**
+     * Get logging prefix for console messages
+     */
+    getLogPrefix() {
+        if (this.playerType === 'parent') {
+            return 'Parent';
+        } else {
+            return this.stemType;
+        }
     }
 }

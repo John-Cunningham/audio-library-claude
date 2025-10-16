@@ -2,6 +2,7 @@
         import { supabase, PREF_KEYS } from './config.js';
         import * as Utils from './utils.js';
         import { generateStemPlayerBar } from './playerTemplate.js';
+        import { PlayerBarComponent } from '../components/playerBar.js';
 
         // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
@@ -19,6 +20,7 @@
 
         let audioFiles = [];
         let wavesurfer = null;
+        let parentPlayerComponent = null; // PlayerBarComponent instance for parent player
         let currentFileId = null;
         let selectedFiles = new Set();
         let processingFiles = new Set(); // Track files currently being processed
@@ -493,6 +495,20 @@
                 });
 
                 console.log('WaveSurfer created:', wavesurfer);
+
+                // Create and initialize parent player component (only once)
+                if (!parentPlayerComponent) {
+                    parentPlayerComponent = new PlayerBarComponent({
+                        playerType: 'parent',
+                        waveform: wavesurfer
+                    });
+                    parentPlayerComponent.init();
+                    console.log('Parent PlayerBarComponent initialized');
+                } else {
+                    // Update waveform reference for existing component
+                    parentPlayerComponent.waveform = wavesurfer;
+                    console.log('Parent PlayerBarComponent waveform reference updated');
+                }
 
                 wavesurfer.on('finish', () => {
                     if (isLooping) {
@@ -5122,7 +5138,13 @@
                 wavesurfer.setVolume(currentVolume);
                 console.log(`Restored parent volume to ${(currentVolume * 100).toFixed(0)}%`);
 
-                addBarMarkers(file);
+                // Load file into parent player component (handles markers)
+                if (parentPlayerComponent) {
+                    parentPlayerComponent.loadFile(file);
+                } else {
+                    // Fallback to old function if component not initialized
+                    addBarMarkers(file);
+                }
 
                 // BPM Lock: Auto-adjust playback rate to match locked BPM
                 if (bpmLockEnabled && lockedBPM !== null && file.bpm) {
@@ -6426,10 +6448,35 @@ window.toggleMute = toggleMute;
 window.resetVolume = resetVolume;
 window.setPlaybackRate = setPlaybackRate;
 window.resetRate = resetRate;
-window.toggleMarkers = toggleMarkers;
-window.setMarkerFrequency = setMarkerFrequency;
-window.shiftBarStartLeft = shiftBarStartLeft;
-window.shiftBarStartRight = shiftBarStartRight;
+// Wrapper functions that delegate to PlayerBarComponent
+        window.toggleMarkers = () => {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.toggleMarkers();
+            } else {
+                toggleMarkers(); // Fallback to old function
+            }
+        };
+        window.setMarkerFrequency = (freq) => {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.setMarkerFrequency(freq);
+            } else {
+                setMarkerFrequency(freq); // Fallback
+            }
+        };
+        window.shiftBarStartLeft = () => {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.shiftBarStartLeft();
+            } else {
+                shiftBarStartLeft(); // Fallback
+            }
+        };
+        window.shiftBarStartRight = () => {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.shiftBarStartRight();
+            } else {
+                shiftBarStartRight(); // Fallback
+            }
+        };
 window.toggleMetronome = toggleMetronome;
 window.setMetronomeSound = setMetronomeSound;
 window.toggleCycleMode = toggleCycleMode;

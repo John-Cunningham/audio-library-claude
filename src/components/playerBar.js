@@ -297,6 +297,11 @@ export class PlayerBarComponent {
             const existingContainer = waveformContainer.querySelector('.marker-container');
             if (existingContainer) existingContainer.remove();
             this.currentMarkers = [];
+
+            // CRITICAL: Sync empty markers to global array
+            if (this.playerType === 'parent' && typeof window !== 'undefined' && window.updateCurrentMarkers) {
+                window.updateCurrentMarkers([]);
+            }
             return;
         }
 
@@ -431,6 +436,17 @@ export class PlayerBarComponent {
             // Store marker time for snap-to-marker functionality
             this.currentMarkers.push(beat.time);
         });
+
+        // CRITICAL: Sync instance markers to global array for app.js waveform click handler
+        // This allows the cycle mode click handler in app.js to access marker data
+        // TODO: Remove this once waveform click handling is moved into component
+        if (this.playerType === 'parent' && typeof window !== 'undefined') {
+            // Access the global currentMarkers array from app.js module scope
+            // We'll expose a setter function to update it
+            if (window.updateCurrentMarkers) {
+                window.updateCurrentMarkers(this.currentMarkers);
+            }
+        }
     }
 
     /**

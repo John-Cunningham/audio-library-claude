@@ -6453,6 +6453,13 @@ window.resetRate = resetRate;
         const _oldSetMarkerFrequency = setMarkerFrequency;
         const _oldShiftBarStartLeft = shiftBarStartLeft;
         const _oldShiftBarStartRight = shiftBarStartRight;
+
+// CRITICAL: Expose setter to sync component markers to global array
+        // This allows waveform click handler (cycle mode) to access marker data
+        // TODO: Remove once waveform click handling is moved into component
+        window.updateCurrentMarkers = (markers) => {
+            currentMarkers = markers;
+        };
 // Wrapper functions that delegate to PlayerBarComponent
         window.toggleMarkers = () => {
             if (parentPlayerComponent) {

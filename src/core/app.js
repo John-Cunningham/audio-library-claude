@@ -6454,11 +6454,16 @@ window.resetRate = resetRate;
         const _oldShiftBarStartLeft = shiftBarStartLeft;
         const _oldShiftBarStartRight = shiftBarStartRight;
 
-// CRITICAL: Expose setter to sync component markers to global array
+// CRITICAL: Expose setters to sync component state to global variables
         // This allows waveform click handler (cycle mode) to access marker data
         // TODO: Remove once waveform click handling is moved into component
         window.updateCurrentMarkers = (markers) => {
             currentMarkers = markers;
+            console.log(`[Global] currentMarkers updated, length: ${markers.length}`);
+        };
+        window.updateMarkersEnabled = (enabled) => {
+            markersEnabled = enabled;
+            console.log(`[Global] markersEnabled updated: ${enabled}`);
         };
 // Wrapper functions that delegate to PlayerBarComponent
         window.toggleMarkers = () => {

@@ -177,6 +177,11 @@ export class PlayerBarComponent {
         this.markersEnabled = !this.markersEnabled;
         console.log(`[${this.getLogPrefix()}] Bar markers: ${this.markersEnabled ? 'ON' : 'OFF'}`);
 
+        // CRITICAL: Sync markersEnabled to global variable for waveform click handler
+        if (this.playerType === 'parent' && typeof window !== 'undefined' && window.updateMarkersEnabled) {
+            window.updateMarkersEnabled(this.markersEnabled);
+        }
+
         // Update button state
         const btnId = this.playerType === 'parent' ? 'markersBtn' : `stem-markers-btn-${this.stemType}`;
         const btn = document.getElementById(btnId);
@@ -444,7 +449,10 @@ export class PlayerBarComponent {
             // Access the global currentMarkers array from app.js module scope
             // We'll expose a setter function to update it
             if (window.updateCurrentMarkers) {
+                console.log(`[${this.getLogPrefix()}] Syncing ${this.currentMarkers.length} markers to global array`);
                 window.updateCurrentMarkers(this.currentMarkers);
+            } else {
+                console.error(`[${this.getLogPrefix()}] window.updateCurrentMarkers is not defined!`);
             }
         }
     }

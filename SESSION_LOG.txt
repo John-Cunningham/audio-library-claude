@@ -449,3 +449,117 @@ CURRENT WORKING COMMIT: 8df7c4e
 ================================================================================
 All features tested and working. Placeholder UI ready for future integration.
 
+================================================================================
+SESSION LOG - Stem Play/Pause Synchronization Fix
+================================================================================
+Date: 2025-10-16 (Continued)
+Branch: experimental-v27-stem-independence
+Commit: 39fb774
+
+================================================================================
+OBJECTIVE
+================================================================================
+Fix stem players not resuming when parent player's play button is pressed.
+User reported: "the play button does not properly resume playback on the stems"
+
+================================================================================
+PROBLEM ANALYSIS
+================================================================================
+
+**Root Cause**: Backwards logic in parent play/pause event handlers (lines 2911-2983)
+
+The old code used variable `isIndependent` with this logic:
+```javascript
+const isIndependent = loopState.enabled || stemPlaybackIndependent[stemType];
+```
+
+This was BACKWARDS because:
+- `stemPlaybackIndependent[stemType] = true` means "stem is ACTIVE and should FOLLOW parent"
+- But the code treated it as "stem is INDEPENDENT and should NOT follow parent"
+- Result: Active stems were excluded from pause/resume synchronization
+
+================================================================================
+SOLUTION IMPLEMENTED
+================================================================================
+
+✅ Fixed Play/Pause/Seeking Event Handlers (commit 39fb774)
+   - File: src/core/app.js (lines 2911-2983)
+   - Inverted logic from `isIndependent` to `followsParent`
+   - New logic: `const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;`
+   - A stem follows parent if:
+     1. It's marked as active (stemPlaybackIndependent = true)
+     2. AND it doesn't have its own cycle/loop enabled
+   - Applied consistently to all three event handlers:
+     * wavesurfer.on('play') - resumes stems
+     * wavesurfer.on('pause') - pauses stems
+     * wavesurfer.on('seeking') - syncs stem positions
+   - Added detailed console logging for debugging
+
+================================================================================
+TESTING RESULTS
+================================================================================
+
+✅ Browser Testing at http://localhost:5500/index.html:
+- Loaded file: "monkey feet.01 JASP VOX.mp3" (has 4 stems)
+- All 4 stems preloaded successfully (vocals, drums, bass, other)
+- PlayerBarComponent instances created for each stem
+
+✅ Console Logs Confirm Fix:
+```
+[LOG] Parent play event - resuming stems
+[LOG] Parent pause event - pausing stems that follow parent
+```
+
+✅ Stem Synchronization:
+- Parent play button now properly resumes all active stems
+- Parent pause button properly pauses all active stems
+- Stems that have independent cycles are NOT affected (correct behavior)
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+Modified:
+- src/core/app.js (lines 2911-2983) - Fixed event handler logic
+
+================================================================================
+COMMITS
+================================================================================
+
+39fb774 - fix: Correct stem play/pause sync logic with parent player
+
+Commit Message:
+```
+fix: Correct stem play/pause sync logic with parent player
+
+Fixed backwards logic in parent play/pause/seeking event handlers.
+Old code treated active stems as "independent" so they wouldn't sync.
+
+Changes:
+- Renamed variable from isIndependent to followsParent (clearer intent)
+- Fixed logic: followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled
+- A stem follows parent if it's active AND doesn't have its own cycle
+- Applied fix to all three event handlers consistently
+- Added detailed console logs for debugging
+
+Result: Stems now properly pause/resume with parent player.
+
+🤖 Generated with Claude Code (https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+================================================================================
+CURRENT WORKING COMMIT: 39fb774
+================================================================================
+Stem play/pause synchronization tested and working. ✅
+
+================================================================================
+NEXT STEPS (User Mentioned, Not Yet Requested)
+================================================================================
+
+User mentioned these future enhancements but has NOT requested implementation:
+1. Add transport controls to stem players (next/previous buttons)
+2. Add individual cycle mode to stem players
+3. Add independent speed/pitch controls to stem players (like parent)
+

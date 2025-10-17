@@ -57,6 +57,16 @@ export class PlayerBarComponent {
         this.volume = 1.0;
         this.muted = false;
 
+        // Future: BPM/Key Locking for Stem Browsing
+        // These enable stems to load files from different songs while auto-matching BPM/key
+        // TODO: Implement in future phase (Signalsmith time/pitch stretching)
+        this.bpmLocked = false;     // Lock to parent's global BPM?
+        this.keyLocked = false;     // Lock to parent's global key?
+        this.fileBPM = null;        // BPM of THIS player's file (could be from different song)
+        this.fileKey = null;        // Key of THIS player's file
+        this.timeStretch = 1.0;     // BPM-matching time stretch factor (independent of rate)
+        this.pitchShift = 0;        // Semitones to shift for key matching
+
         console.log(`[PlayerBarComponent] Created ${this.playerType}${this.stemType ? ' (' + this.stemType + ')' : ''} player`);
     }
 

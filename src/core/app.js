@@ -2573,8 +2573,9 @@
                         timeDisplay.textContent = `0:00 / ${Utils.formatTime(duration)}`;
                     }
 
-                    // Phase 4: Add cycle mode click handler for this stem
-                    setupStemCycleModeClickHandler(stemType, container, ws);
+                    // Phase 4: Cycle mode click handler is now handled by PlayerBarComponent.setupWaveformClickHandler()
+                    // OLD: setupStemCycleModeClickHandler(stemType, container, ws);
+                    // Component's init() already set up the click handler with snap-to-marker + cycle mode support
 
                     // Version 27d: Load file into component (enables markers via component)
                     const file = audioFiles.find(f => f.id === currentFileId);

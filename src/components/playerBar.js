@@ -478,13 +478,21 @@ export class PlayerBarComponent {
         // Marker container fills the full width
         markerContainer.style.width = '100%';
 
+        // Debug: Log first few beats of original beatmap from Music.ai
+        console.log(`[BEATMAP DEBUG] First 10 beats from Music.ai beatmap:`, file.beatmap.slice(0, 10));
+
         // Normalize beatmap (force first beat to be bar 1, beat 1)
+        // This fixes issues where Music.ai thinks the first onset is beat 3
+        // (because it detected the bar started earlier in silence)
         const normalizedBeatmap = file.beatmap.map((beat, index) => {
             if (index === 0) {
+                // First beat is ALWAYS bar 1, beat 1
                 return { ...beat, beatNum: 1, originalIndex: index };
             }
             return { ...beat, originalIndex: index };
         });
+
+        console.log(`[BEATMAP DEBUG] First 10 beats AFTER normalization:`, normalizedBeatmap.slice(0, 10));
 
         // Split barStartOffset into integer bars and fractional beats
         const barOffset = Math.floor(this.barStartOffset);

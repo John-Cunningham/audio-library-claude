@@ -4074,10 +4074,13 @@
             }
 
             // Also update all stem marker frequencies if stems are expanded
+            console.log(`[setMarkerFrequency] freq: ${freq}, multiStemPlayerExpanded: ${multiStemPlayerExpanded}, stemPlayerComponents:`, Object.keys(stemPlayerComponents));
             if (multiStemPlayerExpanded) {
                 const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                 stemTypes.forEach(stemType => {
+                    console.log(`  Checking stem ${stemType}, component exists: ${!!stemPlayerComponents[stemType]}`);
                     if (stemPlayerComponents[stemType]) {
+                        console.log(`  → Setting ${stemType} marker frequency to ${freq}`);
                         stemPlayerComponents[stemType].setMarkerFrequency(freq);
                     }
                 });
@@ -4116,10 +4119,13 @@
             }
 
             // Also shift all stem markers if stems are expanded
+            console.log(`[shiftBarStartLeft] multiStemPlayerExpanded: ${multiStemPlayerExpanded}, stemPlayerComponents:`, Object.keys(stemPlayerComponents));
             if (multiStemPlayerExpanded) {
                 const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                 stemTypes.forEach(stemType => {
+                    console.log(`  Checking stem ${stemType}, component exists: ${!!stemPlayerComponents[stemType]}`);
                     if (stemPlayerComponents[stemType]) {
+                        console.log(`  → Shifting ${stemType} markers left`);
                         stemPlayerComponents[stemType].shiftBarStartLeft();
                     }
                 });
@@ -4145,10 +4151,13 @@
             }
 
             // Also shift all stem markers if stems are expanded
+            console.log(`[shiftBarStartRight] multiStemPlayerExpanded: ${multiStemPlayerExpanded}, stemPlayerComponents:`, Object.keys(stemPlayerComponents));
             if (multiStemPlayerExpanded) {
                 const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                 stemTypes.forEach(stemType => {
+                    console.log(`  Checking stem ${stemType}, component exists: ${!!stemPlayerComponents[stemType]}`);
                     if (stemPlayerComponents[stemType]) {
+                        console.log(`  → Shifting ${stemType} markers right`);
                         stemPlayerComponents[stemType].shiftBarStartRight();
                     }
                 });

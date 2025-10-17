@@ -5356,15 +5356,66 @@
                 return;
             }
 
-            wavesurfer.playPause();
-            const icon = document.getElementById('playPauseIcon');
-            icon.textContent = wavesurfer.isPlaying() ? '⏸' : '▶';
+            // If stems are expanded, control stems instead of parent
+            if (multiStemPlayerExpanded) {
+                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
 
-            // Track user pause state (if pausing, set to true; if playing, set to false)
-            userPaused = !wavesurfer.isPlaying();
+                // Check if any stem is currently playing
+                const anyPlaying = stemTypes.some(type => {
+                    const ws = stemPlayerWavesurfers[type];
+                    return ws && ws.isPlaying();
+                });
 
-            // Record action
-            recordAction(wavesurfer.isPlaying() ? 'play' : 'pause', {});
+                if (anyPlaying) {
+                    // Pause all stems that are following parent (active stems)
+                    stemTypes.forEach(type => {
+                        const ws = stemPlayerWavesurfers[type];
+                        const loopState = stemLoopStates[type];
+                        const followsParent = stemPlaybackIndependent[type] && !loopState.enabled;
+
+                        if (ws && followsParent && ws.isPlaying()) {
+                            ws.pause();
+                            const icon = document.getElementById(`stem-play-pause-icon-${type}`);
+                            if (icon) icon.textContent = '▶';
+                            console.log(`Paused ${type} stem (following parent)`);
+                        }
+                    });
+                    userPaused = true;
+                } else {
+                    // Play all stems that should follow parent (active stems)
+                    stemTypes.forEach(type => {
+                        const ws = stemPlayerWavesurfers[type];
+                        const loopState = stemLoopStates[type];
+                        const followsParent = stemPlaybackIndependent[type] && !loopState.enabled;
+
+                        if (ws && followsParent && !ws.isPlaying()) {
+                            ws.play();
+                            const icon = document.getElementById(`stem-play-pause-icon-${type}`);
+                            if (icon) icon.textContent = '||';
+                            console.log(`Playing ${type} stem (following parent)`);
+                        }
+                    });
+                    userPaused = false;
+                }
+
+                // Update parent button icon based on stem state
+                const icon = document.getElementById('playPauseIcon');
+                icon.textContent = anyPlaying ? '▶' : '⏸';
+
+                // Record action
+                recordAction(anyPlaying ? 'pause' : 'play', {});
+            } else {
+                // Normal parent control when stems are collapsed
+                wavesurfer.playPause();
+                const icon = document.getElementById('playPauseIcon');
+                icon.textContent = wavesurfer.isPlaying() ? '⏸' : '▶';
+
+                // Track user pause state (if pausing, set to true; if playing, set to false)
+                userPaused = !wavesurfer.isPlaying();
+
+                // Record action
+                recordAction(wavesurfer.isPlaying() ? 'play' : 'pause', {});
+            }
         }
 
         // Update player time display

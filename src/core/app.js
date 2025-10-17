@@ -2290,8 +2290,16 @@
         // Phase 2A: Individual Rate Controls
         let stemIndependentRates = {}; // {vocals: 1.0, drums: 1.25, ...} - user's rate multiplier per stem
         let stemRateLocked = {}; // {vocals: true, drums: false, ...} - whether stem follows parent rate
-        let stemPlaybackIndependent = {}; // {vocals: true, drums: false, ...} - whether stem should play when parent plays (user's active selection)
+        let stemPlaybackIndependent = {
+            vocals: true,
+            drums: true,
+            bass: true,
+            other: true
+        }; // whether stem should play when parent plays (user's active selection) - initialize all as active
         let currentParentFileBPM = null; // Store parent file's original BPM for calculations
+
+        // CRITICAL: Expose to window so event handlers can access it
+        window.stemPlaybackIndependent = stemPlaybackIndependent;
 
         // Phase 2B: Individual Loop Controls (Version 27b)
         let stemLoopStates = {

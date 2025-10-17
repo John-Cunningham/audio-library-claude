@@ -484,15 +484,23 @@ export class PlayerBarComponent {
             console.log(`  [${idx}] time: ${beat.time.toFixed(3)}s, beatNum: ${beat.beatNum}, barNumber: ${beat.barNumber || 'N/A'}`);
         });
 
-        // Normalize beatmap (force first beat to be bar 1, beat 1)
-        // This fixes issues where Music.ai thinks the first onset is beat 3
-        // (because it detected the bar started earlier in silence)
+        // Normalize beatmap by shifting ALL beatNums so first beat becomes beat 1
+        // This fixes issues where Music.ai detects pickup beats (anacrusis)
+        // e.g., if first beat is beat 4, we shift all beats: 4→1, 1→2, 2→3, 3→4
+        const firstBeatNum = file.beatmap[0].beatNum;
+        const beatNumShift = firstBeatNum - 1; // How much to shift (e.g., if first is 4, shift by 3)
+
+        console.log(`[BEATMAP DEBUG] First beat is beatNum ${firstBeatNum}, shifting all beats by -${beatNumShift}`);
+
         const normalizedBeatmap = file.beatmap.map((beat, index) => {
-            if (index === 0) {
-                // First beat is ALWAYS bar 1, beat 1
-                return { ...beat, beatNum: 1, originalIndex: index };
-            }
-            return { ...beat, originalIndex: index };
+            // Shift beat numbers so first beat becomes beat 1
+            let newBeatNum = beat.beatNum - beatNumShift;
+
+            // Wrap around (e.g., if beat was 1 and we shift by -3, it becomes 4)
+            while (newBeatNum < 1) newBeatNum += 4;
+            while (newBeatNum > 4) newBeatNum -= 4;
+
+            return { ...beat, beatNum: newBeatNum, originalIndex: index };
         });
 
         console.log(`[BEATMAP DEBUG] ===== AFTER normalization (first 10 beats) =====`);

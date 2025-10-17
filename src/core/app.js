@@ -2946,75 +2946,62 @@
 
             console.log('Setting up parent-stem synchronization');
 
-            // When parent plays, resume all stems that should play with parent
+            // When parent plays, resume all stems that were playing before pause
             wavesurfer.on('play', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent play event - resuming stems');
+                    console.log('Parent play event - resuming stems that were playing');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
-                        const loopState = stemLoopStates[stemType];
-
-                        // Stem is "following parent" if:
-                        // 1. It's marked as active (stemPlaybackIndependent = true)
-                        // 2. AND it doesn't have its own cycle/loop enabled
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        if (ws && followsParent && !ws.isPlaying()) {
+                        // Only play stems that were marked as playing (not manually paused by user)
+                        if (ws && stemPlaybackIndependent[stemType]) {
                             ws.play();
                             const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
                             if (icon) icon.textContent = '||';
-                            console.log(`✓ Resumed ${stemType} stem (following parent)`);
                         }
                     });
                 }
             });
 
-            // When parent pauses, pause stems that are following parent
-            // Independent stems (those with their own cycles/loops OR manually paused) are unaffected
+            // When parent pauses, pause only NON-INDEPENDENT stems
+            // Independent stems (those with their own cycles/loops) continue playing
             wavesurfer.on('pause', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent pause event - pausing stems that follow parent');
+                    console.log('Parent pause event - pausing non-independent stems');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
                         const loopState = stemLoopStates[stemType];
+                        const isIndependent = loopState.enabled || stemPlaybackIndependent[stemType];
 
-                        // Stem is "following parent" if:
-                        // 1. It's marked as active (stemPlaybackIndependent = true)
-                        // 2. AND it doesn't have its own cycle/loop enabled
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        if (ws && followsParent && ws.isPlaying()) {
-                            ws.pause();
-                            const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                            if (icon) icon.textContent = '▶';
-                            console.log(`✓ Paused ${stemType} stem (following parent)`);
+                        if (ws && !isIndependent) {
+                            // Only pause stems that aren't in their own loop/cycle
+                            if (ws.isPlaying()) {
+                                ws.pause();
+                                const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
+                                if (icon) icon.textContent = '▶';
+                            }
                         }
                     });
                 }
             });
 
-            // When parent seeks, seek stems that are following parent
+            // When parent seeks, seek only NON-INDEPENDENT stems
             // Independent stems (those with their own cycles/loops) maintain their own position
             wavesurfer.on('seeking', (currentTime) => {
                 if (multiStemPlayerExpanded) {
                     const seekPosition = currentTime / wavesurfer.getDuration();
-                    console.log('Parent seek event - syncing stems that follow parent to:', seekPosition);
+                    console.log('Parent seek event - syncing non-independent stems to:', seekPosition);
 
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
                         const loopState = stemLoopStates[stemType];
+                        const isIndependent = loopState.enabled || stemPlaybackIndependent[stemType];
 
-                        // Stem is "following parent" if:
-                        // 1. It's marked as active (stemPlaybackIndependent = true)
-                        // 2. AND it doesn't have its own cycle/loop enabled
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        if (ws && followsParent) {
+                        if (ws && !isIndependent) {
+                            // Only seek stems that aren't in their own loop/cycle
                             ws.seekTo(seekPosition);
-                            console.log(`✓ Synced ${stemType} stem position (following parent)`);
                         }
                     });
                 }

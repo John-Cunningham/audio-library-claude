@@ -147,6 +147,9 @@ export class PlayerBarComponent {
             waveformContainer.removeEventListener('click', waveformContainer._clickHandler, true);
         }
 
+        // Setup hover preview for cycle mode (do this once, not every time markers change)
+        this.setupHoverPreview(waveformContainer);
+
         // Create click handler with closure over component instance
         const clickHandler = (e) => {
             // Access global loop/cycle state from app.js
@@ -643,11 +646,6 @@ export class PlayerBarComponent {
             } else {
                 console.error(`[${this.getLogPrefix()}] window.updateCurrentMarkers is not defined!`);
             }
-        }
-
-        // Add hover preview for loop selection (only for parent player)
-        if (this.playerType === 'parent') {
-            this.setupHoverPreview(waveformContainer);
         }
     }
 

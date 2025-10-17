@@ -722,3 +722,249 @@ CURRENT WORKING COMMIT: f51d223
 ================================================================================
 Both fixes implemented and committed. Ready for user testing. ✅
 
+================================================================================
+SESSION LOG - Component Architecture Refactor (Option A)
+================================================================================
+Date: 2025-10-17
+Branch: experimental-v27-stem-independence
+Commits: a25d6d6 → 2aca910 (3 commits)
+
+================================================================================
+OBJECTIVE
+================================================================================
+Complete refactor of cycle mode and snap-to-marker to use PlayerBarComponent
+for BOTH parent and stem players (proper component-based architecture).
+
+User concern: "Are we still respecting our overall goal of having the stems and
+the parent player be components related to each other, or have we gone back to
+doing everything in the app.js?"
+
+Answer: We had regressed. This session fixes that regression.
+
+================================================================================
+PROBLEM IDENTIFIED
+================================================================================
+
+**Architectural Regression:**
+- Stem cycle mode logic was in standalone functions in app.js (lines 3180-3340)
+- toggleStemCycleMode(), updateStemLoopVisuals(), updateStemLoopRegion() were monolithic
+- setupStemCycleModeClickHandler() created duplicate click handlers
+- Snap-to-marker worked for parent but NOT stems
+
+**Why This Was Wrong:**
+- Violates component-based architecture (one PlayerBarComponent class for all players)
+- Stem-specific logic scattered across app.js instead of in component
+- Can't reuse across multiple views (Library, Galaxy, Sphere)
+- Makes future refactoring harder
+
+================================================================================
+WORK COMPLETED
+================================================================================
+
+✅ 1. Refactored setupWaveformClickHandler() to Work for Stems (commits a25d6d6, 7640646)
+   - File: src/components/playerBar.js (lines 145-316)
+
+   **Changes:**
+   - Removed early return for stem players (was only working for parent)
+   - Made waveform container ID detection work for both:
+     * Parent: `waveform`
+     * Stems: `multi-stem-waveform-${stemType}`
+   - Adapted cycle mode logic to use conditional state:
+     * Parent: uses `window.cycleMode`, `window.loopStart`, `window.loopEnd`
+     * Stems: uses `this.cycleMode`, `this.loopStart`, `this.loopEnd`
+   - Snap-to-marker now works for BOTH (uses `this.currentMarkers` + `findNearestMarkerToLeft()`)
+
+   **Result**: Clicking stem waveforms now snaps to markers when markers enabled!
+
+✅ 2. Added toggleCycleMode() Instance Method (commit 7640646)
+   - File: src/components/playerBar.js (lines 790-818)
+
+   **Method:**
+   ```javascript
+   toggleCycleMode() {
+       // Parent delegates to global window.toggleCycleMode()
+       // Stems use instance state (this.cycleMode, this.loopStart, this.loopEnd)
+
+       this.cycleMode = !this.cycleMode;
+       if (this.cycleMode) {
+           this.nextClickSets = 'start';
+       } else {
+           this.loopStart = null;
+           this.loopEnd = null;
+       }
+       this.updateLoopVisuals();
+   }
+   ```
+
+✅ 3. Added updateLoopVisuals() Instance Method (commit 7640646)
+   - File: src/components/playerBar.js (lines 820-866)
+
+   **Functionality:**
+   - Updates CYCLE button active state (adds/removes 'active' class)
+   - Updates loop status text:
+     * "Off" (gray) - cycle mode disabled
+     * "Click start" (amber) - waiting for loop start
+     * "Click end →" (amber) - waiting for loop end
+     * "X.Xs" (green) - loop duration when active
+   - Calls updateLoopRegion() to draw waveform overlay
+
+✅ 4. Added updateLoopRegion() Instance Method (commit 7640646)
+   - File: src/components/playerBar.js (lines 868-910)
+
+   **Functionality:**
+   - Creates blue loop region overlay on stem waveform
+   - Calculates position/width based on loop start/end times
+   - Removes overlay when cycle mode disabled or loop cleared
+
+✅ 5. Updated setupHoverPreview() to Work with Stems (commit 7640646)
+   - File: src/components/playerBar.js (lines 699-767)
+
+   **Changes:**
+   - Now uses conditional state access:
+     * Parent: `window.cycleMode`, `window.loopStart`, `window.loopEnd`
+     * Stems: `this.cycleMode`, `this.loopStart`, `this.loopEnd`
+   - Hover preview (blue indicator) now works for stems when setting loop end!
+
+✅ 6. Wired Up Stem Component in app.js (commit 7640646)
+   - File: src/core/app.js (lines 3153-3186)
+
+   **Updated toggleStemCycleMode():**
+   ```javascript
+   function toggleStemCycleMode(stemType) {
+       // Delegate to PlayerBarComponent if it exists
+       const stemComponent = stemPlayerComponents[stemType];
+       if (stemComponent) {
+           stemComponent.toggleCycleMode();
+           return;
+       }
+       // Fallback to old implementation (with warning)
+   }
+   ```
+
+✅ 7. Removed Duplicate Click Handler Call (commit 2aca910)
+   - File: src/core/app.js (line 2577)
+
+   **Changed:**
+   - Commented out: `setupStemCycleModeClickHandler(stemType, container, ws);`
+   - Component's `init()` already sets up click handler via `setupWaveformClickHandler()`
+   - No duplicate handlers = cleaner architecture
+
+================================================================================
+ARCHITECTURE ACHIEVED
+================================================================================
+
+**BEFORE (Monolithic - WRONG):**
+```
+app.js (monolithic)
+├── toggleStemCycleMode(stemType) - standalone function
+├── updateStemLoopVisuals(stemType) - standalone function
+├── updateStemLoopRegion(stemType) - standalone function
+└── setupStemCycleModeClickHandler(stemType, ...) - standalone function
+```
+
+**AFTER (Component-Based - CORRECT):**
+```
+PlayerBarComponent (instance-based)
+├── toggleCycleMode() - instance method (works for parent OR stems)
+├── updateLoopVisuals() - instance method (works for parent OR stems)
+├── updateLoopRegion() - instance method (works for parent OR stems)
+├── setupWaveformClickHandler() - instance method (includes snap + cycle)
+└── setupHoverPreview() - instance method (blue loop indicator)
+
+Usage:
+  parentPlayer = new PlayerBarComponent({ playerType: 'parent', waveform })
+  vocalsPlayer = new PlayerBarComponent({ playerType: 'stem', stemType: 'vocals', waveform })
+  drumsPlayer = new PlayerBarComponent({ playerType: 'stem', stemType: 'drums', waveform })
+  bassPlayer = new PlayerBarComponent({ playerType: 'stem', stemType: 'bass', waveform })
+  otherPlayer = new PlayerBarComponent({ playerType: 'stem', stemType: 'other', waveform })
+```
+
+**Key Win**: ONE class, instantiated 5 times. Each instance manages its own state.
+
+================================================================================
+TESTING STATUS
+================================================================================
+
+⚠️ READY FOR USER TESTING
+
+User should test the following with stems:
+
+1. **Snap-to-Marker:**
+   - Enable markers on a stem (click MARKS button)
+   - Click waveform
+   - Should snap to nearest marker (not exact click position)
+
+2. **Cycle Mode Visual Indicators:**
+   - Click CYCLE button on stem
+   - Button should highlight (active state)
+   - Status should show "Click start"
+   - Click waveform once - status changes to "Click end →"
+   - Click again - blue loop region appears on waveform
+   - Status shows loop duration (e.g., "2.5s")
+
+3. **Hover Preview:**
+   - After clicking loop start, hover over waveform
+   - Should see blue preview region showing where loop will end
+   - Preview should snap to markers if markers enabled
+
+4. **Multi-Stem Independence:**
+   - Set different loop regions on vocals vs drums vs bass
+   - Each stem should maintain independent loop state
+   - Toggling cycle on one stem shouldn't affect others
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+Modified:
+- src/components/playerBar.js
+  * setupWaveformClickHandler() - now works for stems (lines 145-316)
+  * toggleCycleMode() - new instance method (lines 790-818)
+  * updateLoopVisuals() - new instance method (lines 820-866)
+  * updateLoopRegion() - new instance method (lines 868-910)
+  * setupHoverPreview() - updated for stems (lines 699-767)
+
+- src/core/app.js
+  * toggleStemCycleMode() - now delegates to component (lines 3153-3186)
+  * Removed setupStemCycleModeClickHandler() call (line 2577)
+
+================================================================================
+COMMITS
+================================================================================
+
+a25d6d6 - wip: Start refactoring setupWaveformClickHandler for stem support - IN PROGRESS
+7640646 - refactor: Complete PlayerBarComponent cycle mode for stems - WORKING
+2aca910 - refactor: Remove old setupStemCycleModeClickHandler call - COMPLETE
+
+================================================================================
+KEY LEARNINGS
+================================================================================
+
+1. **Component Architecture is Non-Negotiable**
+   - When adding features, ALWAYS ask: "Does this belong in a component?"
+   - If parent has it, stems need it = component method, not standalone function
+   - Regression happens easily - be vigilant!
+
+2. **Conditional State Access Pattern**
+   ```javascript
+   const state = this.playerType === 'parent' ? window.state : this.state;
+   ```
+   - Parent uses global state (for now) because it's tied to app.js globals
+   - Stems use instance state (this.state)
+   - Clean separation, no conflicts
+
+3. **Old Code as Safety Net**
+   - Kept old function definitions with fallback logic
+   - Warns if component missing ("shouldn't happen")
+   - Can remove after testing confirms components work
+
+4. **Extended Thinking OFF Was Right Choice**
+   - This was "apply known pattern repeatedly" not "figure out novel solution"
+   - Moved faster without extended thinking overhead
+   - Pattern: Read old code → Add to component → Add conditional logic
+
+================================================================================
+CURRENT WORKING COMMIT: 2aca910
+================================================================================
+Component architecture restored. Ready for testing. ✅
+

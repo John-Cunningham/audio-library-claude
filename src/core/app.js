@@ -4895,10 +4895,10 @@
 
             let newLoopStart;
 
-            // If no markers, nudge by 0.1 seconds
+            // If no markers, nudge by 0.01 seconds
             if (currentMarkers.length === 0) {
-                newLoopStart = Math.max(0, loopStart - 0.1); // Don't go below 0
-                console.log(`Start marker nudged left to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(1)}s)`);
+                newLoopStart = Math.max(0, loopStart - 0.01); // Don't go below 0
+                console.log(`Start marker nudged left to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(2)}s)`);
             } else {
                 // Find the previous marker before current start (search backwards)
                 let prevMarker = null;
@@ -4943,11 +4943,11 @@
 
             let newLoopEnd;
 
-            // If no markers, nudge by 0.1 seconds
+            // If no markers, nudge by 0.01 seconds
             if (currentMarkers.length === 0) {
                 const duration = wavesurfer ? wavesurfer.getDuration() : Infinity;
-                newLoopEnd = Math.min(duration, loopEnd + 0.1); // Don't go past file duration
-                console.log(`End marker nudged right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(1)}s)`);
+                newLoopEnd = Math.min(duration, loopEnd + 0.01); // Don't go past file duration
+                console.log(`End marker nudged right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(2)}s)`);
             } else {
                 // Find the next marker after current end
                 let nextMarker = null;
@@ -4991,10 +4991,10 @@
 
             let newLoopStart;
 
-            // If no markers, nudge by 0.1 seconds
+            // If no markers, nudge by 0.01 seconds
             if (currentMarkers.length === 0) {
-                newLoopStart = Math.min(loopEnd - 0.1, loopStart + 0.1); // Don't go past loop end
-                console.log(`Start marker nudged right to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(1)}s)`);
+                newLoopStart = Math.min(loopEnd - 0.01, loopStart + 0.01); // Don't go past loop end
+                console.log(`Start marker nudged right to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(2)}s)`);
             } else {
                 // Find the next marker after current start
                 let nextMarker = null;
@@ -5038,10 +5038,10 @@
 
             let newLoopEnd;
 
-            // If no markers, nudge by 0.1 seconds
+            // If no markers, nudge by 0.01 seconds
             if (currentMarkers.length === 0) {
-                newLoopEnd = Math.max(loopStart + 0.1, loopEnd - 0.1); // Don't go before loop start
-                console.log(`End marker nudged left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(1)}s)`);
+                newLoopEnd = Math.max(loopStart + 0.01, loopEnd - 0.01); // Don't go before loop start
+                console.log(`End marker nudged left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(2)}s)`);
             } else {
                 // Find the previous marker before current end (search backwards)
                 let prevMarker = null;

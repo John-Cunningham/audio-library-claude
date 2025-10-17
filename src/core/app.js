@@ -4072,6 +4072,16 @@
             if (file) {
                 addBarMarkers(file);
             }
+
+            // Also update all stem marker frequencies if stems are expanded
+            if (multiStemPlayerExpanded) {
+                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+                stemTypes.forEach(stemType => {
+                    if (stemPlayerComponents[stemType]) {
+                        stemPlayerComponents[stemType].setMarkerFrequency(freq);
+                    }
+                });
+            }
         }
 
         // Get shift increment based on marker frequency
@@ -4104,6 +4114,16 @@
             if (file) {
                 addBarMarkers(file);
             }
+
+            // Also shift all stem markers if stems are expanded
+            if (multiStemPlayerExpanded) {
+                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+                stemTypes.forEach(stemType => {
+                    if (stemPlayerComponents[stemType]) {
+                        stemPlayerComponents[stemType].shiftBarStartLeft();
+                    }
+                });
+            }
         }
 
         // Shift bar start right (make a later marker be bar 1)
@@ -4122,6 +4142,16 @@
             const file = audioFiles.find(f => f.id === currentFileId);
             if (file) {
                 addBarMarkers(file);
+            }
+
+            // Also shift all stem markers if stems are expanded
+            if (multiStemPlayerExpanded) {
+                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+                stemTypes.forEach(stemType => {
+                    if (stemPlayerComponents[stemType]) {
+                        stemPlayerComponents[stemType].shiftBarStartRight();
+                    }
+                });
             }
         }
 

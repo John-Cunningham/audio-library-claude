@@ -413,6 +413,18 @@ export class PlayerBarComponent {
         } else {
             console.error(`[${this.getLogPrefix()}] Cannot add markers - currentFile is not set!`);
         }
+
+        // If parent player, propagate to all stems
+        if (this.playerType === 'parent' && typeof window !== 'undefined' && window.stemPlayerComponents) {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            stemTypes.forEach(stemType => {
+                const stemComponent = window.stemPlayerComponents[stemType];
+                if (stemComponent) {
+                    console.log(`  → Propagating frequency change to ${stemType}`);
+                    stemComponent.setMarkerFrequency(freq);
+                }
+            });
+        }
     }
 
     /**
@@ -451,6 +463,18 @@ export class PlayerBarComponent {
         if (this.currentFile) {
             this.addBarMarkers(this.currentFile);
         }
+
+        // If parent player, propagate to all stems
+        if (this.playerType === 'parent' && typeof window !== 'undefined' && window.stemPlayerComponents) {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            stemTypes.forEach(stemType => {
+                const stemComponent = window.stemPlayerComponents[stemType];
+                if (stemComponent) {
+                    console.log(`  → Propagating shift left to ${stemType}`);
+                    stemComponent.shiftBarStartLeft();
+                }
+            });
+        }
     }
 
     /**
@@ -473,6 +497,18 @@ export class PlayerBarComponent {
         // Re-render markers
         if (this.currentFile) {
             this.addBarMarkers(this.currentFile);
+        }
+
+        // If parent player, propagate to all stems
+        if (this.playerType === 'parent' && typeof window !== 'undefined' && window.stemPlayerComponents) {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            stemTypes.forEach(stemType => {
+                const stemComponent = window.stemPlayerComponents[stemType];
+                if (stemComponent) {
+                    console.log(`  → Propagating shift right to ${stemType}`);
+                    stemComponent.shiftBarStartRight();
+                }
+            });
         }
     }
 

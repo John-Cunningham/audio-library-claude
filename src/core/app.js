@@ -2301,6 +2301,9 @@
         // CRITICAL: Expose to window so event handlers can access it
         window.stemPlaybackIndependent = stemPlaybackIndependent;
 
+        // CRITICAL: Expose stemPlayerComponents so parent component can propagate to stems
+        window.stemPlayerComponents = stemPlayerComponents;
+
         // Phase 2B: Individual Loop Controls (Version 27b)
         let stemLoopStates = {
             vocals: { enabled: false, start: null, end: null },

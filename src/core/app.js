@@ -2946,15 +2946,19 @@
 
             console.log('Setting up parent-stem synchronization');
 
-            // When parent plays, resume all stems that were playing before pause
+            // When parent plays, resume all NON-INDEPENDENT stems
+            // Use same logic as pause for symmetry
             wavesurfer.on('play', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent play event - resuming stems that were playing');
+                    console.log('Parent play event - resuming non-independent stems');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
-                        // Only play stems that were marked as playing (not manually paused by user)
-                        if (ws && stemPlaybackIndependent[stemType]) {
+                        const loopState = stemLoopStates[stemType];
+                        const isIndependent = loopState.enabled || stemPlaybackIndependent[stemType];
+
+                        if (ws && !isIndependent && !ws.isPlaying()) {
+                            // Only play stems that aren't in their own loop/cycle
                             ws.play();
                             const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
                             if (icon) icon.textContent = '||';

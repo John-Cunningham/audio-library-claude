@@ -3963,8 +3963,22 @@
         // VERSION 27D: PER-STEM MARKER FUNCTIONS
         // ============================================
 
+        // === STEM MARKER WRAPPERS (delegate to PlayerBarComponent) ===
+
         // Toggle markers for a specific stem
         function toggleStemMarkers(stemType) {
+            // Delegate to component if available
+            if (stemPlayerComponents[stemType]) {
+                stemPlayerComponents[stemType].toggleMarkers();
+                return;
+            }
+
+            // Fallback to old implementation
+            _oldToggleStemMarkers(stemType);
+        }
+
+        // OLD IMPLEMENTATION (fallback)
+        function _oldToggleStemMarkers(stemType) {
             stemMarkersEnabled[stemType] = !stemMarkersEnabled[stemType];
             console.log(`[${stemType}] Bar markers: ${stemMarkersEnabled[stemType] ? 'ON' : 'OFF'}`);
 
@@ -3987,6 +4001,18 @@
 
         // Change marker frequency for a specific stem
         function setStemMarkerFrequency(stemType, freq) {
+            // Delegate to component if available
+            if (stemPlayerComponents[stemType]) {
+                stemPlayerComponents[stemType].setMarkerFrequency(freq);
+                return;
+            }
+
+            // Fallback to old implementation
+            _oldSetStemMarkerFrequency(stemType, freq);
+        }
+
+        // OLD IMPLEMENTATION (fallback)
+        function _oldSetStemMarkerFrequency(stemType, freq) {
             stemMarkerFrequency[stemType] = freq;
             console.log(`[${stemType}] Marker frequency: ${freq}`);
 
@@ -4012,6 +4038,18 @@
 
         // Shift stem bar start left
         function shiftStemBarStartLeft(stemType) {
+            // Delegate to component if available
+            if (stemPlayerComponents[stemType]) {
+                stemPlayerComponents[stemType].shiftBarStartLeft();
+                return;
+            }
+
+            // Fallback to old implementation
+            _oldShiftStemBarStartLeft(stemType);
+        }
+
+        // OLD IMPLEMENTATION (fallback)
+        function _oldShiftStemBarStartLeft(stemType) {
             const increment = getStemShiftIncrement(stemType);
             stemBarStartOffset[stemType] -= increment;
             console.log(`[${stemType}] Bar start offset: ${stemBarStartOffset[stemType]} (shifted by -${increment})`);
@@ -4031,6 +4069,18 @@
 
         // Shift stem bar start right
         function shiftStemBarStartRight(stemType) {
+            // Delegate to component if available
+            if (stemPlayerComponents[stemType]) {
+                stemPlayerComponents[stemType].shiftBarStartRight();
+                return;
+            }
+
+            // Fallback to old implementation
+            _oldShiftStemBarStartRight(stemType);
+        }
+
+        // OLD IMPLEMENTATION (fallback)
+        function _oldShiftStemBarStartRight(stemType) {
             const increment = getStemShiftIncrement(stemType);
             stemBarStartOffset[stemType] += increment;
             console.log(`[${stemType}] Bar start offset: ${stemBarStartOffset[stemType]} (shifted by +${increment})`);

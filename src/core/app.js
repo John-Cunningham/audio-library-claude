@@ -2975,15 +2975,16 @@
             // Use same logic as pause for symmetry
             wavesurfer.on('play', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent play event - resuming non-independent stems');
+                    console.log('Parent play event - resuming stems that follow parent');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
                         const loopState = stemLoopStates[stemType];
-                        const isIndependent = loopState.enabled || stemPlaybackIndependent[stemType];
+                        // A stem follows parent if it's active AND doesn't have its own loop
+                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
 
-                        if (ws && !isIndependent && !ws.isPlaying()) {
-                            // Only play stems that aren't in their own loop/cycle
+                        if (ws && followsParent && !ws.isPlaying()) {
+                            // Only play stems that follow parent (not those with own loops)
                             ws.play();
                             const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
                             if (icon) icon.textContent = '||';
@@ -2992,19 +2993,20 @@
                 }
             });
 
-            // When parent pauses, pause only NON-INDEPENDENT stems
-            // Independent stems (those with their own cycles/loops) continue playing
+            // When parent pauses, pause only stems that follow parent
+            // Stems with their own loops continue playing independently
             wavesurfer.on('pause', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent pause event - pausing non-independent stems');
+                    console.log('Parent pause event - pausing stems that follow parent');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
                         const loopState = stemLoopStates[stemType];
-                        const isIndependent = loopState.enabled || stemPlaybackIndependent[stemType];
+                        // A stem follows parent if it's active AND doesn't have its own loop
+                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
 
-                        if (ws && !isIndependent) {
-                            // Only pause stems that aren't in their own loop/cycle
+                        if (ws && followsParent) {
+                            // Only pause stems that follow parent (not those with own loops)
                             if (ws.isPlaying()) {
                                 ws.pause();
                                 const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
@@ -3015,21 +3017,24 @@
                 }
             });
 
-            // When parent seeks, seek only NON-INDEPENDENT stems
-            // Independent stems (those with their own cycles/loops) maintain their own position
+            // When parent seeks, seek only stems that follow parent
+            // Stems with their own loops maintain their own position
             wavesurfer.on('seeking', (currentTime) => {
                 if (multiStemPlayerExpanded) {
                     const seekPosition = currentTime / wavesurfer.getDuration();
-                    console.log('Parent seek event - syncing non-independent stems to:', seekPosition);
+                    console.log('Parent seek event - syncing stems that follow parent to:', seekPosition);
 
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
                         const loopState = stemLoopStates[stemType];
-                        const isIndependent = loopState.enabled || stemPlaybackIndependent[stemType];
+                        // A stem follows parent if it's active AND doesn't have its own loop
+                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
 
-                        if (ws && !isIndependent) {
-                            // Only seek stems that aren't in their own loop/cycle
+                        console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}`);
+
+                        if (ws && followsParent) {
+                            // Only seek stems that follow parent (not those with own loops)
                             ws.seekTo(seekPosition);
                         }
                     });
@@ -3637,16 +3642,25 @@
 
         // Generate stems for a file
         function generateStems(fileId, event) {
+            console.log('🎵 generateStems called with fileId:', fileId);
             event.preventDefault();
             event.stopPropagation();
 
             const file = audioFiles.find(f => f.id === fileId);
-            if (!file) return;
+            console.log('📁 File found:', file?.name || 'NOT FOUND');
+            if (!file) {
+                console.warn('⚠️ File not found for ID:', fileId);
+                return;
+            }
 
             // Open the processing modal with stems icon context
             // This will pre-check the "Split Stems" checkbox and allow user to add other processing options
+            console.log('🔍 Checking for window.openEditTagsModal:', typeof window.openEditTagsModal);
             if (window.openEditTagsModal) {
+                console.log('✅ Opening modal with stems context');
                 window.openEditTagsModal('stems', fileId);
+            } else {
+                console.error('❌ window.openEditTagsModal is not available!');
             }
         }
 

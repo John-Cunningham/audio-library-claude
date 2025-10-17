@@ -665,7 +665,7 @@ export class PlayerBarComponent {
                 return;
             }
 
-            if (!this.waveform || this.currentMarkers.length === 0) return;
+            if (!this.waveform) return;
 
             // Get mouse position
             const rect = waveformContainer.getBoundingClientRect();
@@ -674,8 +674,10 @@ export class PlayerBarComponent {
             const duration = this.waveform.getDuration();
             const mouseTime = relativeX * duration;
 
-            // Find nearest marker to the left
-            const hoverSnapTime = this.findNearestMarkerToLeft(mouseTime);
+            // Find nearest marker to the left (or use exact mouse position if no markers)
+            const hoverSnapTime = this.currentMarkers.length > 0
+                ? this.findNearestMarkerToLeft(mouseTime)
+                : mouseTime;
 
             // Only show preview if hover position is after loop start
             if (hoverSnapTime <= window.loopStart) {

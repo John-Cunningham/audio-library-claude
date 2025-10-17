@@ -21,6 +21,7 @@
         let audioFiles = [];
         let wavesurfer = null;
         let parentPlayerComponent = null; // PlayerBarComponent instance for parent player
+        let stemPlayerComponents = {}; // PlayerBarComponent instances for stem players {vocals: component, drums: component, ...}
         let currentFileId = null;
         let selectedFiles = new Set();
         let processingFiles = new Set(); // Track files currently being processed
@@ -263,6 +264,7 @@
                     }
                 });
                 stemPlayerWavesurfers = {};
+                stemPlayerComponents = {}; // Clear component instances too
                 multiStemReadyCount = 0;
                 stemsPreloaded = false;
 
@@ -2504,6 +2506,15 @@
                 // Store instance
                 stemPlayerWavesurfers[stemType] = ws;
 
+                // Create PlayerBarComponent for this stem (Phase: Stem Components)
+                stemPlayerComponents[stemType] = new PlayerBarComponent({
+                    playerType: 'stem',
+                    stemType: stemType,
+                    waveform: ws
+                });
+                stemPlayerComponents[stemType].init();
+                console.log(`[STEM COMPONENTS] Created and initialized PlayerBarComponent for ${stemType} stem`);
+
                 // Set up time display updates and loop checking
                 ws.on('audioprocess', () => {
                     const currentTime = ws.getCurrentTime();
@@ -2534,10 +2545,20 @@
                     // Phase 4: Add cycle mode click handler for this stem
                     setupStemCycleModeClickHandler(stemType, container, ws);
 
-                    // Version 27d: Render markers if enabled
+                    // Version 27d: Load file into component (enables markers via component)
                     const file = audioFiles.find(f => f.id === currentFileId);
-                    if (file && stemMarkersEnabled[stemType]) {
-                        addStemBarMarkers(stemType, file);
+                    if (file) {
+                        // Load file into PlayerBarComponent (handles markers if enabled)
+                        if (stemPlayerComponents[stemType]) {
+                            stemPlayerComponents[stemType].loadFile(file);
+                            console.log(`[STEM COMPONENTS] Loaded file into ${stemType} component (markers: ${stemPlayerComponents[stemType].markersEnabled})`);
+                        }
+
+                        // OLD CODE (kept as fallback for now, but component should handle this)
+                        // TODO: Remove addStemBarMarkers() once all stems use components
+                        if (stemMarkersEnabled[stemType] && !stemPlayerComponents[stemType]) {
+                            addStemBarMarkers(stemType, file);
+                        }
                     }
                 });
 
@@ -2971,6 +2992,7 @@
                 }
             });
             stemPlayerWavesurfers = {};
+            stemPlayerComponents = {}; // Clear component instances too
             multiStemReadyCount = 0;
 
             // Restore parent player volume if it was muted

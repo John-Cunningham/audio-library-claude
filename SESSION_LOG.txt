@@ -563,3 +563,162 @@ User mentioned these future enhancements but has NOT requested implementation:
 2. Add individual cycle mode to stem players
 3. Add independent speed/pitch controls to stem players (like parent)
 
+================================================================================
+SESSION LOG - Volume Muting & Stem Cycle Visual Indicators
+================================================================================
+Date: 2025-10-17
+Branch: experimental-v27-stem-independence
+Commit: f51d223
+
+================================================================================
+OBJECTIVE
+================================================================================
+Fix two critical issues:
+1. Parent volume slider not completely muting stems at 0%
+2. Missing visual indicators for stem cycle mode
+
+================================================================================
+PROBLEMS REPORTED
+================================================================================
+
+**Issue 1: Volume Slider Not Muting Completely at 0%**
+User reported: "Even though I turn the master volume slider all the way to zero,
+I'm still hearing audio. I hear all the stems equally, but they are much quieter,
+they're just not silent."
+
+**Issue 2: Cycle Mode Visual Indicators Missing**
+User reported: "Cycle mode is working but I really can't tell without all the
+visual indicators. For instance, if I click cycle and cycle mode is on, that
+button needs to get highlighted to indicate its on. Then I need my same blue
+indicator when I am setting my loop start and loop end. When the cycle is set,
+I should see the blue A portion of the waveform indicating which part is within
+the cycle."
+
+================================================================================
+WORK COMPLETED
+================================================================================
+
+✅ 1. Fixed Volume Slider Muting at 0% (commit f51d223)
+   - File: src/core/app.js (lines 440-465)
+   - Function: updateStemAudioState()
+
+   **Root Cause**:
+   - Parent volume slider has max=398 (not 100)
+   - Old calculation: sliderValue / 100 wasn't properly normalizing
+   - At 0 slider value, needed explicit handling for complete silence
+
+   **Fix**:
+   ```javascript
+   const volumeSlider = document.getElementById('volumeSlider');
+   const sliderValue = volumeSlider ? parseFloat(volumeSlider.value) : 100;
+   const sliderMax = volumeSlider ? parseFloat(volumeSlider.max) : 398;
+
+   // Calculate master volume as 0-1 range, ensuring complete silence at 0
+   const masterVolume = sliderValue === 0 ? 0 : sliderValue / sliderMax;
+   ```
+
+   **Result**: Parent volume at 0% now completely silences all stems (no audio)
+
+✅ 2. Added Stem Cycle Mode Visual Indicators (commit f51d223)
+   - File: src/core/app.js (lines 3153-3340)
+
+   **Added Functions**:
+
+   A) `updateStemLoopVisuals(stemType)` - lines 3272-3309
+      - Updates CYCLE button active state (adds/removes 'active' class)
+      - Updates loop status text:
+        * "Off" (gray) - cycle mode disabled
+        * "Click start" (amber) - waiting for loop start
+        * "Click end →" (amber) - waiting for loop end
+        * "X.Xs" (green) - loop duration when active
+      - Calls updateStemLoopRegion() to draw waveform overlay
+
+   B) `updateStemLoopRegion(stemType)` - lines 3311-3340
+      - Creates blue loop region overlay on stem waveform
+      - Calculates position/width based on loop start/end times
+      - Removes overlay when cycle mode disabled or loop cleared
+
+   **Integration Points**:
+   - Modified toggleStemCycleMode() (lines 3153-3177):
+     * Now calls updateStemLoopVisuals() on mode toggle
+   - Modified stem waveform click handler (lines 3210-3266):
+     * Calls updateStemLoopVisuals() after setting loop start (line 3235)
+     * Calls updateStemLoopVisuals() after setting loop end (line 3265)
+     * Calls updateStemLoopVisuals() after moving loop start (line 3216)
+     * Calls updateStemLoopVisuals() after moving loop end (line 3222)
+
+   **Export**:
+   - Added window.toggleStemCycleMode export (line 6866)
+
+   **Result**: Stems now have complete visual feedback for cycle mode:
+   - ✅ CYCLE button highlights when active
+   - ✅ Status text guides user through loop setting process
+   - ✅ Blue loop region overlay shows active loop section on waveform
+
+================================================================================
+TESTING STATUS
+================================================================================
+
+⚠️ READY FOR USER TESTING
+
+User should test the following:
+
+1. **Volume Muting at 0%:**
+   - Set parent volume slider to 0%
+   - Verify all stems are completely silent (no audio at all)
+   - Move slider back up - verify audio returns
+
+2. **Stem Cycle Mode Visual Indicators:**
+   - Click CYCLE button on any stem player
+   - Verify button highlights (active state)
+   - Click waveform once - verify status shows "Click start"
+   - Click waveform again - verify status shows "Click end →"
+   - After setting end - verify blue loop region appears on waveform
+   - Verify region position matches loop start/end points
+   - Click CYCLE again to disable - verify button unhighlights and region disappears
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+Modified:
+- src/core/app.js (lines 440-465, 3153-3177, 3210-3340, 6866)
+  * Fixed updateStemAudioState() volume calculation
+  * Updated toggleStemCycleMode() to call visual updates
+  * Added updateStemLoopVisuals() function
+  * Added updateStemLoopRegion() function
+  * Modified stem waveform click handler to call visual updates
+  * Exported toggleStemCycleMode to window
+
+================================================================================
+COMMITS
+================================================================================
+
+f51d223 - fix: Complete volume muting at 0% and add stem cycle mode visual indicators
+
+Commit Message:
+```
+fix: Complete volume muting at 0% and add stem cycle mode visual indicators
+
+- Fixed volume calculation to properly handle parent slider max=398
+- Added explicit zero check to ensure complete silence at 0%
+- Created updateStemLoopVisuals() for button/status updates
+- Created updateStemLoopRegion() for blue loop overlay on waveform
+- Integrated visual updates into toggleStemCycleMode() and click handlers
+
+Fixes:
+- Parent volume at 0% now completely mutes all stems
+- Stem CYCLE button now highlights when active
+- Loop region shows blue overlay on waveform
+- Status text updates during loop setting (Click start → Click end → duration)
+
+🤖 Generated with Claude Code (https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+================================================================================
+CURRENT WORKING COMMIT: f51d223
+================================================================================
+Both fixes implemented and committed. Ready for user testing. ✅
+

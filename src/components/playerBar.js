@@ -139,14 +139,16 @@ export class PlayerBarComponent {
      * This handler intercepts clicks on the waveform to provide:
      * 1. Snap-to-marker functionality (when markers enabled)
      * 2. Cycle mode loop point setting (when in cycle mode)
+     *
+     * Works for BOTH parent and stem players
      */
     setupWaveformClickHandler() {
-        // Only setup for parent player (not stems)
-        if (this.playerType !== 'parent') {
-            return;
-        }
+        // Get waveform container based on player type
+        const waveformContainerId = this.playerType === 'parent'
+            ? 'waveform'
+            : `multi-stem-waveform-${this.stemType}`;
 
-        const waveformContainer = document.getElementById('waveform');
+        const waveformContainer = document.getElementById(waveformContainerId);
         if (!waveformContainer) {
             console.warn(`[${this.getLogPrefix()}] Waveform container not found`);
             return;
@@ -162,10 +164,13 @@ export class PlayerBarComponent {
 
         // Create click handler with closure over component instance
         const clickHandler = (e) => {
-            // Access global loop/cycle state from app.js
-            // TODO: Move these into component state when refactoring loop controls
-            const cycleMode = window.cycleMode || false;
-            const seekOnClick = window.seekOnClick || false;
+            // Get loop/cycle state (parent uses global window state, stems use instance state)
+            const cycleMode = this.playerType === 'parent'
+                ? (window.cycleMode || false)
+                : this.cycleMode;
+            const seekOnClick = this.playerType === 'parent'
+                ? (window.seekOnClick || false)
+                : this.seekOnClick;
 
             // If markers are disabled AND not in cycle mode, let WaveSurfer handle click normally
             if (!this.markersEnabled || this.currentMarkers.length === 0) {

@@ -2301,6 +2301,9 @@
             other: { enabled: false, start: null, end: null }
         };
 
+        // CRITICAL: Expose to window so PlayerBarComponent can sync to it
+        window.stemLoopStates = stemLoopStates;
+
         // Phase 4: Cycle Mode Controls (Version 27c)
         let stemCycleModes = {
             vocals: false,

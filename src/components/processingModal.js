@@ -316,15 +316,21 @@ function createProcessingModalHTML() {
  * Initialize the processing modal component
  */
 function initProcessingModal() {
+    console.log('🔧 initProcessingModal called');
     injectProcessingModalStyles();
+    console.log('✅ CSS styles injected');
 
     // Check if modal already exists
     if (!document.getElementById('editTagsModal')) {
+        console.log('📝 Creating modal HTML and appending to DOM');
         // Create a container for the modal
         const modalContainer = document.createElement('div');
         modalContainer.id = 'processingModalContainer';
         modalContainer.innerHTML = createProcessingModalHTML();
         document.body.appendChild(modalContainer);
+        console.log('✅ Modal HTML appended');
+    } else {
+        console.log('⚠️ Modal already exists, skipping creation');
     }
 
     // Make modal functions globally accessible
@@ -333,6 +339,8 @@ function initProcessingModal() {
         closeEditTagsModal: closeEditTagsModal,
         handleSave: handleSaveEditedTags
     };
+    console.log('✅ window.processingModal initialized:', window.processingModal);
+    console.log('✅ window.openEditTagsModal available:', typeof window.openEditTagsModal);
 }
 
 /**
@@ -387,7 +395,11 @@ function closeEditTagsModal() {
  * Delegates to the main app's saveEditedTags or processes stems only
  */
 async function handleSaveEditedTags() {
+    console.log('💾 handleSaveEditedTags called');
+    console.log('📌 stemsIconFileId:', stemsIconFileId);
+
     if (stemsIconFileId) {
+        console.log('🎯 Stems icon context detected - processing single file');
         // Stems icon context - only process this file with selected options
         const filesToUpdate = [stemsIconFileId];
 
@@ -399,6 +411,16 @@ async function handleSaveEditedTags() {
         const shouldProcessAutoTag = document.getElementById('processAutoTag').checked;
         const shouldConvertMp3 = document.getElementById('processConvertMp3').checked;
 
+        console.log('✔️ Processing options:', {
+            stems: shouldProcessStems,
+            bpmKey: shouldProcessBpmKey,
+            instruments: shouldProcessInstruments,
+            chords: shouldProcessChords,
+            beatmap: shouldProcessBeatmap,
+            autoTag: shouldProcessAutoTag,
+            convertMp3: shouldConvertMp3
+        });
+
         // Close modal
         closeEditTagsModal();
 
@@ -406,7 +428,11 @@ async function handleSaveEditedTags() {
         const anyProcessing = shouldProcessBpmKey || shouldProcessInstruments || shouldProcessChords ||
                              shouldProcessBeatmap || shouldProcessStems || shouldProcessAutoTag || shouldConvertMp3;
 
+        console.log('🔍 Any processing selected:', anyProcessing);
+        console.log('🔍 window.runSelectedProcessing available:', typeof window.runSelectedProcessing);
+
         if (anyProcessing && window.runSelectedProcessing) {
+            console.log('✅ Calling runSelectedProcessing with file IDs:', filesToUpdate);
             // Call the main app's processing function with just this file
             await window.runSelectedProcessing(filesToUpdate, {
                 bpmKey: shouldProcessBpmKey,
@@ -417,11 +443,16 @@ async function handleSaveEditedTags() {
                 auto_tag: shouldProcessAutoTag,
                 convert_to_mp3: shouldConvertMp3
             });
+        } else {
+            console.error('❌ Cannot proceed: anyProcessing=' + anyProcessing + ', runSelectedProcessing=' + (typeof window.runSelectedProcessing));
         }
     } else {
+        console.log('📝 Edit mode detected - calling saveEditedTags');
         // Edit mode - call the main app's saveEditedTags function
         if (window.saveEditedTags) {
             await window.saveEditedTags();
+        } else {
+            console.error('❌ window.saveEditedTags not available!');
         }
     }
 }
@@ -433,5 +464,10 @@ if (document.readyState === 'loading') {
     initProcessingModal();
 }
 
-// Export functions for use in other modules
-export { openEditTagsModal, closeEditTagsModal, handleSaveEditedTags, initProcessingModal };
+// Also ensure modal is available after a short delay to handle module loading order
+setTimeout(() => {
+    if (!window.processingModal) {
+        console.log('⏲️ Delayed initialization - modal not available, initializing now');
+        initProcessingModal();
+    }
+}, 100);

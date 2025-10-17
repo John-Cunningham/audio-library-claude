@@ -218,6 +218,8 @@ export class PlayerBarComponent {
                             window.loopStart = snapTime;
                         } else {
                             this.loopStart = snapTime;
+                            // Sync to global state for wavesurfer handlers
+                            this.syncLoopStateToGlobal();
                         }
                         console.log(`[${this.getLogPrefix()}] Loop start moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
                         this.updateLoopVisuals();
@@ -231,6 +233,8 @@ export class PlayerBarComponent {
                             window.loopEnd = snapTime;
                         } else {
                             this.loopEnd = snapTime;
+                            // Sync to global state for wavesurfer handlers
+                            this.syncLoopStateToGlobal();
                         }
                         console.log(`[${this.getLogPrefix()}] Loop end moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
                         this.updateLoopVisuals();
@@ -253,6 +257,8 @@ export class PlayerBarComponent {
                         this.loopStart = snapTime;
                         this.loopEnd = null;
                         this.nextClickSets = 'end';
+                        // Sync to global state for wavesurfer handlers
+                        this.syncLoopStateToGlobal();
                     }
                     console.log(`[${this.getLogPrefix()}] Loop start set to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
                     if (this.playerType === 'parent' && window.recordAction) {
@@ -270,6 +276,8 @@ export class PlayerBarComponent {
                     } else {
                         this.loopEnd = snapTime;
                         // Note: For stems, cycleMode stays true (was set by toggleCycleMode())
+                        // Sync to global state for wavesurfer handlers
+                        this.syncLoopStateToGlobal();
                     }
                     justSetLoopEnd = true;
                     console.log(`[${this.getLogPrefix()}] Loop end set to ${snapTime.toFixed(2)}s - Loop active! ${seekOnClick === 'clock' ? '(seeking to loop start)' : seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
@@ -817,10 +825,32 @@ export class PlayerBarComponent {
             this.loopStart = null;
             this.loopEnd = null;
             console.log(`[${this.getLogPrefix()}] CYCLE MODE OFF - loop disabled`);
+
+            // Sync to global state so wavesurfer handlers see the change
+            this.syncLoopStateToGlobal();
         }
 
         // Update visual indicators
         this.updateLoopVisuals();
+    }
+
+    /**
+     * Sync component loop state to global stemLoopStates (for wavesurfer handlers)
+     * This is needed because wavesurfer event handlers in app.js check the global state
+     */
+    syncLoopStateToGlobal() {
+        // Only sync for stems
+        if (this.playerType !== 'stem' || !this.stemType) return;
+
+        // Access global stemLoopStates from app.js
+        if (typeof window !== 'undefined' && window.stemLoopStates && window.stemLoopStates[this.stemType]) {
+            const loopState = window.stemLoopStates[this.stemType];
+            loopState.start = this.loopStart;
+            loopState.end = this.loopEnd;
+            loopState.enabled = this.loopStart !== null && this.loopEnd !== null;
+
+            console.log(`[${this.getLogPrefix()}] Synced loop state to global: start=${this.loopStart?.toFixed(2)}, end=${this.loopEnd?.toFixed(2)}, enabled=${loopState.enabled}`);
+        }
     }
 
     /**

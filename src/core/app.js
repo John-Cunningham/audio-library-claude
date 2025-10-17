@@ -441,6 +441,25 @@
             // Phase 4 Step 2B: Get master volume from slider
             const masterVolume = document.getElementById('volumeSlider')?.value / 100 || 1.0;
 
+            // Update NEW multi-stem player volumes (when expanded)
+            if (multiStemPlayerExpanded) {
+                console.log(`[UPDATE STEM AUDIO] Master volume: ${(masterVolume * 100).toFixed(0)}%`);
+                Object.keys(stemPlayerWavesurfers).forEach(stemType => {
+                    const stemWS = stemPlayerWavesurfers[stemType];
+                    if (!stemWS) return;
+
+                    // Get the stem's individual volume slider value
+                    const stemVolumeSlider = document.getElementById(`stem-volume-${stemType}`);
+                    const stemVolume = stemVolumeSlider ? stemVolumeSlider.value / 100 : 1.0;
+
+                    // Multiply master volume by stem's individual volume
+                    const finalVolume = masterVolume * stemVolume;
+                    stemWS.setVolume(finalVolume);
+                    console.log(`[UPDATE STEM AUDIO] ${stemType}: master ${(masterVolume * 100).toFixed(0)}% × stem ${(stemVolume * 100).toFixed(0)}% = ${(finalVolume * 100).toFixed(0)}%`);
+                });
+            }
+
+            // Also update OLD stem player volumes (legacy Phase 4 code)
             // Phase 4 Fix 2: Check if any stems are soloed (using stem file IDs)
             const stemFileIds = Object.values(stemFiles).map(sf => sf.id);
             const anySoloed = stemFileIds.some(id => stemSoloed[id]);
@@ -3533,13 +3552,11 @@
             const file = audioFiles.find(f => f.id === fileId);
             if (!file) return;
 
-            // Show confirmation dialog
-            if (!confirm(`Generate stems for "${file.name}"?\n\nThis will create 4 separate stem files (vocals, bass, drums, other) using the Demucs separation model. The process may take several minutes.`)) {
-                return;
+            // Open the processing modal with stems icon context
+            // This will pre-check the "Split Stems" checkbox and allow user to add other processing options
+            if (window.openEditTagsModal) {
+                window.openEditTagsModal('stems', fileId);
             }
-
-            // TODO: Implement stem generation via Railway webhook
-            alert('Stem generation will be implemented with Railway webhook integration.');
         }
 
         // Load audio file

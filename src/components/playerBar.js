@@ -366,10 +366,13 @@ export class PlayerBarComponent {
     setMarkerFrequency(freq) {
         this.markerFrequency = freq;
         console.log(`[${this.getLogPrefix()}] Marker frequency: ${freq}`);
+        console.log(`[${this.getLogPrefix()}] currentFile:`, this.currentFile ? 'exists' : 'NULL');
 
         // Re-render current file's markers
         if (this.currentFile) {
             this.addBarMarkers(this.currentFile);
+        } else {
+            console.error(`[${this.getLogPrefix()}] Cannot add markers - currentFile is not set!`);
         }
     }
 
@@ -582,7 +585,10 @@ export class PlayerBarComponent {
                 filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1);
                 break;
             case 'halfbar':
+                console.log(`[${this.getLogPrefix()}] HALFBAR: Checking ${beatmapWithBars.length} beats for beatNum === 1 or 3`);
+                console.log(`[${this.getLogPrefix()}] HALFBAR: First 10 beats beatNum values:`, beatmapWithBars.slice(0, 10).map(b => b.beatNum));
                 filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 || b.beatNum === 3);
+                console.log(`[${this.getLogPrefix()}] HALFBAR: Found ${filteredBeats.length} matching beats`);
                 break;
             case 'beat':
                 filteredBeats = beatmapWithBars;

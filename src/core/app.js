@@ -3151,6 +3151,15 @@
 
         // Phase 4: Toggle Cycle Mode for individual stem
         function toggleStemCycleMode(stemType) {
+            // Delegate to PlayerBarComponent if it exists
+            const stemComponent = stemPlayerComponents[stemType];
+            if (stemComponent) {
+                stemComponent.toggleCycleMode();
+                return;
+            }
+
+            // Fallback to old implementation (shouldn't happen if components are set up properly)
+            console.warn(`[toggleStemCycleMode] No component found for ${stemType}, using fallback`);
             const ws = stemPlayerWavesurfers[stemType];
             if (!ws) return;
 

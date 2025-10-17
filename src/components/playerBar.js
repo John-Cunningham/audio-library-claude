@@ -205,22 +205,35 @@ export class PlayerBarComponent {
                     e.stopImmediatePropagation();
                 }
 
+                // Get loop state (parent uses global window, stems use instance)
+                const loopStart = this.playerType === 'parent' ? window.loopStart : this.loopStart;
+                const loopEnd = this.playerType === 'parent' ? window.loopEnd : this.loopEnd;
+                const nextClickSets = this.playerType === 'parent' ? window.nextClickSets : this.nextClickSets;
+
                 // Check if clicking left of loop start (reset start) or right of loop end (reset end)
-                if (window.loopStart !== null && window.loopEnd !== null) {
-                    if (snapTime < window.loopStart) {
+                if (loopStart !== null && loopEnd !== null) {
+                    if (snapTime < loopStart) {
                         // Clicking left of loop start: reset loop start
-                        window.loopStart = snapTime;
-                        console.log(`Loop start moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
-                        if (window.updateLoopVisuals) window.updateLoopVisuals();
+                        if (this.playerType === 'parent') {
+                            window.loopStart = snapTime;
+                        } else {
+                            this.loopStart = snapTime;
+                        }
+                        console.log(`[${this.getLogPrefix()}] Loop start moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                        this.updateLoopVisuals();
                         if (seekOnClick === 'seek') {
                             this.waveform.seekTo(snapTime / duration);
                         }
                         return false;
-                    } else if (snapTime > window.loopEnd) {
+                    } else if (snapTime > loopEnd) {
                         // Clicking right of loop end: reset loop end
-                        window.loopEnd = snapTime;
-                        console.log(`Loop end moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
-                        if (window.updateLoopVisuals) window.updateLoopVisuals();
+                        if (this.playerType === 'parent') {
+                            window.loopEnd = snapTime;
+                        } else {
+                            this.loopEnd = snapTime;
+                        }
+                        console.log(`[${this.getLogPrefix()}] Loop end moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                        this.updateLoopVisuals();
                         if (seekOnClick === 'seek') {
                             this.waveform.seekTo(snapTime / duration);
                         }
@@ -231,33 +244,45 @@ export class PlayerBarComponent {
                 // Normal loop setting flow
                 let justSetLoopEnd = false;
 
-                if (window.nextClickSets === 'start') {
-                    window.loopStart = snapTime;
-                    window.loopEnd = null;
-                    window.nextClickSets = 'end';
-                    console.log(`Loop start set to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
-                    if (window.recordAction) {
+                if (nextClickSets === 'start') {
+                    if (this.playerType === 'parent') {
+                        window.loopStart = snapTime;
+                        window.loopEnd = null;
+                        window.nextClickSets = 'end';
+                    } else {
+                        this.loopStart = snapTime;
+                        this.loopEnd = null;
+                        this.nextClickSets = 'end';
+                    }
+                    console.log(`[${this.getLogPrefix()}] Loop start set to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                    if (this.playerType === 'parent' && window.recordAction) {
                         window.recordAction('setLoopStart', { loopStart: snapTime });
                     }
-                } else if (window.nextClickSets === 'end') {
-                    if (snapTime <= window.loopStart) {
-                        console.log('Loop end must be after loop start - ignoring click');
+                } else if (nextClickSets === 'end') {
+                    const currentLoopStart = this.playerType === 'parent' ? window.loopStart : this.loopStart;
+                    if (snapTime <= currentLoopStart) {
+                        console.log(`[${this.getLogPrefix()}] Loop end must be after loop start - ignoring click`);
                         return;
                     }
-                    window.loopEnd = snapTime;
-                    window.cycleMode = true;
+                    if (this.playerType === 'parent') {
+                        window.loopEnd = snapTime;
+                        window.cycleMode = true;
+                    } else {
+                        this.loopEnd = snapTime;
+                        // Note: For stems, cycleMode stays true (was set by toggleCycleMode())
+                    }
                     justSetLoopEnd = true;
-                    console.log(`Loop end set to ${snapTime.toFixed(2)}s - Loop active! ${seekOnClick === 'clock' ? '(seeking to loop start)' : seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
-                    if (window.recordAction) {
+                    console.log(`[${this.getLogPrefix()}] Loop end set to ${snapTime.toFixed(2)}s - Loop active! ${seekOnClick === 'clock' ? '(seeking to loop start)' : seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                    if (this.playerType === 'parent' && window.recordAction) {
                         window.recordAction('setLoopEnd', {
-                            loopStart: window.loopStart,
+                            loopStart: currentLoopStart,
                             loopEnd: snapTime,
-                            loopDuration: snapTime - window.loopStart
+                            loopDuration: snapTime - currentLoopStart
                         });
                     }
                 }
 
-                if (window.updateLoopVisuals) window.updateLoopVisuals();
+                this.updateLoopVisuals();
 
                 // Handle seeking based on mode
                 if (seekOnClick === 'seek') {
@@ -265,7 +290,8 @@ export class PlayerBarComponent {
                     this.waveform.seekTo(snapTime / duration);
                 } else if (seekOnClick === 'clock' && justSetLoopEnd) {
                     // Clock mode: ONLY after setting loop end, jump to loop start
-                    this.waveform.seekTo(window.loopStart / duration);
+                    const finalLoopStart = this.playerType === 'parent' ? window.loopStart : this.loopStart;
+                    this.waveform.seekTo(finalLoopStart / duration);
                 }
 
                 // Important: return early to prevent any seeking (if seekOnClick is off)
@@ -673,11 +699,17 @@ export class PlayerBarComponent {
     /**
      * Setup hover preview handlers for cycle mode
      * Shows blue preview of loop region as you move mouse (before clicking to set end)
+     * Works for BOTH parent and stem players
      */
     setupHoverPreview(waveformContainer) {
         const mousemoveHandler = (e) => {
+            // Get cycle state (parent uses global window, stems use instance)
+            const cycleMode = this.playerType === 'parent' ? window.cycleMode : this.cycleMode;
+            const loopStart = this.playerType === 'parent' ? window.loopStart : this.loopStart;
+            const loopEnd = this.playerType === 'parent' ? window.loopEnd : this.loopEnd;
+
             // Only show preview when in edit mode and start is set but end is not
-            if (!window.cycleMode || window.loopStart === null || window.loopEnd !== null) {
+            if (!cycleMode || loopStart === null || loopEnd !== null) {
                 // Remove any existing preview
                 const existingPreview = waveformContainer.querySelector('.loop-preview');
                 if (existingPreview) existingPreview.remove();
@@ -699,7 +731,7 @@ export class PlayerBarComponent {
                 : mouseTime;
 
             // Only show preview if hover position is after loop start
-            if (hoverSnapTime <= window.loopStart) {
+            if (hoverSnapTime <= loopStart) {
                 const existingPreview = waveformContainer.querySelector('.loop-preview');
                 if (existingPreview) existingPreview.remove();
                 return;
@@ -710,7 +742,7 @@ export class PlayerBarComponent {
             if (existingPreview) existingPreview.remove();
 
             // Create new preview
-            const startPercent = (window.loopStart / duration) * 100;
+            const startPercent = (loopStart / duration) * 100;
             const hoverPercent = (hoverSnapTime / duration) * 100;
             const widthPercent = hoverPercent - startPercent;
 
@@ -755,6 +787,132 @@ export class PlayerBarComponent {
         }
 
         return nearestMarker;
+    }
+
+    // ============================================
+    // LOOP/CYCLE CONTROLS
+    // ============================================
+
+    /**
+     * Toggle cycle mode on/off
+     */
+    toggleCycleMode() {
+        // For parent, delegate to global state
+        if (this.playerType === 'parent') {
+            if (window.toggleCycleMode) {
+                window.toggleCycleMode();
+            }
+            return;
+        }
+
+        // For stems, use instance state
+        this.cycleMode = !this.cycleMode;
+
+        if (this.cycleMode) {
+            // Entering cycle mode - enable loop editing
+            this.nextClickSets = 'start';
+            console.log(`[${this.getLogPrefix()}] CYCLE MODE ON - click waveform to set loop start/end`);
+        } else {
+            // Exiting cycle mode - disable loop editing and clear loop
+            this.loopStart = null;
+            this.loopEnd = null;
+            console.log(`[${this.getLogPrefix()}] CYCLE MODE OFF - loop disabled`);
+        }
+
+        // Update visual indicators
+        this.updateLoopVisuals();
+    }
+
+    /**
+     * Update loop visuals (button states, status text, loop region)
+     */
+    updateLoopVisuals() {
+        // For parent, delegate to global function
+        if (this.playerType === 'parent') {
+            if (window.updateLoopVisuals) {
+                window.updateLoopVisuals();
+            }
+            return;
+        }
+
+        // For stems, update stem-specific UI
+        const cycleBtn = document.getElementById(`stem-cycle-btn-${this.stemType}`);
+        const loopStatus = document.getElementById(`stem-loop-status-${this.stemType}`);
+
+        // Update cycle button state
+        if (cycleBtn) {
+            if (this.cycleMode) {
+                cycleBtn.classList.add('active');
+            } else {
+                cycleBtn.classList.remove('active');
+            }
+        }
+
+        // Update status text
+        if (loopStatus) {
+            const hasLoop = this.loopStart !== null && this.loopEnd !== null;
+            if (!this.cycleMode && !hasLoop) {
+                loopStatus.textContent = 'Off';
+                loopStatus.style.color = '#666';
+            } else if (this.cycleMode && this.loopStart === null) {
+                loopStatus.textContent = 'Click start';
+                loopStatus.style.color = '#f59e0b';
+            } else if (this.cycleMode && this.loopEnd === null) {
+                loopStatus.textContent = 'Click end →';
+                loopStatus.style.color = '#f59e0b';
+            } else if (hasLoop) {
+                const duration = this.loopEnd - this.loopStart;
+                loopStatus.textContent = `${duration.toFixed(1)}s`;
+                loopStatus.style.color = '#10b981';
+            }
+        }
+
+        // Update loop region visualization
+        this.updateLoopRegion();
+    }
+
+    /**
+     * Update loop region overlay on waveform
+     */
+    updateLoopRegion() {
+        // Get waveform container based on player type
+        const waveformContainerId = this.playerType === 'parent'
+            ? 'waveform'
+            : `multi-stem-waveform-${this.stemType}`;
+
+        const waveformContainer = document.getElementById(waveformContainerId);
+        if (!waveformContainer) return;
+
+        const ws = this.waveform;
+
+        // Remove existing loop region
+        const existingRegion = waveformContainer.querySelector('.loop-region');
+        if (existingRegion) existingRegion.remove();
+
+        // For parent, delegate to global function
+        if (this.playerType === 'parent') {
+            if (window.updateLoopRegion) {
+                window.updateLoopRegion();
+            }
+            return;
+        }
+
+        // Don't draw if cycle mode is off or loop not fully set
+        if (!this.cycleMode || this.loopStart === null || this.loopEnd === null || !ws) return;
+
+        const duration = ws.getDuration();
+        if (duration === 0) return;
+
+        const startPercent = (this.loopStart / duration) * 100;
+        const endPercent = (this.loopEnd / duration) * 100;
+        const widthPercent = endPercent - startPercent;
+
+        const loopRegion = document.createElement('div');
+        loopRegion.className = 'loop-region';
+        loopRegion.style.left = `${startPercent}%`;
+        loopRegion.style.width = `${widthPercent}%`;
+
+        waveformContainer.appendChild(loopRegion);
     }
 
     /**

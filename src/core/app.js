@@ -2646,13 +2646,23 @@
                 wavesurfer.setVolume(0);
                 console.log('✓ Parent muted');
 
-                // 3. UNMUTE ALL STEMS
+                // 3. UNMUTE ALL STEMS (inherit parent's volume on first expansion)
+                const parentVolumeSlider = document.getElementById('volumeSlider');
+                const parentVolume = parentVolumeSlider ? parentVolumeSlider.value / 100 : 1.0;
+
                 stemTypes.forEach(type => {
                     const ws = stemPlayerWavesurfers[type];
                     if (ws) {
                         const volumeSlider = document.getElementById(`stem-volume-${type}`);
-                        const targetVolume = volumeSlider ? volumeSlider.value / 100 : 1.0;
+                        // Use stem's own volume if it's been set, otherwise inherit from parent
+                        const targetVolume = (volumeSlider && volumeSlider.value != 100)
+                            ? volumeSlider.value / 100
+                            : parentVolume;
                         ws.setVolume(targetVolume);
+                        // Update stem volume slider to match
+                        if (volumeSlider && volumeSlider.value == 100) {
+                            volumeSlider.value = parentVolume * 100;
+                        }
                         console.log(`✓ ${type} unmuted (volume: ${targetVolume})`);
                     }
                 });
@@ -5410,66 +5420,17 @@
                 return;
             }
 
-            // If stems are expanded, control stems instead of parent
-            if (multiStemPlayerExpanded) {
-                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            // ALWAYS control the parent wavesurfer
+            // Even when stems are expanded, parent plays (muted) and stems sync via events
+            wavesurfer.playPause();
+            const icon = document.getElementById('playPauseIcon');
+            icon.textContent = wavesurfer.isPlaying() ? '⏸' : '▶';
 
-                // Check if any stem is currently playing
-                const anyPlaying = stemTypes.some(type => {
-                    const ws = stemPlayerWavesurfers[type];
-                    return ws && ws.isPlaying();
-                });
+            // Track user pause state (if pausing, set to true; if playing, set to false)
+            userPaused = !wavesurfer.isPlaying();
 
-                if (anyPlaying) {
-                    // Pause all stems that are following parent (active stems)
-                    stemTypes.forEach(type => {
-                        const ws = stemPlayerWavesurfers[type];
-                        const loopState = stemLoopStates[type];
-                        const followsParent = stemPlaybackIndependent[type] && !loopState.enabled;
-
-                        if (ws && followsParent && ws.isPlaying()) {
-                            ws.pause();
-                            const icon = document.getElementById(`stem-play-pause-icon-${type}`);
-                            if (icon) icon.textContent = '▶';
-                            console.log(`Paused ${type} stem (following parent)`);
-                        }
-                    });
-                    userPaused = true;
-                } else {
-                    // Play all stems that should follow parent (active stems)
-                    stemTypes.forEach(type => {
-                        const ws = stemPlayerWavesurfers[type];
-                        const loopState = stemLoopStates[type];
-                        const followsParent = stemPlaybackIndependent[type] && !loopState.enabled;
-
-                        if (ws && followsParent && !ws.isPlaying()) {
-                            ws.play();
-                            const icon = document.getElementById(`stem-play-pause-icon-${type}`);
-                            if (icon) icon.textContent = '||';
-                            console.log(`Playing ${type} stem (following parent)`);
-                        }
-                    });
-                    userPaused = false;
-                }
-
-                // Update parent button icon based on stem state
-                const icon = document.getElementById('playPauseIcon');
-                icon.textContent = anyPlaying ? '▶' : '⏸';
-
-                // Record action
-                recordAction(anyPlaying ? 'pause' : 'play', {});
-            } else {
-                // Normal parent control when stems are collapsed
-                wavesurfer.playPause();
-                const icon = document.getElementById('playPauseIcon');
-                icon.textContent = wavesurfer.isPlaying() ? '⏸' : '▶';
-
-                // Track user pause state (if pausing, set to true; if playing, set to false)
-                userPaused = !wavesurfer.isPlaying();
-
-                // Record action
-                recordAction(wavesurfer.isPlaying() ? 'play' : 'pause', {});
-            }
+            // Record action
+            recordAction(wavesurfer.isPlaying() ? 'play' : 'pause', {});
         }
 
         // Update player time display

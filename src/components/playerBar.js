@@ -479,7 +479,10 @@ export class PlayerBarComponent {
         markerContainer.style.width = '100%';
 
         // Debug: Log first few beats of original beatmap from Music.ai
-        console.log(`[BEATMAP DEBUG] First 10 beats from Music.ai beatmap:`, file.beatmap.slice(0, 10));
+        console.log(`[BEATMAP DEBUG] ===== ORIGINAL Music.ai beatmap (first 10 beats) =====`);
+        file.beatmap.slice(0, 10).forEach((beat, idx) => {
+            console.log(`  [${idx}] time: ${beat.time.toFixed(3)}s, beatNum: ${beat.beatNum}, barNumber: ${beat.barNumber || 'N/A'}`);
+        });
 
         // Normalize beatmap (force first beat to be bar 1, beat 1)
         // This fixes issues where Music.ai thinks the first onset is beat 3
@@ -492,7 +495,10 @@ export class PlayerBarComponent {
             return { ...beat, originalIndex: index };
         });
 
-        console.log(`[BEATMAP DEBUG] First 10 beats AFTER normalization:`, normalizedBeatmap.slice(0, 10));
+        console.log(`[BEATMAP DEBUG] ===== AFTER normalization (first 10 beats) =====`);
+        normalizedBeatmap.slice(0, 10).forEach((beat, idx) => {
+            console.log(`  [${idx}] time: ${beat.time.toFixed(3)}s, beatNum: ${beat.beatNum}, originalIndex: ${beat.originalIndex}`);
+        });
 
         // Split barStartOffset into integer bars and fractional beats
         const barOffset = Math.floor(this.barStartOffset);

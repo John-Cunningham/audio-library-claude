@@ -279,3 +279,173 @@ CURRENT WORKING COMMIT: 838c1b6
 ================================================================================
 All features tested and working. Safe revert point.
 
+================================================================================
+SESSION LOG - Speed/Pitch Placeholder UI
+================================================================================
+Date: 2025-10-16 (Continued)
+Branch: experimental-v27-stem-independence
+Commits: 54fcd19 → 8df7c4e (1 commit)
+
+================================================================================
+OBJECTIVE
+================================================================================
+Add placeholder UI for independent speed/pitch controls that can be wired up
+with Signalsmith time-stretch library in future sessions.
+
+**Priority #1**: Keep stem rate controls working (non-negotiable)
+
+================================================================================
+WORK COMPLETED
+================================================================================
+
+✅ 1. Added Control Definitions to playerTemplate.js (commit 8df7c4e)
+   - File: src/core/playerTemplate.js (lines 345-456)
+   - Added control definitions for advanced speed/pitch UI:
+     * toggleRateMode: Gear button (⚙️) to toggle advanced controls
+     * speedSlider: 0.025-4.0x range for speed control
+     * speedDisplay: Shows current speed value
+     * pitchSlider: -12 to +12 semitones for pitch control
+     * pitchDisplay: Shows current pitch value in semitones
+     * speedPitchLock: Lock button (🔗) to link speed/pitch together
+   - All controls marked as showIn: ['parent'] - only for parent player
+
+✅ 2. Added Placeholder Functions to app.js (commit 8df7c4e)
+   - File: src/core/app.js (lines 5576-5652)
+   - Added placeholder functions with console logging:
+     * toggleRateMode(): Shows/hides advanced rate container
+     * setSpeed(speed): Updates speed slider and display
+     * resetSpeed(): Resets speed to 1.0x
+     * setPitch(semitones): Updates pitch slider and display (placeholder only)
+     * resetPitch(): Resets pitch to 0 semitones
+     * toggleSpeedPitchLock(): Toggles lock state (🔗/🔓)
+   - Added window exports (lines 6642-6647)
+
+✅ 3. Added Advanced Rate UI to index.html (commit 8df7c4e)
+   - File: index.html (lines 1209-1263)
+   - Added gear button (⚙️) next to "Rate:" label
+   - Wrapped existing rate slider in simpleRateContainer div
+   - Added advancedRateContainer div (hidden by default) with:
+     * Speed slider with label and display
+     * Pitch slider with label and display
+     * Lock button with placeholder notice
+
+================================================================================
+TESTING RESULTS
+================================================================================
+
+✅ Browser Testing at http://localhost:5500/index.html:
+- Gear button (⚙️) visible and functional
+- Clicking gear reveals/hides advanced controls
+- Speed slider works: range 0.025-4.0x, displays "1.0x"
+- Pitch slider visible: range -12 to +12 semitones, displays "0.0st"
+- Lock button shows "🔗 Lock" and toggles to "🔓 Unlock"
+- Placeholder text visible: "Placeholder - Signalsmith integration pending"
+
+✅ Console Logs Confirm Functionality:
+- "Advanced rate mode: ON/OFF" when gear clicked
+- "Speed set to X.Xx (placeholder - chipmunk effect only)" when speed moved
+- "Pitch set to X.Xst (placeholder - not yet functional)" when pitch moved
+- "Speed/Pitch LOCKED/UNLOCKED" when lock button clicked
+
+⚠️ Current Limitations (By Design):
+- Speed control only provides chipmunk effect (changes speed+pitch together)
+- Pitch control is non-functional (logs only, waiting for Signalsmith)
+- Lock button changes visual state but pitch doesn't affect playback yet
+
+✅ Stem Rate Controls Status:
+- ALL stem rate controls UNTOUCHED and fully functional
+- Independent stem rates work perfectly
+- Lock/unlock buttons work
+- No changes to stem control code
+
+================================================================================
+ARCHITECTURE NOTES
+================================================================================
+
+Current Approach: Following Existing Monolithic Pattern
+- Parent player HTML hardcoded in index.html (not using template yet)
+- Player functions in app.js as standalone functions
+- Window exports for onclick handlers
+
+Why Not Component-Based?
+- Refactoring to components is future work (see PLAYER_ARCHITECTURE.md)
+- Priority was to add placeholder UI quickly without breaking stems
+- This approach allows easy swap-out of placeholders for Signalsmith later
+
+Template System Usage:
+- Control definitions added to playerTemplate.js for consistency
+- These definitions are NOT currently used for parent player generation
+- Will be used when parent player is refactored to use template system
+
+================================================================================
+NEXT SESSION OPTIONS
+================================================================================
+
+1. **Option A: Try WaveSurfer preservePitch API**
+   - Modify setPlaybackRate() to accept preservePitch parameter
+   - Wire up setSpeed() to call wavesurfer.setPlaybackRate(speed, true)
+   - Test if WaveSurfer v7 preservePitch actually works
+   - If yes: Wire up pitch slider to adjust playback rate proportionally
+   - If no: Move to Option B or C
+
+2. **Option B: Integrate Signalsmith Stretch**
+   - Reference saved branch: experimental-signalsmith-save (commit 608774c)
+   - Review pause button issues from previous attempt
+   - Implement proper state management for Signalsmith mode
+   - Wire up speed/pitch sliders to Signalsmith API
+   - Fix pause button behavior
+
+3. **Option C: Try MediaElement Backend**
+   - WaveSurfer v7 supports MediaElement backend instead of WebAudio
+   - MediaElement backend may have better preservePitch support
+   - Test if switching backend fixes preservePitch behavior
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+Modified:
+- src/core/playerTemplate.js (+112 lines)
+- src/core/app.js (+84 lines)
+- index.html (+40 lines)
+
+================================================================================
+COMMITS (This Session)
+================================================================================
+
+8df7c4e - feat: Add placeholder UI for independent speed/pitch controls
+
+Commit Message:
+```
+feat: Add placeholder UI for independent speed/pitch controls
+
+Added advanced rate mode toggle button (⚙️) to parent player that reveals
+separate speed and pitch sliders when clicked. These are placeholder UI
+elements ready to be wired up with Signalsmith time-stretch library later.
+
+Changes:
+- playerTemplate.js: Added control definitions for toggleRateMode button,
+  speedSlider, pitchSlider, speedPitchLock, and display elements
+- app.js: Added placeholder functions (toggleRateMode, setSpeed, setPitch,
+  toggleSpeedPitchLock) that log to console and update UI
+- index.html: Added advanced rate container with speed/pitch sliders
+  (hidden by default, shown when gear button is clicked)
+
+Features:
+- Simple rate slider shown by default (chipmunk effect - speed+pitch together)
+- Gear button (⚙️) toggles advanced mode revealing speed/pitch sliders
+- Lock button (🔗) for future speed/pitch linking
+- Clear messaging: "Placeholder - Signalsmith integration pending"
+
+Priority #1: Stem rate controls remain untouched and fully functional
+
+🤖 Generated with Claude Code (https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+================================================================================
+CURRENT WORKING COMMIT: 8df7c4e
+================================================================================
+All features tested and working. Placeholder UI ready for future integration.
+

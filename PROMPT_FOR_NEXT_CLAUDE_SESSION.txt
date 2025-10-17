@@ -1,0 +1,60 @@
+I'm continuing work on my audio library web app. Here's where we left off:
+
+## Current State
+
+**Branch:** experimental-v27-stem-independence
+**Commit:** 4071c10 (STEM-WRAPPERS - 2025-10-16 18:46)
+**Status:** ✅ STABLE - Everything working
+
+**What's Working:**
+- Parent player with single RATE slider (chipmunk effect)
+- Stem players with independent rate controls
+- Stem rate lock/unlock functionality
+- All transport controls, markers, cycle mode
+- All keyboard shortcuts
+
+**What's NOT Working:**
+- No independent speed/pitch control (only chipmunk effect available)
+
+## What We Tried Today (Saved in Experimental Branches)
+
+We spent ~5 hours attempting to add independent speed/pitch controls but hit blockers:
+
+**Attempt 1: WaveSurfer preservePitch API** (Branch: experimental-speed-pitch-save, commit 75cd508)
+- Added dual SPEED/PITCH sliders with lock button
+- Tried using `wavesurfer.setPlaybackRate(speed, preservePitch)` per WaveSurfer v7 docs
+- PROBLEM: preservePitch parameter didn't work - still got chipmunk effect
+- Also tried setting HTMLMediaElement.preservesPitch directly - also didn't work
+- PROBLEM: Broke stem rate controls
+
+**Attempt 2: Signalsmith Integration** (Branch: experimental-signalsmith-save, commit 608774c)
+- Integrated Signalsmith Stretch library for true independent time/pitch
+- When unlocked: Used Signalsmith for audio, WaveSurfer for visualization only
+- PROBLEM: Pause button stopped working (audio continued in background)
+- PROBLEM: Complex state management issues
+- PROBLEM: Broke stem controls
+
+## What I Need
+
+**Priority #1:** Keep stem rate controls working (non-negotiable)
+**Goal:** Add optional independent speed/pitch control as advanced feature
+
+**Preferred UI Approach:**
+- Default: Simple RATE slider (current behavior)
+- Optional: Button to reveal advanced SPEED/PITCH controls
+
+## Questions for You
+
+1. Can you help investigate why WaveSurfer's preservePitch isn't working? Docs say it should work.
+2. Should we try MediaElement backend instead of WebAudio?
+3. Or should we focus on fixing the Signalsmith integration issues?
+4. Any other approaches to achieve independent time/pitch without breaking stems?
+
+## Files to Check
+
+- `src/components/playerBar.js` - Player component with rate controls
+- `src/core/app.js` - Stem rate control logic (lines with setStemRatePreset, toggleStemRateLock)
+- `index.html` - Parent player UI (rate slider around line 1240-1262)
+- `NEXT_SESSION_PROMPT.md` - Detailed notes from today's session
+
+Please review the current stable code and help me figure out the best path forward for adding independent speed/pitch control without breaking the working stem functionality.

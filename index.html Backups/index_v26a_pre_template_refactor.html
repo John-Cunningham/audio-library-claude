@@ -1207,13 +1207,8 @@
             </div>
 
         <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; min-width: 240px;">
-            <div style="text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <div style="text-align: center;">
                 <span style="color: #999; font-size: 11px;">Rate:</span>
-                <button class="player-btn" id="toggleRateModeBtn" onclick="toggleRateMode()"
-                        title="Toggle advanced speed/pitch controls"
-                        style="padding: 2px 6px; min-width: 28px; height: 20px; font-size: 10px;">
-                    <span>⚙️</span>
-                </button>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
                 <button class="player-btn" id="halfRateBtn" onclick="setPlaybackRate(0.5)" title="Half Rate (0.5x - slower + lower pitch)" style="flex: 1;">
@@ -1226,39 +1221,12 @@
                     <span>2x</span>
                 </button>
             </div>
-            <div id="simpleRateContainer" style="display: flex; align-items: center; gap: 8px; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
                 <input type="range" id="rateSlider" min="0.025" max="4.0" step="0.025" value="1.0"
                        style="flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;"
                        oninput="setPlaybackRate(parseFloat(this.value))"
                        ondblclick="resetRate()">
                 <span id="rateValue" style="color: #999; font-size: 11px; min-width: 35px; text-align: right;">1.0x</span>
-            </div>
-            <!-- Advanced Speed/Pitch Controls (Hidden by default) -->
-            <div id="advancedRateContainer" style="display: none; flex-direction: column; gap: 4px; width: 100%; padding: 8px; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; margin-top: 4px;">
-                <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                    <span style="color: #999; font-size: 10px; min-width: 45px;">Speed:</span>
-                    <input type="range" id="speedSlider" min="0.025" max="4.0" step="0.025" value="1.0"
-                           style="flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;"
-                           oninput="setSpeed(parseFloat(this.value))"
-                           ondblclick="resetSpeed()">
-                    <span id="speedValue" style="color: #999; font-size: 11px; min-width: 35px; text-align: right;">1.0x</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                    <span style="color: #999; font-size: 10px; min-width: 45px;">Pitch:</span>
-                    <input type="range" id="pitchSlider" min="-12" max="12" step="0.1" value="0"
-                           style="flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;"
-                           oninput="setPitch(parseFloat(this.value))"
-                           ondblclick="resetPitch()">
-                    <span id="pitchValue" style="color: #999; font-size: 11px; min-width: 35px; text-align: right;">0.0st</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 8px; justify-content: center;">
-                    <button class="player-btn active" id="speedPitchLockBtn" onclick="toggleSpeedPitchLock()"
-                            title="Lock speed and pitch together"
-                            style="padding: 4px 8px; min-width: 60px; height: 24px; font-size: 11px;">
-                        <span>🔗 Lock</span>
-                    </button>
-                    <span style="color: #888; font-size: 9px; font-style: italic;">Placeholder - Signalsmith integration pending</span>
-                </div>
             </div>
         </div>
 
@@ -1377,17 +1345,5 @@
         <!-- End Row 2 -->
     </div>
 
-    <script type="module" src="./src/core/app.js"></script>
-    <script type="module">
-        // Generate parent player controls using template
-        import { generatePlayerHTML } from './src/core/playerTemplate.js';
-
-        // This will be called after DOM is ready
-        document.addEventListener('DOMContentLoaded', () => {
-            // Generate parent player HTML
-            const parentPlayerHTML = generatePlayerHTML('parent');
-            console.log('Generated parent player HTML:', parentPlayerHTML);
-        });
-    </script>
-</body>
+    <script type="module" src="./src/core/app.js"></script></body>
 </html>

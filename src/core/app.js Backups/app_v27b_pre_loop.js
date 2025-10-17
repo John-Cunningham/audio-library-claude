@@ -2,7 +2,6 @@
         import { supabase, PREF_KEYS } from './config.js';
         import * as Utils from './utils.js';
         import { generateStemPlayerBar } from './playerTemplate.js';
-        import { PlayerBarComponent } from '../components/playerBar.js';
 
         // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
@@ -20,8 +19,6 @@
 
         let audioFiles = [];
         let wavesurfer = null;
-        let parentPlayerComponent = null; // PlayerBarComponent instance for parent player
-        let stemPlayerComponents = {}; // PlayerBarComponent instances for stem players {vocals: component, drums: component, ...}
         let currentFileId = null;
         let selectedFiles = new Set();
         let processingFiles = new Set(); // Track files currently being processed
@@ -264,7 +261,6 @@
                     }
                 });
                 stemPlayerWavesurfers = {};
-                stemPlayerComponents = {}; // Clear component instances too
                 multiStemReadyCount = 0;
                 stemsPreloaded = false;
 
@@ -439,32 +435,8 @@
         // Apply solo/mute logic to stems
         function updateStemAudioState() {
             // Phase 4 Step 2B: Get master volume from slider
-            const volumeSlider = document.getElementById('volumeSlider');
-            const sliderValue = volumeSlider ? parseFloat(volumeSlider.value) : 100;
-            const sliderMax = volumeSlider ? parseFloat(volumeSlider.max) : 398;
+            const masterVolume = document.getElementById('volumeSlider')?.value / 100 || 1.0;
 
-            // Calculate master volume as 0-1 range, ensuring complete silence at 0
-            const masterVolume = sliderValue === 0 ? 0 : sliderValue / sliderMax;
-
-            // Update NEW multi-stem player volumes (when expanded)
-            if (multiStemPlayerExpanded) {
-                console.log(`[UPDATE STEM AUDIO] Master volume: ${(masterVolume * 100).toFixed(0)}%`);
-                Object.keys(stemPlayerWavesurfers).forEach(stemType => {
-                    const stemWS = stemPlayerWavesurfers[stemType];
-                    if (!stemWS) return;
-
-                    // Get the stem's individual volume slider value
-                    const stemVolumeSlider = document.getElementById(`stem-volume-${stemType}`);
-                    const stemVolume = stemVolumeSlider ? stemVolumeSlider.value / 100 : 1.0;
-
-                    // Multiply master volume by stem's individual volume
-                    const finalVolume = masterVolume * stemVolume;
-                    stemWS.setVolume(finalVolume);
-                    console.log(`[UPDATE STEM AUDIO] ${stemType}: master ${(masterVolume * 100).toFixed(0)}% × stem ${(stemVolume * 100).toFixed(0)}% = ${(finalVolume * 100).toFixed(0)}%`);
-                });
-            }
-
-            // Also update OLD stem player volumes (legacy Phase 4 code)
             // Phase 4 Fix 2: Check if any stems are soloed (using stem file IDs)
             const stemFileIds = Object.values(stemFiles).map(sf => sf.id);
             const anySoloed = stemFileIds.some(id => stemSoloed[id]);
@@ -522,20 +494,6 @@
 
                 console.log('WaveSurfer created:', wavesurfer);
 
-                // Create and initialize parent player component (only once)
-                if (!parentPlayerComponent) {
-                    parentPlayerComponent = new PlayerBarComponent({
-                        playerType: 'parent',
-                        waveform: wavesurfer
-                    });
-                    parentPlayerComponent.init();
-                    console.log('Parent PlayerBarComponent initialized');
-                } else {
-                    // Update waveform reference for existing component
-                    parentPlayerComponent.waveform = wavesurfer;
-                    console.log('Parent PlayerBarComponent waveform reference updated');
-                }
-
                 wavesurfer.on('finish', () => {
                     if (isLooping) {
                         wavesurfer.play();
@@ -561,13 +519,6 @@
                     console.log('Waveform container HTML:', document.getElementById('waveform').innerHTML);
                     console.log('Waveform container children:', document.getElementById('waveform').children);
                     updatePlayerTime();
-
-                    // CRITICAL: Re-establish parent-stem sync for this new wavesurfer instance
-                    // This must be called every time wavesurfer is recreated
-                    if (Object.keys(stemPlayerWavesurfers).length > 0) {
-                        setupParentStemSync();
-                        console.log('✓ Parent-stem sync re-established for new wavesurfer instance');
-                    }
                 });
 
                 wavesurfer.on('audioprocess', () => {
@@ -2290,158 +2241,8 @@
         // Phase 2A: Individual Rate Controls
         let stemIndependentRates = {}; // {vocals: 1.0, drums: 1.25, ...} - user's rate multiplier per stem
         let stemRateLocked = {}; // {vocals: true, drums: false, ...} - whether stem follows parent rate
-        let stemPlaybackIndependent = {
-            vocals: true,
-            drums: true,
-            bass: true,
-            other: true
-        }; // whether stem should play when parent plays (user's active selection) - initialize all as active
+        let stemPlaybackIndependent = {}; // {vocals: true, drums: false, ...} - whether stem should play when parent plays (user's active selection)
         let currentParentFileBPM = null; // Store parent file's original BPM for calculations
-
-        // CRITICAL: Expose to window so event handlers can access it
-        window.stemPlaybackIndependent = stemPlaybackIndependent;
-
-        // CRITICAL: Expose stemPlayerComponents so parent component can propagate to stems
-        window.stemPlayerComponents = stemPlayerComponents;
-
-        // Phase 2B: Individual Loop Controls (Version 27b)
-        let stemLoopStates = {
-            vocals: { enabled: false, start: null, end: null },
-            drums: { enabled: false, start: null, end: null },
-            bass: { enabled: false, start: null, end: null },
-            other: { enabled: false, start: null, end: null }
-        };
-
-        // CRITICAL: Expose to window so PlayerBarComponent can sync to it
-        window.stemLoopStates = stemLoopStates;
-
-        // Phase 4: Cycle Mode Controls (Version 27c)
-        let stemCycleModes = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemNextClickSets = {
-            vocals: 'start',
-            drums: 'start',
-            bass: 'start',
-            other: 'start'
-        };
-
-        // ============================================
-        // VERSION 27D: FULL TEMPLATE SYSTEM - PER-STEM STATE OBJECTS
-        // ============================================
-
-        // Markers
-        let stemMarkersEnabled = {
-            vocals: true,
-            drums: true,
-            bass: true,
-            other: true
-        };
-        let stemMarkerFrequency = {
-            vocals: 'bar',
-            drums: 'bar',
-            bass: 'bar',
-            other: 'bar'
-        };
-        let stemCurrentMarkers = {
-            vocals: [],
-            drums: [],
-            bass: [],
-            other: []
-        };
-        let stemBarStartOffset = {
-            vocals: 0,
-            drums: 0,
-            bass: 0,
-            other: 0
-        };
-
-        // Metronome
-        let stemMetronomeEnabled = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemMetronomeSound = {
-            vocals: 'click',
-            drums: 'click',
-            bass: 'click',
-            other: 'click'
-        };
-
-        // Loop/Cycle additional controls
-        let stemSeekOnClick = {
-            vocals: 'off',
-            drums: 'off',
-            bass: 'off',
-            other: 'off'
-        };
-        let stemImmediateJump = {
-            vocals: 'off',
-            drums: 'off',
-            bass: 'off',
-            other: 'off'
-        };
-        let stemLoopControlsExpanded = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemLoopFadesEnabled = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemFadeTime = {
-            vocals: 15,
-            drums: 15,
-            bass: 15,
-            other: 15
-        };
-        let stemPreserveLoop = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemBPMLock = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemRecordingActions = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemRecordedActions = {
-            vocals: [],
-            drums: [],
-            bass: [],
-            other: []
-        };
-
-        // Preserved loop positions (for file changes)
-        let stemPreservedLoopStartBar = {
-            vocals: null,
-            drums: null,
-            bass: null,
-            other: null
-        };
-        let stemPreservedLoopEndBar = {
-            vocals: null,
-            drums: null,
-            bass: null,
-            other: null
-        };
 
         // Phase 1: Pre-load stems silently in background when file loads
         async function preloadMultiStemWavesurfers(fileId) {
@@ -2551,32 +2352,13 @@
                 // Store instance
                 stemPlayerWavesurfers[stemType] = ws;
 
-                // Create PlayerBarComponent for this stem (Phase: Stem Components)
-                stemPlayerComponents[stemType] = new PlayerBarComponent({
-                    playerType: 'stem',
-                    stemType: stemType,
-                    waveform: ws
-                });
-                stemPlayerComponents[stemType].init();
-                console.log(`[STEM COMPONENTS] Created and initialized PlayerBarComponent for ${stemType} stem`);
-
-                // Set up time display updates and loop checking
+                // Set up time display updates
                 ws.on('audioprocess', () => {
                     const currentTime = ws.getCurrentTime();
                     const duration = ws.getDuration();
                     const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
                     if (timeDisplay) {
                         timeDisplay.textContent = `${Utils.formatTime(currentTime)} / ${Utils.formatTime(duration)}`;
-                    }
-
-                    // Phase 4: Check if we need to loop this stem
-                    const loopState = stemLoopStates[stemType];
-                    if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                        if (currentTime >= loopState.end) {
-                            // Loop back to start
-                            ws.seekTo(loopState.start / duration);
-                            console.log(`[${stemType}] Looping back to ${loopState.start.toFixed(2)}s`);
-                        }
                     }
                 });
 
@@ -2585,26 +2367,6 @@
                     const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
                     if (timeDisplay) {
                         timeDisplay.textContent = `0:00 / ${Utils.formatTime(duration)}`;
-                    }
-
-                    // Phase 4: Cycle mode click handler is now handled by PlayerBarComponent.setupWaveformClickHandler()
-                    // OLD: setupStemCycleModeClickHandler(stemType, container, ws);
-                    // Component's init() already set up the click handler with snap-to-marker + cycle mode support
-
-                    // Version 27d: Load file into component (enables markers via component)
-                    const file = audioFiles.find(f => f.id === currentFileId);
-                    if (file) {
-                        // Load file into PlayerBarComponent (handles markers if enabled)
-                        if (stemPlayerComponents[stemType]) {
-                            stemPlayerComponents[stemType].loadFile(file);
-                            console.log(`[STEM COMPONENTS] Loaded file into ${stemType} component (markers: ${stemPlayerComponents[stemType].markersEnabled})`);
-                        }
-
-                        // OLD CODE (kept as fallback for now, but component should handle this)
-                        // TODO: Remove addStemBarMarkers() once all stems use components
-                        if (stemMarkersEnabled[stemType] && !stemPlayerComponents[stemType]) {
-                            addStemBarMarkers(stemType, file);
-                        }
                     }
                 });
 
@@ -2692,23 +2454,13 @@
                 wavesurfer.setVolume(0);
                 console.log('✓ Parent muted');
 
-                // 3. UNMUTE ALL STEMS (inherit parent's volume on first expansion)
-                const parentVolumeSlider = document.getElementById('volumeSlider');
-                const parentVolume = parentVolumeSlider ? parentVolumeSlider.value / 100 : 1.0;
-
+                // 3. UNMUTE ALL STEMS
                 stemTypes.forEach(type => {
                     const ws = stemPlayerWavesurfers[type];
                     if (ws) {
                         const volumeSlider = document.getElementById(`stem-volume-${type}`);
-                        // Use stem's own volume if it's been set, otherwise inherit from parent
-                        const targetVolume = (volumeSlider && volumeSlider.value != 100)
-                            ? volumeSlider.value / 100
-                            : parentVolume;
+                        const targetVolume = volumeSlider ? volumeSlider.value / 100 : 1.0;
                         ws.setVolume(targetVolume);
-                        // Update stem volume slider to match
-                        if (volumeSlider && volumeSlider.value == 100) {
-                            volumeSlider.value = parentVolume * 100;
-                        }
                         console.log(`✓ ${type} unmuted (volume: ${targetVolume})`);
                     }
                 });
@@ -2894,54 +2646,12 @@
                         }
                     });
 
-                    // Update time display and handle loop playback
+                    // Update time display
                     ws.on('timeupdate', (currentTime) => {
                         const duration = ws.getDuration();
                         const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
                         if (timeDisplay) {
                             timeDisplay.textContent = `${Utils.formatTime(currentTime)} / ${Utils.formatTime(duration)}`;
-                        }
-
-                        // Check for loop playback
-                        const loopState = stemLoopStates[stemType];
-
-                        // Stem follows parent loop if:
-                        // 1. Stem is active (stemPlaybackIndependent = true)
-                        // 2. Stem doesn't have its own cycle enabled (loopState.enabled = false)
-                        // 3. Parent has cycle enabled with valid loop points
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        if (followsParent && cycleMode && loopStart !== null && loopEnd !== null) {
-                            // Follow parent's loop
-                            if (currentTime >= loopEnd) {
-                                ws.seekTo(loopStart / duration);
-                                // Don't log every loop - too spammy
-                            }
-                        } else if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                            // Use stem's own loop
-                            if (currentTime >= loopState.end) {
-                                ws.seekTo(loopState.start / duration);
-                                console.log(`${stemType} looped back to ${loopState.start}s`);
-                            }
-                        }
-                    });
-
-                    // Handle stem reaching end of file - loop if enabled
-                    ws.on('finish', () => {
-                        const loopState = stemLoopStates[stemType];
-
-                        // Stem follows parent loop if active and doesn't have own cycle
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        if (followsParent && cycleMode && loopStart !== null && loopEnd !== null) {
-                            // Follow parent's loop
-                            ws.seekTo(loopStart / ws.getDuration());
-                            ws.play();
-                        } else if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                            // Use stem's own loop
-                            ws.seekTo(loopState.start / ws.getDuration());
-                            ws.play();
-                            console.log(`${stemType} finished - looping back to ${loopState.start}s`);
                         }
                     });
 
@@ -2985,23 +2695,15 @@
 
             console.log('Setting up parent-stem synchronization');
 
-            // When parent plays, resume all NON-INDEPENDENT stems
-            // Use same logic as pause for symmetry
+            // When parent plays, resume all stems that were playing before pause
             wavesurfer.on('play', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent play event - resuming stems that follow parent');
+                    console.log('Parent play event - resuming stems that were playing');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
-                        const loopState = stemLoopStates[stemType];
-                        // A stem follows parent if it's active AND doesn't have its own loop
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
-
-                        if (ws && followsParent && !ws.isPlaying()) {
-                            // Only play stems that follow parent (not those with own loops)
-                            console.log(`  → Playing ${stemType}`);
+                        // Only play stems that were marked as playing (not manually paused by user)
+                        if (ws && stemPlaybackIndependent[stemType]) {
                             ws.play();
                             const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
                             if (icon) icon.textContent = '||';
@@ -3010,61 +2712,61 @@
                 }
             });
 
-            // When parent pauses, pause only stems that follow parent
-            // Stems with their own loops continue playing independently
+            // When parent pauses, pause ALL stems (master control)
             wavesurfer.on('pause', () => {
                 if (multiStemPlayerExpanded) {
-                    console.log('Parent pause event - pausing stems that follow parent');
+                    console.log('Parent pause event - pausing all stems (master control)');
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
-                        const loopState = stemLoopStates[stemType];
-                        // A stem follows parent if it's active AND doesn't have its own loop
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
-
-                        if (ws && followsParent) {
-                            // Only pause stems that follow parent (not those with own loops)
+                        if (ws) {
+                            // Remember which stems were playing BEFORE parent pause
                             if (ws.isPlaying()) {
-                                console.log(`  → Pausing ${stemType}`);
+                                stemPlaybackIndependent[stemType] = true; // Mark as active
                                 ws.pause();
                                 const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
                                 if (icon) icon.textContent = '▶';
+                            } else {
+                                stemPlaybackIndependent[stemType] = false; // Mark as inactive
                             }
                         }
                     });
                 }
             });
 
-            // When parent seeks, seek only stems that follow parent
-            // Stems with their own loops maintain their own position
+            // When parent seeks, seek all stems
             wavesurfer.on('seeking', (currentTime) => {
                 if (multiStemPlayerExpanded) {
                     const seekPosition = currentTime / wavesurfer.getDuration();
-                    console.log('Parent seek event - syncing stems that follow parent to:', seekPosition);
+                    console.log('Parent seek event - syncing stems to:', seekPosition);
 
                     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
-                        const loopState = stemLoopStates[stemType];
-                        // A stem follows parent if it's active AND doesn't have its own loop
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}`);
-
-                        if (ws && followsParent) {
-                            // Only seek stems that follow parent (not those with own loops)
+                        if (ws) {
                             ws.seekTo(seekPosition);
                         }
                     });
                 }
             });
 
-            // REMOVED: Bidirectional sync that made parent follow stems
-            // Stems now have independent playback and loops
-            // Parent controls act as MODIFIERS (rate × rate, volume × volume)
-            // But parent timeline does NOT follow stem timelines
+            // Keep stems in sync during playback (use first stem as reference)
+            const firstStem = stemPlayerWavesurfers['vocals'] || stemPlayerWavesurfers['drums'] ||
+                             stemPlayerWavesurfers['bass'] || stemPlayerWavesurfers['other'];
+
+            if (firstStem) {
+                firstStem.on('audioprocess', () => {
+                    if (!multiStemPlayerExpanded || !wavesurfer) return;
+
+                    const stemPosition = firstStem.getCurrentTime() / firstStem.getDuration();
+                    const parentPosition = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
+
+                    // If parent and stems drift more than 0.1 seconds apart, resync
+                    if (Math.abs(stemPosition - parentPosition) > 0.01) {
+                        wavesurfer.seekTo(stemPosition);
+                    }
+                });
+            }
         }
 
         function destroyMultiStemPlayerWavesurfers() {
@@ -3084,7 +2786,6 @@
                 }
             });
             stemPlayerWavesurfers = {};
-            stemPlayerComponents = {}; // Clear component instances too
             multiStemReadyCount = 0;
 
             // Restore parent player volume if it was muted
@@ -3161,223 +2862,25 @@
         }
 
         function toggleMultiStemLoop(stemType) {
-            // Phase 4: Instead of toggling basic loop, toggle cycle mode
-            toggleStemCycleMode(stemType);
-        }
-
-        // Helper function to set stem loop region
-        function setStemLoopRegion(stemType, startTime, endTime) {
-            const loopState = stemLoopStates[stemType];
-            loopState.start = startTime;
-            loopState.end = endTime;
-            console.log(`${stemType} loop region set: ${startTime}s - ${endTime}s`);
-
-            // TODO: Render loop region visual overlay on waveform
-        }
-
-        // Phase 4: Toggle Cycle Mode for individual stem
-        function toggleStemCycleMode(stemType) {
-            // Delegate to PlayerBarComponent if it exists
-            const stemComponent = stemPlayerComponents[stemType];
-            if (stemComponent) {
-                stemComponent.toggleCycleMode();
-                return;
-            }
-
-            // Fallback to old implementation (shouldn't happen if components are set up properly)
-            console.warn(`[toggleStemCycleMode] No component found for ${stemType}, using fallback`);
             const ws = stemPlayerWavesurfers[stemType];
             if (!ws) return;
 
-            const loopState = stemLoopStates[stemType];
+            const loopBtn = document.getElementById(`stem-loop-${stemType}`);
+            const currentLoop = ws.options.interact;
 
-            // Toggle cycle mode
-            stemCycleModes[stemType] = !stemCycleModes[stemType];
-
-            if (stemCycleModes[stemType]) {
-                // Entering cycle mode - enable loop editing
-                stemNextClickSets[stemType] = 'start';
-                console.log(`[${stemType}] CYCLE MODE ON - click waveform to set loop start/end`);
+            // Toggle loop - WaveSurfer v7 doesn't have built-in loop, so we use finish event
+            if (loopBtn.classList.contains('active')) {
+                loopBtn.classList.remove('active');
+                ws.un('finish'); // Remove finish event
             } else {
-                // Exiting cycle mode - disable loop editing
-                // Also disable loop if it was playing
-                loopState.enabled = false;
-                loopState.start = null;
-                loopState.end = null;
-                console.log(`[${stemType}] CYCLE MODE OFF - loop disabled`);
-            }
-
-            // Update visual indicators
-            updateStemLoopVisuals(stemType);
-        }
-
-        // Phase 4: Setup click handler for stem waveform cycle mode
-        function setupStemCycleModeClickHandler(stemType, waveformContainer, ws) {
-            // Remove old click listeners if they exist
-            if (waveformContainer._clickHandler) {
-                waveformContainer.removeEventListener('click', waveformContainer._clickHandler, true);
-            }
-
-            // Create new click handler with capture phase to intercept BEFORE WaveSurfer
-            const clickHandler = (e) => {
-                const loopState = stemLoopStates[stemType];
-                const cycleMode = stemCycleModes[stemType];
-
-                // If cycle mode is off, let WaveSurfer handle click normally (seeking)
-                if (!cycleMode || !ws) return;
-
-                // Prevent WaveSurfer from seeking when in cycle mode
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-
-                // Get click position relative to waveform container
-                const rect = waveformContainer.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const relativeX = clickX / rect.width;
-
-                // Calculate time at click position
-                const duration = ws.getDuration();
-                const clickTime = relativeX * duration;
-
-                console.log(`[${stemType}] Click at ${clickTime.toFixed(2)}s`);
-
-                // Check if clicking left of loop start (reset start) or right of loop end (reset end)
-                if (loopState.start !== null && loopState.end !== null) {
-                    if (clickTime < loopState.start) {
-                        // Clicking left of loop start: move loop start
-                        loopState.start = clickTime;
-                        console.log(`[${stemType}] Loop start moved to ${clickTime.toFixed(2)}s`);
-                        updateStemLoopVisuals(stemType);
-                        return false;
-                    } else if (clickTime > loopState.end) {
-                        // Clicking right of loop end: move loop end
-                        loopState.end = clickTime;
-                        console.log(`[${stemType}] Loop end moved to ${clickTime.toFixed(2)}s`);
-                        updateStemLoopVisuals(stemType);
-                        return false;
-                    }
-                }
-
-                // Normal loop setting flow
-                if (stemNextClickSets[stemType] === 'start') {
-                    // Set loop start
-                    loopState.start = clickTime;
-                    loopState.end = null;
-                    loopState.enabled = false; // Don't enable loop yet (need end point)
-                    stemNextClickSets[stemType] = 'end';
-                    console.log(`[${stemType}] Loop start set to ${clickTime.toFixed(2)}s - click again for end`);
-                    updateStemLoopVisuals(stemType);
-                } else if (stemNextClickSets[stemType] === 'end') {
-                    // Set loop end
-                    if (clickTime <= loopState.start) {
-                        console.log(`[${stemType}] Loop end must be after loop start - ignoring click`);
-                        return false;
-                    }
-                    loopState.end = clickTime;
-                    loopState.enabled = true; // Enable loop now that we have both points
-                    stemNextClickSets[stemType] = 'start'; // Reset for next loop
-                    console.log(`[${stemType}] Loop end set to ${clickTime.toFixed(2)}s - Loop active! Starting playback...`);
-
-                    // Auto-play the stem when loop is set
-                    if (!ws.isPlaying()) {
-                        // Seek to loop start
-                        ws.seekTo(loopState.start / duration);
-                        // Start playing
+                loopBtn.classList.add('active');
+                ws.on('finish', () => {
+                    if (loopBtn.classList.contains('active')) {
+                        ws.seekTo(0);
                         ws.play();
-                        // Mark stem as active (so parent play/pause respects it)
-                        stemPlaybackIndependent[stemType] = true;
-                        // Update play button icon
-                        const playBtn = document.getElementById(`stem-play-pause-${stemType}`);
-                        if (playBtn) {
-                            const icon = playBtn.querySelector('span');
-                            if (icon) icon.textContent = '||';
-                        }
-                        console.log(`[${stemType}] Auto-started playback from loop start`);
                     }
-
-                    // Update visuals to show loop region
-                    updateStemLoopVisuals(stemType);
-                }
-
-                return false;
-            };
-
-            // Add listener in CAPTURE phase to intercept before WaveSurfer's handler
-            waveformContainer.addEventListener('click', clickHandler, true);
-            waveformContainer._clickHandler = clickHandler; // Store reference for cleanup
-
-            console.log(`[${stemType}] Cycle mode click handler installed`);
-        }
-
-        // Update stem loop visuals (button states, status text, loop region)
-        function updateStemLoopVisuals(stemType) {
-            const cycleBtn = document.getElementById(`stem-cycle-btn-${stemType}`);
-            const loopStatus = document.getElementById(`stem-loop-status-${stemType}`);
-            const loopState = stemLoopStates[stemType];
-            const cycleMode = stemCycleModes[stemType];
-
-            // Update cycle button state
-            if (cycleBtn) {
-                if (cycleMode) {
-                    cycleBtn.classList.add('active');
-                } else {
-                    cycleBtn.classList.remove('active');
-                }
+                });
             }
-
-            // Update status text
-            if (loopStatus) {
-                const hasLoop = loopState.start !== null && loopState.end !== null;
-                if (!cycleMode && !hasLoop) {
-                    loopStatus.textContent = 'Off';
-                    loopStatus.style.color = '#666';
-                } else if (cycleMode && loopState.start === null) {
-                    loopStatus.textContent = 'Click start';
-                    loopStatus.style.color = '#f59e0b';
-                } else if (cycleMode && loopState.end === null) {
-                    loopStatus.textContent = 'Click end →';
-                    loopStatus.style.color = '#f59e0b';
-                } else if (hasLoop) {
-                    const duration = loopState.end - loopState.start;
-                    loopStatus.textContent = `${duration.toFixed(1)}s`;
-                    loopStatus.style.color = '#10b981';
-                }
-            }
-
-            // Update loop region visualization
-            updateStemLoopRegion(stemType);
-        }
-
-        // Update stem loop region overlay on waveform
-        function updateStemLoopRegion(stemType) {
-            const waveformContainer = document.getElementById(`multi-stem-waveform-${stemType}`);
-            if (!waveformContainer) return;
-
-            const ws = stemPlayerWavesurfers[stemType];
-            const loopState = stemLoopStates[stemType];
-            const cycleMode = stemCycleModes[stemType];
-
-            // Remove existing loop region
-            const existingRegion = waveformContainer.querySelector('.loop-region');
-            if (existingRegion) existingRegion.remove();
-
-            // Don't draw if cycle mode is off or loop not fully set
-            if (!cycleMode || loopState.start === null || loopState.end === null || !ws) return;
-
-            const duration = ws.getDuration();
-            if (duration === 0) return;
-
-            const startPercent = (loopState.start / duration) * 100;
-            const endPercent = (loopState.end / duration) * 100;
-            const widthPercent = endPercent - startPercent;
-
-            const loopRegion = document.createElement('div');
-            loopRegion.className = 'loop-region';
-            loopRegion.style.left = `${startPercent}%`;
-            loopRegion.style.width = `${widthPercent}%`;
-
-            waveformContainer.appendChild(loopRegion);
         }
 
         function handleMultiStemVolumeChange(stemType, value) {
@@ -3662,26 +3165,19 @@
 
         // Generate stems for a file
         function generateStems(fileId, event) {
-            console.log('🎵 generateStems called with fileId:', fileId);
             event.preventDefault();
             event.stopPropagation();
 
             const file = audioFiles.find(f => f.id === fileId);
-            console.log('📁 File found:', file?.name || 'NOT FOUND');
-            if (!file) {
-                console.warn('⚠️ File not found for ID:', fileId);
+            if (!file) return;
+
+            // Show confirmation dialog
+            if (!confirm(`Generate stems for "${file.name}"?\n\nThis will create 4 separate stem files (vocals, bass, drums, other) using the Demucs separation model. The process may take several minutes.`)) {
                 return;
             }
 
-            // Open the processing modal with stems icon context
-            // This will pre-check the "Split Stems" checkbox and allow user to add other processing options
-            console.log('🔍 Checking for window.openEditTagsModal:', typeof window.openEditTagsModal);
-            if (window.openEditTagsModal) {
-                console.log('✅ Opening modal with stems context');
-                window.openEditTagsModal('stems', fileId);
-            } else {
-                console.error('❌ window.openEditTagsModal is not available!');
-            }
+            // TODO: Implement stem generation via Railway webhook
+            alert('Stem generation will be implemented with Railway webhook integration.');
         }
 
         // Load audio file
@@ -4075,19 +3571,6 @@
             if (file) {
                 addBarMarkers(file);
             }
-
-            // Also update all stem marker frequencies if stems are expanded
-            console.log(`[setMarkerFrequency] freq: ${freq}, multiStemPlayerExpanded: ${multiStemPlayerExpanded}, stemPlayerComponents:`, Object.keys(stemPlayerComponents));
-            if (multiStemPlayerExpanded) {
-                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                stemTypes.forEach(stemType => {
-                    console.log(`  Checking stem ${stemType}, component exists: ${!!stemPlayerComponents[stemType]}`);
-                    if (stemPlayerComponents[stemType]) {
-                        console.log(`  → Setting ${stemType} marker frequency to ${freq}`);
-                        stemPlayerComponents[stemType].setMarkerFrequency(freq);
-                    }
-                });
-            }
         }
 
         // Get shift increment based on marker frequency
@@ -4120,19 +3603,6 @@
             if (file) {
                 addBarMarkers(file);
             }
-
-            // Also shift all stem markers if stems are expanded
-            console.log(`[shiftBarStartLeft] multiStemPlayerExpanded: ${multiStemPlayerExpanded}, stemPlayerComponents:`, Object.keys(stemPlayerComponents));
-            if (multiStemPlayerExpanded) {
-                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                stemTypes.forEach(stemType => {
-                    console.log(`  Checking stem ${stemType}, component exists: ${!!stemPlayerComponents[stemType]}`);
-                    if (stemPlayerComponents[stemType]) {
-                        console.log(`  → Shifting ${stemType} markers left`);
-                        stemPlayerComponents[stemType].shiftBarStartLeft();
-                    }
-                });
-            }
         }
 
         // Shift bar start right (make a later marker be bar 1)
@@ -4152,19 +3622,6 @@
             if (file) {
                 addBarMarkers(file);
             }
-
-            // Also shift all stem markers if stems are expanded
-            console.log(`[shiftBarStartRight] multiStemPlayerExpanded: ${multiStemPlayerExpanded}, stemPlayerComponents:`, Object.keys(stemPlayerComponents));
-            if (multiStemPlayerExpanded) {
-                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                stemTypes.forEach(stemType => {
-                    console.log(`  Checking stem ${stemType}, component exists: ${!!stemPlayerComponents[stemType]}`);
-                    if (stemPlayerComponents[stemType]) {
-                        console.log(`  → Shifting ${stemType} markers right`);
-                        stemPlayerComponents[stemType].shiftBarStartRight();
-                    }
-                });
-            }
         }
 
         // Find nearest marker to the left of a given time
@@ -4182,313 +3639,6 @@
             return nearestMarker;
         }
 
-        // ============================================
-        // VERSION 27D: PER-STEM MARKER FUNCTIONS
-        // ============================================
-
-        // === STEM MARKER WRAPPERS (delegate to PlayerBarComponent) ===
-
-        // Toggle markers for a specific stem
-        function toggleStemMarkers(stemType) {
-            // Delegate to component if available
-            if (stemPlayerComponents[stemType]) {
-                stemPlayerComponents[stemType].toggleMarkers();
-                return;
-            }
-
-            // Fallback to old implementation
-            _oldToggleStemMarkers(stemType);
-        }
-
-        // OLD IMPLEMENTATION (fallback)
-        function _oldToggleStemMarkers(stemType) {
-            stemMarkersEnabled[stemType] = !stemMarkersEnabled[stemType];
-            console.log(`[${stemType}] Bar markers: ${stemMarkersEnabled[stemType] ? 'ON' : 'OFF'}`);
-
-            // Update button state
-            const btn = document.getElementById(`stem-markers-btn-${stemType}`);
-            if (btn) {
-                if (stemMarkersEnabled[stemType]) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            }
-
-            // Re-render markers (or clear them)
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addStemBarMarkers(stemType, file);
-            }
-        }
-
-        // Change marker frequency for a specific stem
-        function setStemMarkerFrequency(stemType, freq) {
-            // Delegate to component if available
-            if (stemPlayerComponents[stemType]) {
-                stemPlayerComponents[stemType].setMarkerFrequency(freq);
-                return;
-            }
-
-            // Fallback to old implementation
-            _oldSetStemMarkerFrequency(stemType, freq);
-        }
-
-        // OLD IMPLEMENTATION (fallback)
-        function _oldSetStemMarkerFrequency(stemType, freq) {
-            stemMarkerFrequency[stemType] = freq;
-            console.log(`[${stemType}] Marker frequency: ${freq}`);
-
-            // Re-render current file's markers
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addStemBarMarkers(stemType, file);
-            }
-        }
-
-        // Get shift increment based on stem's marker frequency
-        function getStemShiftIncrement(stemType) {
-            switch (stemMarkerFrequency[stemType]) {
-                case 'bar8': return 8;
-                case 'bar4': return 4;
-                case 'bar2': return 2;
-                case 'bar': return 1;
-                case 'halfbar': return 0.5;
-                case 'beat': return 0.25;
-                default: return 1;
-            }
-        }
-
-        // Shift stem bar start left
-        function shiftStemBarStartLeft(stemType) {
-            // Delegate to component if available
-            if (stemPlayerComponents[stemType]) {
-                stemPlayerComponents[stemType].shiftBarStartLeft();
-                return;
-            }
-
-            // Fallback to old implementation
-            _oldShiftStemBarStartLeft(stemType);
-        }
-
-        // OLD IMPLEMENTATION (fallback)
-        function _oldShiftStemBarStartLeft(stemType) {
-            const increment = getStemShiftIncrement(stemType);
-            stemBarStartOffset[stemType] -= increment;
-            console.log(`[${stemType}] Bar start offset: ${stemBarStartOffset[stemType]} (shifted by -${increment})`);
-
-            // Update display
-            const display = document.getElementById(`stem-bar-offset-${stemType}`);
-            if (display) {
-                display.textContent = stemBarStartOffset[stemType].toFixed(2).replace(/\.?0+$/, '');
-            }
-
-            // Re-render markers
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addStemBarMarkers(stemType, file);
-            }
-        }
-
-        // Shift stem bar start right
-        function shiftStemBarStartRight(stemType) {
-            // Delegate to component if available
-            if (stemPlayerComponents[stemType]) {
-                stemPlayerComponents[stemType].shiftBarStartRight();
-                return;
-            }
-
-            // Fallback to old implementation
-            _oldShiftStemBarStartRight(stemType);
-        }
-
-        // OLD IMPLEMENTATION (fallback)
-        function _oldShiftStemBarStartRight(stemType) {
-            const increment = getStemShiftIncrement(stemType);
-            stemBarStartOffset[stemType] += increment;
-            console.log(`[${stemType}] Bar start offset: ${stemBarStartOffset[stemType]} (shifted by +${increment})`);
-
-            // Update display
-            const display = document.getElementById(`stem-bar-offset-${stemType}`);
-            if (display) {
-                display.textContent = stemBarStartOffset[stemType].toFixed(2).replace(/\.?0+$/, '');
-            }
-
-            // Re-render markers
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addStemBarMarkers(stemType, file);
-            }
-        }
-
-        // Add bar markers to stem waveform (adapted from parent addBarMarkers)
-        function addStemBarMarkers(stemType, file) {
-            const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) return;
-
-            const waveformContainer = document.getElementById(`multi-stem-waveform-${stemType}`);
-            if (!waveformContainer) return;
-
-            // Don't add markers if disabled or no data
-            if (!stemMarkersEnabled[stemType] || !file.beatmap) {
-                // Clear any existing markers if disabled
-                const existingContainer = waveformContainer.querySelector('.marker-container');
-                if (existingContainer) existingContainer.remove();
-                stemCurrentMarkers[stemType] = [];
-                return;
-            }
-
-            // Get the duration to calculate marker positions
-            const duration = ws.getDuration();
-            if (!duration) return;
-
-            // Get or create marker container
-            let markerContainer = waveformContainer.querySelector('.marker-container');
-            if (!markerContainer) {
-                markerContainer = document.createElement('div');
-                markerContainer.className = 'marker-container';
-                waveformContainer.appendChild(markerContainer);
-            }
-
-            // Clear existing markers
-            const existingMarkers = markerContainer.querySelectorAll('.bar-marker, .beat-marker');
-            existingMarkers.forEach(marker => marker.remove());
-            stemCurrentMarkers[stemType] = [];
-
-            // Marker container fills the full width
-            markerContainer.style.width = '100%';
-
-            // Normalize beatmap (force first beat to be bar 1, beat 1)
-            const normalizedBeatmap = file.beatmap.map((beat, index) => {
-                if (index === 0) {
-                    return { ...beat, beatNum: 1, originalIndex: index };
-                }
-                return { ...beat, originalIndex: index };
-            });
-
-            // Split stemBarStartOffset into integer bars and fractional beats
-            const barOffset = Math.floor(stemBarStartOffset[stemType]);
-            const fractionalBeats = Math.round((stemBarStartOffset[stemType] - barOffset) * 4);
-
-            // Calculate original bar numbers
-            let barNumber = 0;
-            const beatmapWithOriginalBars = normalizedBeatmap.map(beat => {
-                if (beat.beatNum === 1) barNumber++;
-                return { ...beat, originalBarNumber: barNumber };
-            });
-
-            // Rotate beatNum values for fractional beat shifts
-            const beatmapWithRotatedBeats = beatmapWithOriginalBars.map(beat => {
-                if (fractionalBeats === 0) {
-                    return { ...beat };
-                } else {
-                    let newBeatNum = beat.beatNum - fractionalBeats;
-                    while (newBeatNum < 1) newBeatNum += 4;
-                    while (newBeatNum > 4) newBeatNum -= 4;
-                    return { ...beat, beatNum: newBeatNum };
-                }
-            });
-
-            // Recalculate bar numbers after beat rotation
-            barNumber = 0;
-            const beatmapWithNewBars = beatmapWithRotatedBeats.map(beat => {
-                if (beat.beatNum === 1) barNumber++;
-                return { ...beat, barNumber };
-            });
-
-            // Shift bar numbers by integer bar offset
-            const beatmapWithBars = beatmapWithNewBars.map(beat => {
-                return { ...beat, barNumber: beat.barNumber - barOffset };
-            });
-
-            // Filter based on frequency
-            let filteredBeats = [];
-            switch (stemMarkerFrequency[stemType]) {
-                case 'bar8':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 8 === 1);
-                    break;
-                case 'bar4':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 4 === 1);
-                    break;
-                case 'bar2':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 2 === 1);
-                    break;
-                case 'bar':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1);
-                    break;
-                case 'halfbar':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 || b.beatNum === 3);
-                    break;
-                case 'beat':
-                    filteredBeats = beatmapWithBars;
-                    break;
-            }
-
-            console.log(`[${stemType}] Adding ${filteredBeats.length} markers (frequency: ${stemMarkerFrequency[stemType]}, barOffset: ${barOffset}, beatOffset: ${fractionalBeats})`);
-
-            // Add a marker div for each filtered beat
-            filteredBeats.forEach((beat) => {
-                const marker = document.createElement('div');
-                const isBar = beat.beatNum === 1;
-                const isEmphasisBar = isBar && (beat.barNumber % 4 === 1);
-
-                if (isEmphasisBar) {
-                    marker.className = 'bar-marker';
-                    marker.title = `Bar ${beat.barNumber}`;
-                } else if (isBar) {
-                    marker.className = 'beat-marker';
-                    marker.title = `Bar ${beat.barNumber}`;
-                } else {
-                    marker.className = 'beat-marker';
-                    marker.title = `Beat ${beat.beatNum}`;
-                }
-
-                // Calculate position as percentage of duration
-                const position = (beat.time / duration) * 100;
-                marker.style.left = `${position}%`;
-
-                // Add bar number label at bottom for bars (beatNum === 1)
-                if (isBar) {
-                    const barLabel = document.createElement('span');
-                    barLabel.textContent = beat.barNumber;
-                    barLabel.style.cssText = `
-                        position: absolute;
-                        bottom: 0;
-                        left: 0;
-                        transform: translateX(-50%);
-                        font-size: 9px;
-                        color: rgba(255, 255, 255, 0.5);
-                        pointer-events: none;
-                        white-space: nowrap;
-                    `;
-                    marker.appendChild(barLabel);
-                }
-
-                markerContainer.appendChild(marker);
-
-                // Store marker time for snap-to-marker functionality
-                stemCurrentMarkers[stemType].push(beat.time);
-            });
-        }
-
-        // Find nearest marker to the left for stem
-        function findStemNearestMarkerToLeft(stemType, clickTime) {
-            if (stemCurrentMarkers[stemType].length === 0) return clickTime;
-
-            let nearestMarker = 0;
-            for (let markerTime of stemCurrentMarkers[stemType]) {
-                if (markerTime <= clickTime && markerTime > nearestMarker) {
-                    nearestMarker = markerTime;
-                }
-            }
-
-            return nearestMarker;
-        }
-
-        // ============================================
-        // END PER-STEM MARKER FUNCTIONS
-        // ============================================
-
         // Toggle Cycle Mode (combined edit + active loop)
         function toggleCycleMode() {
             cycleMode = !cycleMode;
@@ -4498,42 +3648,9 @@
                 // Do NOT reset loop markers - they stay where they were
                 nextClickSets = 'start';
                 console.log('CYCLE MODE ON - click to set loop start/end, loop will play');
-
-                // If stems are expanded, also enable cycle mode for all stems
-                if (multiStemPlayerExpanded) {
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                    stemTypes.forEach(type => {
-                        const loopBtn = document.getElementById(`stem-cycle-${type}`);
-                        if (loopBtn && !stemCycleModes[type]) {
-                            // Enable stem cycle mode
-                            stemCycleModes[type] = true;
-                            stemNextClickSets[type] = 'start';
-                            loopBtn.classList.add('active', 'cycle-mode');
-                            console.log(`[${type}] CYCLE MODE ON (synced with parent)`);
-                        }
-                    });
-                }
             } else {
                 // Exiting cycle mode - editing disabled AND loop disabled
                 console.log('CYCLE MODE OFF - loop disabled');
-
-                // If stems are expanded, also disable cycle mode for all stems
-                if (multiStemPlayerExpanded) {
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                    stemTypes.forEach(type => {
-                        const loopBtn = document.getElementById(`stem-cycle-${type}`);
-                        const loopState = stemLoopStates[type];
-                        if (loopBtn && stemCycleModes[type]) {
-                            // Disable stem cycle mode
-                            stemCycleModes[type] = false;
-                            loopBtn.classList.remove('active', 'cycle-mode');
-                            loopState.enabled = false;
-                            loopState.start = null;
-                            loopState.end = null;
-                            console.log(`[${type}] CYCLE MODE OFF (synced with parent)`);
-                        }
-                    });
-                }
             }
 
             updateLoopVisuals();
@@ -5216,38 +4333,28 @@
 
         // Shift+Left Arrow: Move loop START marker to the LEFT (expand loop from left)
         function moveStartLeft() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop');
+            if (!cycleMode || loopStart === null || loopEnd === null || currentMarkers.length === 0) {
+                console.log('No active loop or no markers available');
                 return;
             }
 
-            let newLoopStart;
-
-            // If no markers, nudge by 0.01 seconds
-            if (currentMarkers.length === 0) {
-                newLoopStart = Math.max(0, loopStart - 0.01); // Don't go below 0
-                console.log(`Start marker nudged left to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(2)}s)`);
-            } else {
-                // Find the previous marker before current start (search backwards)
-                let prevMarker = null;
-                for (let i = currentMarkers.length - 1; i >= 0; i--) {
-                    const markerTime = currentMarkers[i];
-                    if (markerTime < loopStart) {
-                        prevMarker = markerTime;
-                        break; // Take first marker before start (searching backwards)
-                    }
+            // Find the previous marker before current start (search backwards)
+            let prevMarker = null;
+            for (let i = currentMarkers.length - 1; i >= 0; i--) {
+                const markerTime = currentMarkers[i];
+                if (markerTime < loopStart) {
+                    prevMarker = markerTime;
+                    break; // Take first marker before start (searching backwards)
                 }
-
-                if (prevMarker === null) {
-                    console.log('No marker found before loop start');
-                    return;
-                }
-
-                newLoopStart = prevMarker;
-                console.log(`Start marker moved left to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(1)}s)`);
             }
 
-            loopStart = newLoopStart;
+            if (prevMarker === null) {
+                console.log('No marker found before loop start');
+                return;
+            }
+
+            loopStart = prevMarker;
+            console.log(`Start marker moved left to ${loopStart.toFixed(2)}s (loop now ${(loopEnd - loopStart).toFixed(1)}s)`);
             recordAction('moveStartLeft', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
 
             // Handle jump based on mode
@@ -5264,38 +4371,27 @@
 
         // Shift+Up Arrow: Move loop END marker to the RIGHT (expand loop)
         function moveEndRight() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop');
+            if (!cycleMode || loopStart === null || loopEnd === null || currentMarkers.length === 0) {
+                console.log('No active loop or no markers available');
                 return;
             }
 
-            let newLoopEnd;
-
-            // If no markers, nudge by 0.01 seconds
-            if (currentMarkers.length === 0) {
-                const duration = wavesurfer ? wavesurfer.getDuration() : Infinity;
-                newLoopEnd = Math.min(duration, loopEnd + 0.01); // Don't go past file duration
-                console.log(`End marker nudged right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(2)}s)`);
-            } else {
-                // Find the next marker after current end
-                let nextMarker = null;
-                for (const markerTime of currentMarkers) {
-                    if (markerTime > loopEnd) {
-                        nextMarker = markerTime;
-                        break; // Take first marker after end
-                    }
+            // Find the next marker after current end
+            let nextMarker = null;
+            for (const markerTime of currentMarkers) {
+                if (markerTime > loopEnd) {
+                    nextMarker = markerTime;
+                    break; // Take first marker after end
                 }
-
-                if (nextMarker === null) {
-                    console.log('No marker found after loop end');
-                    return;
-                }
-
-                newLoopEnd = nextMarker;
-                console.log(`End marker moved right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(1)}s)`);
             }
 
-            loopEnd = newLoopEnd;
+            if (nextMarker === null) {
+                console.log('No marker found after loop end');
+                return;
+            }
+
+            loopEnd = nextMarker;
+            console.log(`End marker moved right to ${loopEnd.toFixed(2)}s (loop now ${(loopEnd - loopStart).toFixed(1)}s)`);
             recordAction('moveEndRight', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
 
             // Handle jump based on mode
@@ -5312,37 +4408,27 @@
 
         // Move start marker right to next marker (shrink loop from left)
         function moveStartRight() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop');
+            if (!cycleMode || loopStart === null || loopEnd === null || currentMarkers.length === 0) {
+                console.log('No active loop or no markers available');
                 return;
             }
 
-            let newLoopStart;
-
-            // If no markers, nudge by 0.01 seconds
-            if (currentMarkers.length === 0) {
-                newLoopStart = Math.min(loopEnd - 0.01, loopStart + 0.01); // Don't go past loop end
-                console.log(`Start marker nudged right to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(2)}s)`);
-            } else {
-                // Find the next marker after current start
-                let nextMarker = null;
-                for (const markerTime of currentMarkers) {
-                    if (markerTime > loopStart && markerTime < loopEnd) {
-                        nextMarker = markerTime;
-                        break; // Take first marker after start
-                    }
+            // Find the next marker after current start
+            let nextMarker = null;
+            for (const markerTime of currentMarkers) {
+                if (markerTime > loopStart && markerTime < loopEnd) {
+                    nextMarker = markerTime;
+                    break; // Take first marker after start
                 }
-
-                if (nextMarker === null) {
-                    console.log('No marker found between start and end');
-                    return;
-                }
-
-                newLoopStart = nextMarker;
-                console.log(`Start marker moved right to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(1)}s)`);
             }
 
-            loopStart = newLoopStart;
+            if (nextMarker === null) {
+                console.log('No marker found between start and end');
+                return;
+            }
+
+            loopStart = nextMarker;
+            console.log(`Start marker moved right to ${loopStart.toFixed(2)}s (loop now ${(loopEnd - loopStart).toFixed(1)}s)`);
             recordAction('moveStartRight', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
 
             // Handle jump based on mode
@@ -5359,38 +4445,28 @@
 
         // Move end marker left to previous marker (shrink loop from right)
         function moveEndLeft() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop');
+            if (!cycleMode || loopStart === null || loopEnd === null || currentMarkers.length === 0) {
+                console.log('No active loop or no markers available');
                 return;
             }
 
-            let newLoopEnd;
-
-            // If no markers, nudge by 0.01 seconds
-            if (currentMarkers.length === 0) {
-                newLoopEnd = Math.max(loopStart + 0.01, loopEnd - 0.01); // Don't go before loop start
-                console.log(`End marker nudged left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(2)}s)`);
-            } else {
-                // Find the previous marker before current end (search backwards)
-                let prevMarker = null;
-                for (let i = currentMarkers.length - 1; i >= 0; i--) {
-                    const markerTime = currentMarkers[i];
-                    if (markerTime < loopEnd && markerTime > loopStart) {
-                        prevMarker = markerTime;
-                        break; // Take first marker before end
-                    }
+            // Find the previous marker before current end (search backwards)
+            let prevMarker = null;
+            for (let i = currentMarkers.length - 1; i >= 0; i--) {
+                const markerTime = currentMarkers[i];
+                if (markerTime < loopEnd && markerTime > loopStart) {
+                    prevMarker = markerTime;
+                    break; // Take first marker before end
                 }
-
-                if (prevMarker === null) {
-                    console.log('No marker found between start and end');
-                    return;
-                }
-
-                newLoopEnd = prevMarker;
-                console.log(`End marker moved left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(1)}s)`);
             }
 
-            loopEnd = newLoopEnd;
+            if (prevMarker === null) {
+                console.log('No marker found between start and end');
+                return;
+            }
+
+            loopEnd = prevMarker;
+            console.log(`End marker moved left to ${loopEnd.toFixed(2)}s (loop now ${(loopEnd - loopStart).toFixed(1)}s)`);
             recordAction('moveEndLeft', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
 
             // Handle jump based on mode
@@ -5507,13 +4583,7 @@
                 wavesurfer.setVolume(currentVolume);
                 console.log(`Restored parent volume to ${(currentVolume * 100).toFixed(0)}%`);
 
-                // Load file into parent player component (handles markers)
-                if (parentPlayerComponent) {
-                    parentPlayerComponent.loadFile(file);
-                } else {
-                    // Fallback to old function if component not initialized
-                    addBarMarkers(file);
-                }
+                addBarMarkers(file);
 
                 // BPM Lock: Auto-adjust playback rate to match locked BPM
                 if (bpmLockEnabled && lockedBPM !== null && file.bpm) {
@@ -5599,8 +4669,6 @@
                 return;
             }
 
-            // ALWAYS control the parent wavesurfer
-            // Even when stems are expanded, parent plays (muted) and stems sync via events
             wavesurfer.playPause();
             const icon = document.getElementById('playPauseIcon');
             icon.textContent = wavesurfer.isPlaying() ? '⏸' : '▶';
@@ -5829,84 +4897,6 @@
         // Reset rate to 1.0x
         function resetRate() {
             setPlaybackRate(1.0);
-        }
-
-        // ============================================
-        // ADVANCED SPEED/PITCH CONTROLS (Placeholder)
-        // ============================================
-
-        let isAdvancedRateMode = false;
-        let currentSpeed = 1.0;
-        let currentPitch = 0.0; // semitones
-        let speedPitchLocked = true;
-
-        // Toggle between simple rate and advanced speed/pitch mode
-        function toggleRateMode() {
-            isAdvancedRateMode = !isAdvancedRateMode;
-            const advancedContainer = document.getElementById('advancedRateContainer');
-            const simpleRateSlider = document.getElementById('rateSlider');
-            const toggleBtn = document.getElementById('toggleRateModeBtn');
-
-            if (advancedContainer) {
-                advancedContainer.style.display = isAdvancedRateMode ? 'flex' : 'none';
-            }
-
-            if (simpleRateSlider) {
-                simpleRateSlider.style.display = isAdvancedRateMode ? 'none' : 'block';
-            }
-
-            if (toggleBtn) {
-                toggleBtn.classList.toggle('active', isAdvancedRateMode);
-            }
-
-            console.log(`Advanced rate mode: ${isAdvancedRateMode ? 'ON' : 'OFF'}`);
-        }
-
-        // Set speed (placeholder - will integrate with Signalsmith later)
-        function setSpeed(speed) {
-            currentSpeed = speed;
-            document.getElementById('speedValue').textContent = speed.toFixed(1) + 'x';
-
-            // For now, just adjust the simple rate slider
-            if (speedPitchLocked) {
-                setPlaybackRate(speed);
-            }
-
-            console.log(`Speed set to ${speed}x (placeholder - chipmunk effect only)`);
-        }
-
-        // Reset speed to 1.0x
-        function resetSpeed() {
-            setSpeed(1.0);
-        }
-
-        // Set pitch (placeholder - will integrate with Signalsmith later)
-        function setPitch(semitones) {
-            currentPitch = semitones;
-            document.getElementById('pitchValue').textContent = semitones.toFixed(1) + 'st';
-
-            console.log(`Pitch set to ${semitones}st (placeholder - not yet functional)`);
-        }
-
-        // Reset pitch to 0 semitones
-        function resetPitch() {
-            setPitch(0);
-        }
-
-        // Toggle speed/pitch lock
-        function toggleSpeedPitchLock() {
-            speedPitchLocked = !speedPitchLocked;
-            const lockBtn = document.getElementById('speedPitchLockBtn');
-
-            if (lockBtn) {
-                lockBtn.innerHTML = speedPitchLocked ? '<span>🔗</span>' : '<span>🔓</span>';
-                lockBtn.classList.toggle('active', speedPitchLocked);
-                lockBtn.title = speedPitchLocked
-                    ? 'Unlock speed and pitch (independent control)'
-                    : 'Lock speed and pitch together';
-            }
-
-            console.log(`Speed/Pitch ${speedPitchLocked ? 'LOCKED' : 'UNLOCKED'}`);
         }
 
         // Phase 4 Step 2B: Stem volume control
@@ -6897,90 +5887,10 @@ window.toggleMute = toggleMute;
 window.resetVolume = resetVolume;
 window.setPlaybackRate = setPlaybackRate;
 window.resetRate = resetRate;
-window.toggleRateMode = toggleRateMode;
-window.setSpeed = setSpeed;
-window.resetSpeed = resetSpeed;
-window.setPitch = setPitch;
-window.resetPitch = resetPitch;
-window.toggleSpeedPitchLock = toggleSpeedPitchLock;
-// Store references to old functions before overwriting
-        const _oldToggleMarkers = toggleMarkers;
-        const _oldSetMarkerFrequency = setMarkerFrequency;
-        const _oldShiftBarStartLeft = shiftBarStartLeft;
-        const _oldShiftBarStartRight = shiftBarStartRight;
-
-// CRITICAL: Expose setters to sync component state to global variables
-        // This allows waveform click handler (cycle mode) to access marker data
-        // TODO: Remove once waveform click handling is moved into component
-        window.updateCurrentMarkers = (markers) => {
-            currentMarkers = markers;
-            console.log(`[Global] currentMarkers updated, length: ${markers.length}`);
-        };
-        window.updateMarkersEnabled = (enabled) => {
-            markersEnabled = enabled;
-            console.log(`[Global] markersEnabled updated: ${enabled}`);
-        };
-
-        // Expose loop/cycle state variables for component click handler
-        // Using getters/setters so component can read AND write the module-scoped variables
-        Object.defineProperty(window, 'cycleMode', {
-            get: () => cycleMode,
-            set: (value) => { cycleMode = value; },
-            configurable: true
-        });
-        Object.defineProperty(window, 'loopStart', {
-            get: () => loopStart,
-            set: (value) => { loopStart = value; },
-            configurable: true
-        });
-        Object.defineProperty(window, 'loopEnd', {
-            get: () => loopEnd,
-            set: (value) => { loopEnd = value; },
-            configurable: true
-        });
-        Object.defineProperty(window, 'nextClickSets', {
-            get: () => nextClickSets,
-            set: (value) => { nextClickSets = value; },
-            configurable: true
-        });
-        Object.defineProperty(window, 'seekOnClick', {
-            get: () => seekOnClick,
-            set: (value) => { seekOnClick = value; },
-            configurable: true
-        });
-
-        // Expose helper functions for component
-        window.updateLoopVisuals = updateLoopVisuals;
-        window.recordAction = recordAction;
-// Wrapper functions that delegate to PlayerBarComponent
-        window.toggleMarkers = () => {
-            if (parentPlayerComponent) {
-                parentPlayerComponent.toggleMarkers();
-            } else {
-                _oldToggleMarkers(); // Fallback to old function
-            }
-        };
-        window.setMarkerFrequency = (freq) => {
-            if (parentPlayerComponent) {
-                parentPlayerComponent.setMarkerFrequency(freq);
-            } else {
-                _oldSetMarkerFrequency(freq); // Fallback
-            }
-        };
-        window.shiftBarStartLeft = () => {
-            if (parentPlayerComponent) {
-                parentPlayerComponent.shiftBarStartLeft();
-            } else {
-                _oldShiftBarStartLeft(); // Fallback
-            }
-        };
-        window.shiftBarStartRight = () => {
-            if (parentPlayerComponent) {
-                parentPlayerComponent.shiftBarStartRight();
-            } else {
-                _oldShiftBarStartRight(); // Fallback
-            }
-        };
+window.toggleMarkers = toggleMarkers;
+window.setMarkerFrequency = setMarkerFrequency;
+window.shiftBarStartLeft = shiftBarStartLeft;
+window.shiftBarStartRight = shiftBarStartRight;
 window.toggleMetronome = toggleMetronome;
 window.setMetronomeSound = setMetronomeSound;
 window.toggleCycleMode = toggleCycleMode;
@@ -7013,25 +5923,3 @@ window.handleMultiStemVolumeChange = handleMultiStemVolumeChange;
 window.handleStemRateChange = handleStemRateChange;
 window.setStemRatePreset = setStemRatePreset;
 window.toggleStemRateLock = toggleStemRateLock;
-// Phase 2B: Loop region functions
-window.setStemLoopRegion = setStemLoopRegion;
-
-// ============================================
-// VERSION 27D: FULL TEMPLATE SYSTEM EXPORTS
-// ============================================
-
-// Marker functions
-window.toggleStemMarkers = toggleStemMarkers;
-window.setStemMarkerFrequency = setStemMarkerFrequency;
-window.shiftStemBarStartLeft = shiftStemBarStartLeft;
-window.shiftStemBarStartRight = shiftStemBarStartRight;
-
-// Cycle/Loop functions
-window.toggleStemCycleMode = toggleStemCycleMode;
-
-// TODO: Add more function exports as they are implemented:
-// Metronome: toggleStemMetronome, setStemMetronomeSound
-// Cycle/Loop: toggleStemSeekOnClick, clearStemLoopKeepCycle, toggleStemLoopControlsExpanded
-// Loop manipulation: shiftStemLoopLeft, shiftStemLoopRight, moveStemStartLeft, moveStemEndRight, halfStemLoopLength, doubleStemLoopLength
-// Loop modes: toggleStemImmediateJump, toggleStemLoopFades, setStemFadeTime, toggleStemPreserveLoop, toggleStemBPMLock
-// Recording: toggleStemRecordActions, playStemRecordedActions

@@ -188,3 +188,94 @@ KEY LEARNINGS
 ================================================================================
 STATUS: READY FOR TESTING (pending cache clear)
 ================================================================================
+
+================================================================================
+SESSION LOG - Cycle Mode Fix & Beatmap Normalization
+================================================================================
+Date: 2025-10-16 (Continued)
+Branch: experimental-v27-stem-independence
+Commits: 0940346 → 838c1b6 (9 commits)
+
+================================================================================
+OBJECTIVE
+================================================================================
+Fix cycle mode functionality and resolve shift function bugs caused by
+incorrect beatmap normalization.
+
+================================================================================
+WORK COMPLETED
+================================================================================
+
+✅ 1. Moved Waveform Click Handler into Component (commit 98bfe56, 2b1919f)
+   - Added setupWaveformClickHandler() method to PlayerBarComponent
+   - Click handler now uses component's this.markersEnabled and this.currentMarkers
+   - Exposed loop/cycle state via window.cycleMode, window.loopStart, etc. using Object.defineProperty
+   - Fixed: Cycle mode now detects clicks and sets loop points
+
+✅ 2. Added Hover Preview for Cycle Mode (commit d7db221)
+   - Added setupHoverPreview() method to show blue loop region preview
+   - Preview appears when hovering over waveform after setting loop start
+   - Removed when loop end is set or mouse leaves waveform
+
+✅ 3. Fixed Beatmap Normalization Bug (commit 838c1b6) **CRITICAL FIX**
+   - **Root Cause**: Old logic forced ONLY first beat to beatNum=1, but if Music.ai
+     detected pickup beat (e.g., beatNum=4), the SECOND beat was already beatNum=1,
+     resulting in two consecutive "bar start" beats
+   - **Fix**: Shift ALL beatNums by (firstBeatNum - 1) to maintain relative spacing
+   - **Result**: Eliminates duplicate bar markers, smooth shift transitions
+
+✅ 4. Added Debug Logging (commits fb8d64b, da368dc)
+   - Console output shows original Music.ai beatmap data
+   - Shows normalization shift calculations
+   - Shows first 5 filtered beats for each frequency
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+Modified:
+- src/components/playerBar.js (added click handler, hover preview, debug logging)
+- src/core/app.js (exposed loop/cycle state via window properties)
+
+================================================================================
+COMMITS (This Session)
+================================================================================
+
+0940346 - Add handoff document for next session - Cycle mode debugging
+98bfe56 - Claude: Move waveform click handler into PlayerBarComponent - IN PROGRESS
+2b1919f - Claude: Expose loop/cycle state on window and fix markers-off behavior - WORKING
+d7db221 - Claude: Add hover preview handlers for cycle mode visual indicator - WORKING
+fb8d64b - Claude: Add debug logging for shift function - DEBUGGING
+da368dc - Claude: Add detailed beatmap debug logging with formatted output - DEBUGGING
+838c1b6 - Claude: Fix beatmap normalization - shift ALL beatNums - CRITICAL FIX ✅ WORKING
+
+================================================================================
+TESTING RESULTS
+================================================================================
+
+✅ Cycle Mode:
+- Pressing C or CYCLE button enables cycle mode
+- First click sets loop start
+- Hover shows blue preview of loop region
+- Second click sets loop end
+- Loop region appears correctly
+
+✅ Snap-to-Marker:
+- Clicking waveform snaps to nearest marker when markers enabled
+- Markers OFF disables snap (lets WaveSurfer handle clicks normally)
+
+✅ Shift Function:
+- Smooth transitions across all fractional values (0.25, 0.5, 0.75, 1.0)
+- No visual jumps when crossing whole number boundaries
+- Works correctly with files that have good beatmap data
+
+⚠️ Known Issue:
+- Some files have incorrect Music.ai beatmap data (first beat detected late)
+- This is a data quality issue, not a code issue
+- User will re-analyze these files later
+
+================================================================================
+CURRENT WORKING COMMIT: 838c1b6
+================================================================================
+All features tested and working. Safe revert point.
+

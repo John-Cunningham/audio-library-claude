@@ -2986,8 +2986,11 @@
                         // A stem follows parent if it's active AND doesn't have its own loop
                         const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
 
+                        console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
+
                         if (ws && followsParent && !ws.isPlaying()) {
                             // Only play stems that follow parent (not those with own loops)
+                            console.log(`  → Playing ${stemType}`);
                             ws.play();
                             const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
                             if (icon) icon.textContent = '||';
@@ -3008,9 +3011,12 @@
                         // A stem follows parent if it's active AND doesn't have its own loop
                         const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
 
+                        console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
+
                         if (ws && followsParent) {
                             // Only pause stems that follow parent (not those with own loops)
                             if (ws.isPlaying()) {
+                                console.log(`  → Pausing ${stemType}`);
                                 ws.pause();
                                 const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
                                 if (icon) icon.textContent = '▶';

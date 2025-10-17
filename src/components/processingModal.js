@@ -220,7 +220,7 @@ function createProcessingModalHTML() {
             <div class="modal-content">
                 <div class="modal-header">
                     <h2>Edit Files <span id="modalFileCount" style="color: #999; font-size: 0.8em;"></span></h2>
-                    <button class="modal-close" onclick="window.processingModal.closeEditTagsModal()">&times;</button>
+                    <button class="modal-close" onclick="closeEditTagsModal()">&times;</button>
                 </div>
 
                 <!-- Tags Section -->
@@ -302,8 +302,8 @@ function createProcessingModalHTML() {
                 </div>
 
                 <div class="modal-actions">
-                    <button class="modal-btn modal-btn-cancel" onclick="window.processingModal.closeEditTagsModal()">Cancel</button>
-                    <button class="modal-btn modal-btn-save" onclick="window.processingModal.handleSave()">Save Changes</button>
+                    <button class="modal-btn modal-btn-cancel" onclick="closeEditTagsModal()">Cancel</button>
+                    <button class="modal-btn modal-btn-save" onclick="handleSaveEditedTags()">Save Changes</button>
                 </div>
             </div>
         </div>

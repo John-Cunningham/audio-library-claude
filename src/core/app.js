@@ -537,6 +537,13 @@
                     console.log('Waveform container HTML:', document.getElementById('waveform').innerHTML);
                     console.log('Waveform container children:', document.getElementById('waveform').children);
                     updatePlayerTime();
+
+                    // CRITICAL: Re-establish parent-stem sync for this new wavesurfer instance
+                    // This must be called every time wavesurfer is recreated
+                    if (Object.keys(stemPlayerWavesurfers).length > 0) {
+                        setupParentStemSync();
+                        console.log('✓ Parent-stem sync re-established for new wavesurfer instance');
+                    }
                 });
 
                 wavesurfer.on('audioprocess', () => {

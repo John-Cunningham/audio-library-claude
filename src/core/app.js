@@ -2848,8 +2848,21 @@
 
                         // Check for loop playback
                         const loopState = stemLoopStates[stemType];
-                        if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                            // If playhead reaches or passes loop end, jump back to loop start
+
+                        // Stem follows parent loop if:
+                        // 1. Stem is active (stemPlaybackIndependent = true)
+                        // 2. Stem doesn't have its own cycle enabled (loopState.enabled = false)
+                        // 3. Parent has cycle enabled with valid loop points
+                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
+
+                        if (followsParent && cycleMode && loopStart !== null && loopEnd !== null) {
+                            // Follow parent's loop
+                            if (currentTime >= loopEnd) {
+                                ws.seekTo(loopStart / duration);
+                                // Don't log every loop - too spammy
+                            }
+                        } else if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
+                            // Use stem's own loop
                             if (currentTime >= loopState.end) {
                                 ws.seekTo(loopState.start / duration);
                                 console.log(`${stemType} looped back to ${loopState.start}s`);
@@ -2860,8 +2873,16 @@
                     // Handle stem reaching end of file - loop if enabled
                     ws.on('finish', () => {
                         const loopState = stemLoopStates[stemType];
-                        if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                            // Loop is enabled - seek back to loop start and continue playing
+
+                        // Stem follows parent loop if active and doesn't have own cycle
+                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
+
+                        if (followsParent && cycleMode && loopStart !== null && loopEnd !== null) {
+                            // Follow parent's loop
+                            ws.seekTo(loopStart / ws.getDuration());
+                            ws.play();
+                        } else if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
+                            // Use stem's own loop
                             ws.seekTo(loopState.start / ws.getDuration());
                             ws.play();
                             console.log(`${stemType} finished - looping back to ${loopState.start}s`);
@@ -4288,9 +4309,42 @@
                 // Do NOT reset loop markers - they stay where they were
                 nextClickSets = 'start';
                 console.log('CYCLE MODE ON - click to set loop start/end, loop will play');
+
+                // If stems are expanded, also enable cycle mode for all stems
+                if (multiStemPlayerExpanded) {
+                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+                    stemTypes.forEach(type => {
+                        const loopBtn = document.getElementById(`stem-cycle-${type}`);
+                        if (loopBtn && !stemCycleModes[type]) {
+                            // Enable stem cycle mode
+                            stemCycleModes[type] = true;
+                            stemNextClickSets[type] = 'start';
+                            loopBtn.classList.add('active', 'cycle-mode');
+                            console.log(`[${type}] CYCLE MODE ON (synced with parent)`);
+                        }
+                    });
+                }
             } else {
                 // Exiting cycle mode - editing disabled AND loop disabled
                 console.log('CYCLE MODE OFF - loop disabled');
+
+                // If stems are expanded, also disable cycle mode for all stems
+                if (multiStemPlayerExpanded) {
+                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+                    stemTypes.forEach(type => {
+                        const loopBtn = document.getElementById(`stem-cycle-${type}`);
+                        const loopState = stemLoopStates[type];
+                        if (loopBtn && stemCycleModes[type]) {
+                            // Disable stem cycle mode
+                            stemCycleModes[type] = false;
+                            loopBtn.classList.remove('active', 'cycle-mode');
+                            loopState.enabled = false;
+                            loopState.start = null;
+                            loopState.end = null;
+                            console.log(`[${type}] CYCLE MODE OFF (synced with parent)`);
+                        }
+                    });
+                }
             }
 
             updateLoopVisuals();

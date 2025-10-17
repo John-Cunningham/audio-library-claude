@@ -343,6 +343,119 @@ export const controlDefinitions = {
     },
 
     // ============================================
+    // ADVANCED RATE CONTROLS (PARENT ONLY)
+    // Placeholder UI for independent speed/pitch control
+    // ============================================
+
+    toggleRateMode: {
+        id: 'toggleRateMode',
+        type: 'button',
+        showIn: ['parent'],
+        row: 'rate',
+        order: 22,
+        htmlId: () => 'toggleRateModeBtn',
+        tag: 'button',
+        classes: () => 'player-btn',
+        innerHTML: () => '<span style="font-size: 10px;">⚙️</span>',
+        attributes: () => ({
+            onclick: 'toggleRateMode()',
+            title: 'Toggle advanced speed/pitch controls',
+            style: 'margin-left: 8px;'
+        })
+    },
+
+    speedSlider: {
+        id: 'speedSlider',
+        type: 'slider',
+        showIn: ['parent'],
+        row: 'advancedRate',
+        order: 1,
+        htmlId: () => 'speedSlider',
+        tag: 'input',
+        classes: () => '',
+        innerHTML: () => '',
+        attributes: () => ({
+            type: 'range',
+            min: '0.025',
+            max: '4.0',
+            step: '0.025',
+            value: '1.0',
+            style: 'flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;',
+            oninput: 'setSpeed(parseFloat(this.value))',
+            ondblclick: 'resetSpeed()'
+        })
+    },
+
+    speedDisplay: {
+        id: 'speedDisplay',
+        type: 'text',
+        showIn: ['parent'],
+        row: 'advancedRate',
+        order: 2,
+        htmlId: () => 'speedValue',
+        tag: 'span',
+        classes: () => '',
+        innerHTML: () => '1.0x',
+        attributes: () => ({
+            style: 'color: #999; font-size: 11px; min-width: 35px; text-align: right;'
+        })
+    },
+
+    pitchSlider: {
+        id: 'pitchSlider',
+        type: 'slider',
+        showIn: ['parent'],
+        row: 'advancedRate',
+        order: 3,
+        htmlId: () => 'pitchSlider',
+        tag: 'input',
+        classes: () => '',
+        innerHTML: () => '',
+        attributes: () => ({
+            type: 'range',
+            min: '-12',
+            max: '12',
+            step: '0.1',
+            value: '0',
+            style: 'flex: 1; height: 4px; background: #444; border-radius: 2px; outline: none; cursor: pointer;',
+            oninput: 'setPitch(parseFloat(this.value))',
+            ondblclick: 'resetPitch()'
+        })
+    },
+
+    pitchDisplay: {
+        id: 'pitchDisplay',
+        type: 'text',
+        showIn: ['parent'],
+        row: 'advancedRate',
+        order: 4,
+        htmlId: () => 'pitchValue',
+        tag: 'span',
+        classes: () => '',
+        innerHTML: () => '0.0st',
+        attributes: () => ({
+            style: 'color: #999; font-size: 11px; min-width: 35px; text-align: right;'
+        })
+    },
+
+    speedPitchLock: {
+        id: 'speedPitchLock',
+        type: 'button',
+        showIn: ['parent'],
+        row: 'advancedRate',
+        order: 5,
+        htmlId: () => 'speedPitchLockBtn',
+        tag: 'button',
+        classes: () => 'player-btn',
+        innerHTML: () => '<span>🔗</span>',
+        attributes: () => ({
+            onclick: 'toggleSpeedPitchLock()',
+            title: 'Lock speed and pitch together',
+            style: 'margin-left: 8px;'
+        })
+    },
+
+    // ============================================
     // TRANSPORT CONTROLS (PARENT ONLY)
     // ============================================
 

@@ -5573,6 +5573,84 @@
             setPlaybackRate(1.0);
         }
 
+        // ============================================
+        // ADVANCED SPEED/PITCH CONTROLS (Placeholder)
+        // ============================================
+
+        let isAdvancedRateMode = false;
+        let currentSpeed = 1.0;
+        let currentPitch = 0.0; // semitones
+        let speedPitchLocked = true;
+
+        // Toggle between simple rate and advanced speed/pitch mode
+        function toggleRateMode() {
+            isAdvancedRateMode = !isAdvancedRateMode;
+            const advancedContainer = document.getElementById('advancedRateContainer');
+            const simpleRateSlider = document.getElementById('rateSlider');
+            const toggleBtn = document.getElementById('toggleRateModeBtn');
+
+            if (advancedContainer) {
+                advancedContainer.style.display = isAdvancedRateMode ? 'flex' : 'none';
+            }
+
+            if (simpleRateSlider) {
+                simpleRateSlider.style.display = isAdvancedRateMode ? 'none' : 'block';
+            }
+
+            if (toggleBtn) {
+                toggleBtn.classList.toggle('active', isAdvancedRateMode);
+            }
+
+            console.log(`Advanced rate mode: ${isAdvancedRateMode ? 'ON' : 'OFF'}`);
+        }
+
+        // Set speed (placeholder - will integrate with Signalsmith later)
+        function setSpeed(speed) {
+            currentSpeed = speed;
+            document.getElementById('speedValue').textContent = speed.toFixed(1) + 'x';
+
+            // For now, just adjust the simple rate slider
+            if (speedPitchLocked) {
+                setPlaybackRate(speed);
+            }
+
+            console.log(`Speed set to ${speed}x (placeholder - chipmunk effect only)`);
+        }
+
+        // Reset speed to 1.0x
+        function resetSpeed() {
+            setSpeed(1.0);
+        }
+
+        // Set pitch (placeholder - will integrate with Signalsmith later)
+        function setPitch(semitones) {
+            currentPitch = semitones;
+            document.getElementById('pitchValue').textContent = semitones.toFixed(1) + 'st';
+
+            console.log(`Pitch set to ${semitones}st (placeholder - not yet functional)`);
+        }
+
+        // Reset pitch to 0 semitones
+        function resetPitch() {
+            setPitch(0);
+        }
+
+        // Toggle speed/pitch lock
+        function toggleSpeedPitchLock() {
+            speedPitchLocked = !speedPitchLocked;
+            const lockBtn = document.getElementById('speedPitchLockBtn');
+
+            if (lockBtn) {
+                lockBtn.innerHTML = speedPitchLocked ? '<span>🔗</span>' : '<span>🔓</span>';
+                lockBtn.classList.toggle('active', speedPitchLocked);
+                lockBtn.title = speedPitchLocked
+                    ? 'Unlock speed and pitch (independent control)'
+                    : 'Lock speed and pitch together';
+            }
+
+            console.log(`Speed/Pitch ${speedPitchLocked ? 'LOCKED' : 'UNLOCKED'}`);
+        }
+
         // Phase 4 Step 2B: Stem volume control
         function handleStemVolumeChange(stemType, value) {
             // Phase 4 Fix 2: Use stem file ID instead of stem type
@@ -6561,6 +6639,12 @@ window.toggleMute = toggleMute;
 window.resetVolume = resetVolume;
 window.setPlaybackRate = setPlaybackRate;
 window.resetRate = resetRate;
+window.toggleRateMode = toggleRateMode;
+window.setSpeed = setSpeed;
+window.resetSpeed = resetSpeed;
+window.setPitch = setPitch;
+window.resetPitch = resetPitch;
+window.toggleSpeedPitchLock = toggleSpeedPitchLock;
 // Store references to old functions before overwriting
         const _oldToggleMarkers = toggleMarkers;
         const _oldSetMarkerFrequency = setMarkerFrequency;

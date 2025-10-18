@@ -57,6 +57,10 @@ export class PlayerBarComponent {
         this.volume = 1.0;
         this.muted = false;
 
+        // Stem-specific rate control (only used for stems)
+        this.independentRate = 1.0;  // Independent rate multiplier for stems
+        this.rateLocked = true;      // For stems: locked to parent rate by default
+
         // Future: BPM/Key Locking for Stem Browsing
         // These enable stems to load files from different songs while auto-matching BPM/key
         // TODO: Implement in future phase (Signalsmith time/pitch stretching)
@@ -1005,7 +1009,7 @@ export class PlayerBarComponent {
 
     /**
      * Play/Pause toggle
-     * Called from window.playPause() wrapper
+     * Works for both parent and stem players
      */
     playPause() {
         if (!this.waveform) {
@@ -1013,31 +1017,405 @@ export class PlayerBarComponent {
             return;
         }
 
-        this.waveform.playPause();
+        // Get icon based on player type
+        const iconId = this.playerType === 'parent'
+            ? 'playPauseIcon'
+            : `stem-play-pause-icon-${this.stemType}`;
+        const icon = document.getElementById(iconId);
 
-        // Update play/pause icon
-        const icon = document.getElementById('playPauseIcon');
-        if (icon) {
-            icon.textContent = this.waveform.isPlaying() ? '⏸' : '▶';
+        if (this.waveform.isPlaying()) {
+            this.waveform.pause();
+            if (icon) icon.textContent = '▶';
+
+            // For stems, mark as inactive
+            if (this.playerType === 'stem' && typeof window !== 'undefined' && window.stemPlaybackIndependent) {
+                window.stemPlaybackIndependent[this.stemType] = false;
+                console.log(`[${this.getLogPrefix()}] Paused - marked as inactive`);
+            }
+        } else {
+            this.waveform.play();
+            if (icon) icon.textContent = '||';
+
+            // For stems, mark as active
+            if (this.playerType === 'stem' && typeof window !== 'undefined' && window.stemPlaybackIndependent) {
+                window.stemPlaybackIndependent[this.stemType] = true;
+                console.log(`[${this.getLogPrefix()}] Playing - marked as active`);
+            }
         }
 
         console.log(`[${this.getLogPrefix()}] ${this.waveform.isPlaying() ? 'Playing' : 'Paused'}`);
     }
 
     // ============================================
-    // RATE CONTROLS (PLACEHOLDER)
+    // RATE CONTROLS
     // ============================================
 
     setupRateControls() {
-        // TODO: Implement rate controls
+        // Note: Rate controls have onclick/oninput handlers in HTML that call window wrappers
+        // Window wrappers delegate to these component methods
+        // No need to add addEventListener here to avoid double-firing
+    }
+
+    /**
+     * Calculate final playback rate for stem players
+     * Formula:
+     *   - If locked: finalRate = parentRate
+     *   - If unlocked: finalRate = independentRate × parentRate
+     *
+     * For parent player, just returns this.rate
+     */
+    calculateFinalRate() {
+        if (this.playerType === 'parent') {
+            return this.rate;
+        }
+
+        // For stems, get parent rate from global state
+        const parentRate = (typeof window !== 'undefined' && window.currentRate) ? window.currentRate : 1.0;
+
+        if (this.rateLocked) {
+            // Locked: stem follows parent rate exactly
+            return parentRate;
+        } else {
+            // Unlocked: stem rate = independent multiplier × parent rate
+            return this.independentRate * parentRate;
+        }
+    }
+
+    /**
+     * Update rate display (shows rate and resulting BPM)
+     * @param {number} finalRate - The final playback rate to display
+     */
+    updateRateDisplay(finalRate) {
+        const displayId = this.playerType === 'parent'
+            ? 'rateDisplay'
+            : `stem-rate-display-${this.stemType}`;
+        const display = document.getElementById(displayId);
+
+        if (!display) return;
+
+        // Get current file BPM
+        const currentBPM = this.playerType === 'parent'
+            ? (typeof window !== 'undefined' && window.currentParentFileBPM) || null
+            : null;
+
+        // Calculate resulting BPM
+        const resultingBPM = currentBPM
+            ? (currentBPM * finalRate).toFixed(1)
+            : '---';
+
+        // Update display
+        display.textContent = `${finalRate.toFixed(2)}x @ ${resultingBPM} BPM`;
+    }
+
+    /**
+     * Update rate slider position (without triggering oninput)
+     * @param {number} sliderValue - Slider value (50-200)
+     */
+    updateRateSlider(sliderValue) {
+        const sliderId = this.playerType === 'parent'
+            ? 'rateSlider'
+            : `stem-rate-slider-${this.stemType}`;
+        const slider = document.getElementById(sliderId);
+
+        if (slider) {
+            slider.value = sliderValue;
+        }
+    }
+
+    /**
+     * Update lock button visual state (stems only)
+     * @param {boolean} isLocked - Whether the rate is locked to parent
+     */
+    updateLockButton(isLocked) {
+        if (this.playerType === 'parent') return; // Parent doesn't have lock button
+
+        const lockBtn = document.getElementById(`stem-lock-${this.stemType}`);
+        if (!lockBtn) return;
+
+        if (isLocked) {
+            lockBtn.classList.add('locked');
+            lockBtn.classList.remove('unlocked');
+            lockBtn.title = 'Locked to Parent Rate (click to unlock)';
+        } else {
+            lockBtn.classList.remove('locked');
+            lockBtn.classList.add('unlocked');
+            lockBtn.title = 'Independent Rate (click to lock to parent)';
+        }
+    }
+
+    /**
+     * Handle rate slider changes
+     * @param {number} sliderValue - Slider value (50-200 for 0.5x-2.0x)
+     */
+    setRate(sliderValue) {
+        if (!this.waveform) {
+            console.warn(`[${this.getLogPrefix()}] No waveform instance`);
+            return;
+        }
+
+        console.log(`[${this.getLogPrefix()}] setRate(${sliderValue})`);
+
+        // Convert slider value (50-200) to rate (0.5x-2.0x)
+        const rate = sliderValue / 100;
+
+        if (this.playerType === 'parent') {
+            // Parent player: just set the rate
+            this.rate = rate;
+            this.waveform.setPlaybackRate(rate, false);
+            this.updateRateDisplay(rate);
+            console.log(`[${this.getLogPrefix()}] Rate set to ${rate.toFixed(2)}x`);
+
+            // TODO: Update all locked stems to match parent rate
+            // This should be handled by the parent player syncing to stems
+        } else {
+            // Stem player: set independent rate
+            this.independentRate = rate;
+
+            // Unlock this stem (user is manually adjusting)
+            if (this.rateLocked) {
+                this.rateLocked = false;
+                this.updateLockButton(false);
+                console.log(`[${this.getLogPrefix()}] Unlocked (user adjusted rate manually)`);
+
+                // Sync to global state
+                if (typeof window !== 'undefined' && window.stemRateLocked) {
+                    window.stemRateLocked[this.stemType] = false;
+                }
+            }
+
+            // Calculate final rate (independent × parent)
+            const finalRate = this.calculateFinalRate();
+            this.waveform.setPlaybackRate(finalRate, false);
+            this.updateRateDisplay(finalRate);
+
+            const parentRate = (typeof window !== 'undefined' && window.currentRate) ? window.currentRate : 1.0;
+            console.log(`[${this.getLogPrefix()}] Rate set to ${finalRate.toFixed(2)}x (independent: ${rate.toFixed(2)}x × parent: ${parentRate.toFixed(2)}x)`);
+
+            // Sync to global state
+            if (typeof window !== 'undefined' && window.stemIndependentRates) {
+                window.stemIndependentRates[this.stemType] = rate;
+            }
+        }
+    }
+
+    /**
+     * Set rate to a preset value (0.5x, 1x, 2x)
+     * @param {number} presetRate - Preset rate (0.5, 1, or 2)
+     */
+    setRatePreset(presetRate) {
+        console.log(`[${this.getLogPrefix()}] setRatePreset(${presetRate}x)`);
+
+        if (this.playerType === 'parent') {
+            // Parent player: set rate directly
+            this.rate = presetRate;
+            this.updateRateSlider(presetRate * 100);
+
+            if (this.waveform) {
+                this.waveform.setPlaybackRate(presetRate, false);
+            }
+
+            this.updateRateDisplay(presetRate);
+            console.log(`[${this.getLogPrefix()}] Rate set to ${presetRate.toFixed(2)}x`);
+        } else {
+            // Stem player: set independent rate
+            this.independentRate = presetRate;
+
+            // Unlock if not already
+            if (this.rateLocked) {
+                this.rateLocked = false;
+                this.updateLockButton(false);
+                console.log(`[${this.getLogPrefix()}] Unlocked (preset button clicked)`);
+
+                // Sync to global state
+                if (typeof window !== 'undefined' && window.stemRateLocked) {
+                    window.stemRateLocked[this.stemType] = false;
+                }
+            }
+
+            // Update slider
+            this.updateRateSlider(presetRate * 100);
+
+            // Calculate and apply final rate
+            const finalRate = this.calculateFinalRate();
+            if (this.waveform) {
+                this.waveform.setPlaybackRate(finalRate, false);
+            }
+
+            this.updateRateDisplay(finalRate);
+            console.log(`[${this.getLogPrefix()}] Rate set to ${finalRate.toFixed(2)}x`);
+
+            // Sync to global state
+            if (typeof window !== 'undefined' && window.stemIndependentRates) {
+                window.stemIndependentRates[this.stemType] = presetRate;
+            }
+        }
+    }
+
+    /**
+     * Toggle lock/unlock state for stem's rate
+     * Only applicable for stem players
+     */
+    toggleRateLock() {
+        if (this.playerType === 'parent') {
+            console.warn(`[${this.getLogPrefix()}] Parent player doesn't have rate lock`);
+            return;
+        }
+
+        const wasLocked = this.rateLocked;
+        const newLockState = !wasLocked;
+
+        console.log(`[${this.getLogPrefix()}] toggleRateLock: ${wasLocked ? 'LOCKED' : 'UNLOCKED'} → ${newLockState ? 'LOCKED' : 'UNLOCKED'}`);
+
+        this.rateLocked = newLockState;
+
+        if (newLockState) {
+            // Locking: reset independent rate to 1.0
+            this.independentRate = 1.0;
+            this.updateRateSlider(100);
+            console.log(`[${this.getLogPrefix()}] Locked - reset to 1.0x multiplier`);
+        } else {
+            console.log(`[${this.getLogPrefix()}] Unlocked - can now set independent rate`);
+        }
+
+        // Update button appearance
+        this.updateLockButton(newLockState);
+
+        // Recalculate and apply final rate
+        const finalRate = this.calculateFinalRate();
+        if (this.waveform) {
+            this.waveform.setPlaybackRate(finalRate, false);
+        }
+
+        this.updateRateDisplay(finalRate);
+        console.log(`[${this.getLogPrefix()}] Rate updated to ${finalRate.toFixed(2)}x`);
+
+        // Sync to global state
+        if (typeof window !== 'undefined') {
+            if (window.stemRateLocked) {
+                window.stemRateLocked[this.stemType] = newLockState;
+            }
+            if (window.stemIndependentRates) {
+                window.stemIndependentRates[this.stemType] = this.independentRate;
+            }
+        }
     }
 
     // ============================================
-    // VOLUME CONTROLS (PLACEHOLDER)
+    // VOLUME CONTROLS
     // ============================================
 
     setupVolumeControls() {
-        // TODO: Implement volume controls
+        // Note: Volume controls have onclick/oninput handlers in HTML that call window wrappers
+        // Window wrappers delegate to these component methods
+        // No need to add addEventListener here to avoid double-firing
+    }
+
+    /**
+     * Toggle mute/unmute
+     * Works for both parent and stem players
+     */
+    toggleMute() {
+        if (!this.waveform) {
+            console.warn(`[${this.getLogPrefix()}] No waveform instance`);
+            return;
+        }
+
+        const currentVolume = this.waveform.getVolume();
+
+        // Get UI elements based on player type
+        const muteBtnId = this.playerType === 'parent'
+            ? 'muteBtn'
+            : `stem-mute-${this.stemType}`;
+        const volumeSliderId = this.playerType === 'parent'
+            ? 'volumeSlider'
+            : `stem-volume-${this.stemType}`;
+        const percentDisplayId = this.playerType === 'parent'
+            ? 'volumePercent'
+            : `stem-volume-percent-${this.stemType}`;
+
+        const muteBtn = document.getElementById(muteBtnId);
+        const volumeSlider = document.getElementById(volumeSliderId);
+        const percentDisplay = document.getElementById(percentDisplayId);
+
+        if (currentVolume > 0) {
+            // Mute - save current volume first
+            this.volume = currentVolume; // Save to component state
+            this.muted = true;
+            this.waveform.setVolume(0);
+
+            if (muteBtn) {
+                muteBtn.classList.add('active');
+                const icon = muteBtn.querySelector('span');
+                if (icon) icon.textContent = '🔇';
+            }
+            if (volumeSlider) volumeSlider.value = 0;
+            if (percentDisplay) percentDisplay.textContent = '0%';
+
+            console.log(`[${this.getLogPrefix()}] Muted`);
+        } else {
+            // Unmute - restore previous volume
+            const restoredVolume = this.volume || 1.0;
+            this.muted = false;
+            this.waveform.setVolume(restoredVolume);
+
+            if (muteBtn) {
+                muteBtn.classList.remove('active');
+                const icon = muteBtn.querySelector('span');
+                if (icon) icon.textContent = '🔊';
+            }
+            if (volumeSlider) volumeSlider.value = restoredVolume * 100;
+            if (percentDisplay) percentDisplay.textContent = `${Math.round(restoredVolume * 100)}%`;
+
+            console.log(`[${this.getLogPrefix()}] Unmuted to ${Math.round(restoredVolume * 100)}%`);
+        }
+    }
+
+    /**
+     * Set volume level (0-100)
+     * @param {number} value - Volume level 0-100
+     */
+    setVolume(value) {
+        if (!this.waveform) {
+            console.warn(`[${this.getLogPrefix()}] No waveform instance`);
+            return;
+        }
+
+        const volume = value / 100;
+        this.volume = volume;
+        this.waveform.setVolume(volume);
+
+        // Get UI elements based on player type
+        const percentDisplayId = this.playerType === 'parent'
+            ? 'volumePercent'
+            : `stem-volume-percent-${this.stemType}`;
+        const muteBtnId = this.playerType === 'parent'
+            ? 'muteBtn'
+            : `stem-mute-${this.stemType}`;
+
+        const percentDisplay = document.getElementById(percentDisplayId);
+        const muteBtn = document.getElementById(muteBtnId);
+
+        // Update percentage display
+        if (percentDisplay) {
+            percentDisplay.textContent = `${value}%`;
+        }
+
+        // Update mute button icon based on volume
+        if (muteBtn) {
+            const icon = muteBtn.querySelector('span');
+            if (icon) {
+                icon.textContent = volume === 0 ? '🔇' : '🔊';
+            }
+            if (volume === 0) {
+                muteBtn.classList.add('active');
+                this.muted = true;
+            } else {
+                muteBtn.classList.remove('active');
+                this.muted = false;
+            }
+        }
+
+        console.log(`[${this.getLogPrefix()}] Volume set to ${value}%`);
     }
 
     // ============================================

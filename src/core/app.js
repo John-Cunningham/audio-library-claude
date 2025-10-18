@@ -918,6 +918,7 @@
             stemIndependentRates = result.stemIndependentRates;
             stemRateLocked = result.stemRateLocked;
             currentParentFileBPM = result.currentParentFileBPM;
+            window.currentParentFileBPM = result.currentParentFileBPM; // Expose to window for PlayerBarComponent
             stemsPreloaded = result.stemsPreloaded;
         }
 
@@ -1153,68 +1154,14 @@
             }
         }
 
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleMultiStemPlay(stemType) {
-            const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) {
-                console.log(`No WaveSurfer instance for ${stemType}`);
-                return;
-            }
-
-            const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-
-            if (ws.isPlaying()) {
-                ws.pause();
-                if (icon) icon.textContent = '▶';
-                // Mark as NOT active (user paused it)
-                stemPlaybackIndependent[stemType] = false;
-                console.log(`Paused ${stemType} stem - marked as inactive`);
-            } else {
-                ws.play();
-                if (icon) icon.textContent = '||';
-                // Mark as active (user wants it playing)
-                stemPlaybackIndependent[stemType] = true;
-                console.log(`Playing ${stemType} stem - marked as active`);
-            }
+            stemPlayerComponents[stemType]?.playPause();
         }
 
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleMultiStemMute(stemType) {
-            const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) {
-                console.log(`No WaveSurfer instance for ${stemType}`);
-                return;
-            }
-
-            const muteBtn = document.getElementById(`stem-mute-${stemType}`);
-            const volumeSlider = document.getElementById(`stem-volume-${stemType}`);
-            const currentVolume = ws.getVolume();
-
-            if (currentVolume > 0) {
-                // Mute - save current volume first
-                ws._savedVolume = currentVolume;
-                ws.setVolume(0);
-                if (muteBtn) {
-                    muteBtn.classList.add('active');
-                    const icon = muteBtn.querySelector('span');
-                    if (icon) icon.textContent = '🔇';
-                }
-                if (volumeSlider) volumeSlider.value = 0;
-                const percentDisplay = document.getElementById(`stem-volume-percent-${stemType}`);
-                if (percentDisplay) percentDisplay.textContent = '0%';
-                console.log(`Muted ${stemType} stem`);
-            } else {
-                // Unmute - restore previous volume
-                const restoredVolume = ws._savedVolume || 1.0;
-                ws.setVolume(restoredVolume);
-                if (muteBtn) {
-                    muteBtn.classList.remove('active');
-                    const icon = muteBtn.querySelector('span');
-                    if (icon) icon.textContent = '🔊';
-                }
-                if (volumeSlider) volumeSlider.value = restoredVolume * 100;
-                const percentDisplay = document.getElementById(`stem-volume-percent-${stemType}`);
-                if (percentDisplay) percentDisplay.textContent = `${Math.round(restoredVolume * 100)}%`;
-                console.log(`Unmuted ${stemType} stem to ${Math.round(restoredVolume * 100)}%`);
-            }
+            stemPlayerComponents[stemType]?.toggleMute();
         }
 
         function toggleMultiStemLoop(stemType) {
@@ -1437,199 +1384,27 @@
             waveformContainer.appendChild(loopRegion);
         }
 
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function handleMultiStemVolumeChange(stemType, value) {
-            const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) {
-                console.log(`No WaveSurfer instance for ${stemType}`);
-                return;
-            }
-
-            const volume = value / 100;
-            ws.setVolume(volume);
-
-            // Update percentage display
-            const percentDisplay = document.getElementById(`stem-volume-percent-${stemType}`);
-            if (percentDisplay) {
-                percentDisplay.textContent = `${value}%`;
-            }
-
-            // Update mute button icon based on volume
-            const muteBtn = document.getElementById(`stem-mute-${stemType}`);
-            if (muteBtn) {
-                const icon = muteBtn.querySelector('span');
-                if (icon) {
-                    icon.textContent = volume === 0 ? '🔇' : '🔊';
-                }
-                if (volume === 0) {
-                    muteBtn.classList.add('active');
-                } else {
-                    muteBtn.classList.remove('active');
-                }
-            }
-
-            console.log(`Set ${stemType} volume to ${value}%`);
+            stemPlayerComponents[stemType]?.setVolume(value);
         }
 
         // Phase 2A: Individual Rate Control Functions
+        // THIN WRAPPERS: All delegate to PlayerBarComponent methods
 
-        /**
-         * Calculate the final playback rate for a stem
-         * Formula: finalRate = stemIndependentRate × parentRate (if unlocked)
-         *       or finalRate = parentRate (if locked)
-         */
-        function calculateStemFinalRate(stemType) {
-            const parentRate = currentRate || 1.0;
-            const isLocked = stemRateLocked[stemType];
-
-            if (isLocked) {
-                // Locked: stem follows parent rate exactly
-                return parentRate;
-            } else {
-                // Unlocked: stem rate = independent multiplier × parent rate
-                const independentRate = stemIndependentRates[stemType] || 1.0;
-                return independentRate * parentRate;
-            }
-        }
-
-        /**
-         * Update the visual display of a stem's rate and BPM
-         */
-        function updateStemRateDisplay(stemType, finalRate) {
-            const display = document.getElementById(`stem-rate-display-${stemType}`);
-            if (!display) return;
-
-            // Calculate resulting BPM
-            const resultingBPM = currentParentFileBPM
-                ? (currentParentFileBPM * finalRate).toFixed(1)
-                : '---';
-
-            // Update display
-            display.textContent = `${finalRate.toFixed(2)}x @ ${resultingBPM} BPM`;
-        }
-
-        /**
-         * Update the rate slider position (without triggering oninput)
-         */
-        function updateStemRateSlider(stemType, sliderValue) {
-            const slider = document.getElementById(`stem-rate-slider-${stemType}`);
-            if (slider) {
-                slider.value = sliderValue;
-            }
-        }
-
-        /**
-         * Update the lock button visual state
-         */
-        function updateLockButton(stemType, isLocked) {
-            const lockBtn = document.getElementById(`stem-lock-${stemType}`);
-            if (!lockBtn) return;
-
-            if (isLocked) {
-                lockBtn.classList.add('locked');
-                lockBtn.classList.remove('unlocked');
-                lockBtn.title = 'Locked to Parent Rate (click to unlock)';
-            } else {
-                lockBtn.classList.remove('locked');
-                lockBtn.classList.add('unlocked');
-                lockBtn.title = 'Independent Rate (click to lock to parent)';
-            }
-        }
-
-        /**
-         * Handle rate slider changes
-         */
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function handleStemRateChange(stemType, sliderValue) {
-            console.log(`=== handleStemRateChange(${stemType}, ${sliderValue}) ===`);
-
-            // Convert slider value (50-200) to rate (0.5x-2.0x)
-            const independentRate = sliderValue / 100;
-            stemIndependentRates[stemType] = independentRate;
-
-            // Unlock this stem (user is manually adjusting)
-            if (stemRateLocked[stemType]) {
-                stemRateLocked[stemType] = false;
-                updateLockButton(stemType, false);
-                console.log(`${stemType} unlocked (user adjusted rate manually)`);
-            }
-
-            // Calculate final rate (independent × parent)
-            const finalRate = calculateStemFinalRate(stemType);
-
-            // Apply to WaveSurfer
-            const ws = stemPlayerWavesurfers[stemType];
-            if (ws) {
-                ws.setPlaybackRate(finalRate, false);
-                console.log(`✓ ${stemType} rate set to ${finalRate.toFixed(2)}x (independent: ${independentRate.toFixed(2)}x × parent: ${(currentRate || 1.0).toFixed(2)}x)`);
-            }
-
-            // Update display
-            updateStemRateDisplay(stemType, finalRate);
+            stemPlayerComponents[stemType]?.setRate(sliderValue);
         }
 
-        /**
-         * Set rate to a preset value (0.5x, 1x, 2x)
-         */
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function setStemRatePreset(stemType, presetRate) {
-            console.log(`=== setStemRatePreset(${stemType}, ${presetRate}x) ===`);
-
-            // Set independent rate
-            stemIndependentRates[stemType] = presetRate;
-
-            // Unlock if not already
-            if (stemRateLocked[stemType]) {
-                stemRateLocked[stemType] = false;
-                updateLockButton(stemType, false);
-                console.log(`${stemType} unlocked (preset button clicked)`);
-            }
-
-            // Update slider
-            updateStemRateSlider(stemType, presetRate * 100);
-
-            // Calculate and apply final rate
-            const finalRate = calculateStemFinalRate(stemType);
-            const ws = stemPlayerWavesurfers[stemType];
-            if (ws) {
-                ws.setPlaybackRate(finalRate, false);
-                console.log(`✓ ${stemType} rate set to ${finalRate.toFixed(2)}x`);
-            }
-
-            // Update display
-            updateStemRateDisplay(stemType, finalRate);
+            stemPlayerComponents[stemType]?.setRatePreset(presetRate);
         }
 
-        /**
-         * Toggle lock/unlock state for a stem's rate
-         */
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleStemRateLock(stemType) {
-            const wasLocked = stemRateLocked[stemType];
-            const newLockState = !wasLocked;
-
-            console.log(`=== toggleStemRateLock(${stemType}) === ${wasLocked ? 'UNLOCKED' : 'LOCKED'} → ${newLockState ? 'LOCKED' : 'UNLOCKED'}`);
-
-            stemRateLocked[stemType] = newLockState;
-
-            if (newLockState) {
-                // Locking: reset independent rate to 1.0
-                stemIndependentRates[stemType] = 1.0;
-                updateStemRateSlider(stemType, 100);
-                console.log(`${stemType} locked - reset to 1.0x multiplier`);
-            } else {
-                console.log(`${stemType} unlocked - can now set independent rate`);
-            }
-
-            // Update button appearance
-            updateLockButton(stemType, newLockState);
-
-            // Recalculate and apply final rate
-            const finalRate = calculateStemFinalRate(stemType);
-            const ws = stemPlayerWavesurfers[stemType];
-            if (ws) {
-                ws.setPlaybackRate(finalRate, false);
-                console.log(`✓ ${stemType} rate updated to ${finalRate.toFixed(2)}x`);
-            }
-
-            // Update display
-            updateStemRateDisplay(stemType, finalRate);
+            stemPlayerComponents[stemType]?.toggleRateLock();
         }
 
         // Phase 4 Step 2B: Render visual waveforms in expansion containers
@@ -2892,6 +2667,7 @@
         // Set playback rate (natural analog - speed and pitch together)
         function setPlaybackRate(rate) {
             currentRate = rate;
+            window.currentRate = rate; // Expose to window for PlayerBarComponent access
 
             // Check for OLD stem system (disabled but code still exists)
             const hasStemWavesurfers = Object.keys(stemWavesurfers).length > 0;
@@ -2935,13 +2711,14 @@
 
             // Phase 2A: Recalculate and set rate on NEW multi-stem player WaveSurfers
             // Each stem's final rate = independentRate × parentRate (multiplicative)
+            // Delegate to PlayerBarComponent to calculate and update
             Object.keys(stemPlayerWavesurfers).forEach(stemType => {
-                const stemWS = stemPlayerWavesurfers[stemType];
-                if (stemWS) {
-                    const finalRate = calculateStemFinalRate(stemType);
-                    stemWS.setPlaybackRate(finalRate, false);
-                    updateStemRateDisplay(stemType, finalRate);
-                    console.log(`✓ ${stemType} rate set to ${finalRate.toFixed(2)}x (${stemRateLocked[stemType] ? 'locked' : `independent: ${stemIndependentRates[stemType].toFixed(2)}x`})`);
+                const stemComponent = stemPlayerComponents[stemType];
+                if (stemComponent) {
+                    const finalRate = stemComponent.calculateFinalRate();
+                    stemPlayerWavesurfers[stemType].setPlaybackRate(finalRate, false);
+                    stemComponent.updateRateDisplay(finalRate);
+                    console.log(`✓ ${stemType} rate set to ${finalRate.toFixed(2)}x (${stemComponent.rateLocked ? 'locked' : `independent: ${stemComponent.independentRate.toFixed(2)}x`})`);
                 }
             });
 

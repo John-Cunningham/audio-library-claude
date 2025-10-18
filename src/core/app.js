@@ -803,91 +803,18 @@
             seeking: null
         };
 
-        // Set up synchronization between parent player and stems
+        // Wrapper function to call module version with current state
         function setupParentStemSync() {
-            if (!wavesurfer) return;
-
-            console.log('Setting up parent-stem synchronization');
-
-            // Clean up old handlers first (prevent duplicates)
-            if (parentStemSyncHandlers.play) {
-                wavesurfer.un('play', parentStemSyncHandlers.play);
-            }
-            if (parentStemSyncHandlers.pause) {
-                wavesurfer.un('pause', parentStemSyncHandlers.pause);
-            }
-            if (parentStemSyncHandlers.seeking) {
-                wavesurfer.un('seeking', parentStemSyncHandlers.seeking);
-            }
-
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-
-            // When parent plays, resume stems that follow parent
-            parentStemSyncHandlers.play = () => {
-                if (multiStemPlayerExpanded) {
-                    console.log('Parent play event - resuming stems that follow parent');
-                    stemTypes.forEach(stemType => {
-                        const ws = stemPlayerWavesurfers[stemType];
-                        const loopState = stemLoopStates[stemType];
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
-
-                        if (ws && followsParent && !ws.isPlaying()) {
-                            console.log(`  → Playing ${stemType}`);
-                            ws.play();
-                            const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                            if (icon) icon.textContent = '||';
-                        }
-                    });
+            StemPlayerManager.setupParentStemSync(
+                {},  // state not used by module version
+                {
+                    wavesurfer,
+                    stemPlayerWavesurfers,
+                    multiStemPlayerExpanded,
+                    stemPlaybackIndependent,
+                    stemLoopStates
                 }
-            };
-            wavesurfer.on('play', parentStemSyncHandlers.play);
-
-            // When parent pauses, pause stems that follow parent
-            parentStemSyncHandlers.pause = () => {
-                if (multiStemPlayerExpanded) {
-                    console.log('Parent pause event - pausing stems that follow parent');
-                    stemTypes.forEach(stemType => {
-                        const ws = stemPlayerWavesurfers[stemType];
-                        const loopState = stemLoopStates[stemType];
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
-
-                        if (ws && followsParent) {
-                            if (ws.isPlaying()) {
-                                console.log(`  → Pausing ${stemType}`);
-                                ws.pause();
-                                const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                                if (icon) icon.textContent = '▶';
-                            }
-                        }
-                    });
-                }
-            };
-            wavesurfer.on('pause', parentStemSyncHandlers.pause);
-
-            // When parent seeks, seek stems that follow parent
-            parentStemSyncHandlers.seeking = (currentTime) => {
-                if (multiStemPlayerExpanded) {
-                    const seekPosition = currentTime / wavesurfer.getDuration();
-                    console.log('Parent seek event - syncing stems that follow parent to:', seekPosition);
-
-                    stemTypes.forEach(stemType => {
-                        const ws = stemPlayerWavesurfers[stemType];
-                        const loopState = stemLoopStates[stemType];
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}`);
-
-                        if (ws && followsParent) {
-                            ws.seekTo(seekPosition);
-                        }
-                    });
-                }
-            };
-            wavesurfer.on('seeking', parentStemSyncHandlers.seeking);
+            );
         }
 
         function destroyMultiStemPlayerWavesurfers() {

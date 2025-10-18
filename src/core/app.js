@@ -466,101 +466,7 @@
             TagManager.toggleShowAll();
         }
 
-        // Get all unique BPMs with counts
-        function getAllBPMs() {
-            const bpmCounts = {};
-            audioFiles.forEach(file => {
-                if (file.bpm) {
-                    bpmCounts[file.bpm] = (bpmCounts[file.bpm] || 0) + 1;
-                }
-            });
-
-            // Sort by BPM value (ascending)
-            return Object.entries(bpmCounts)
-                .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-                .map(([bpm, count]) => ({ bpm: parseInt(bpm), count }));
-        }
-
-        // Get all unique keys with counts
-        function getAllKeys() {
-            const keyCounts = {};
-            audioFiles.forEach(file => {
-                if (file.key) {
-                    keyCounts[file.key] = (keyCounts[file.key] || 0) + 1;
-                }
-            });
-
-            // Sort alphabetically
-            return Object.entries(keyCounts)
-                .sort((a, b) => a[0].localeCompare(b[0]))
-                .map(([key, count]) => ({ key, count }));
-        }
-
-        // Handle BPM click
-        function handleBPMClick(bpm, event) {
-            event.preventDefault();
-
-            if (filters.bpm.has(bpm)) {
-                filters.bpm.delete(bpm);
-            } else {
-                filters.bpm.add(bpm);
-            }
-
-            renderBPMs();
-            FileListRenderer.render();
-        }
-
-        // Handle Key click
-        function handleKeyClick(key, event) {
-            event.preventDefault();
-
-            if (filters.key.has(key)) {
-                filters.key.delete(key);
-            } else {
-                filters.key.add(key);
-            }
-
-            renderKeys();
-            FileListRenderer.render();
-        }
-
-        // Render BPM filters
-        function renderBPMs() {
-            const container = document.getElementById('bpmContainer');
-            const allBPMs = getAllBPMs();
-
-            if (allBPMs.length === 0) {
-                container.innerHTML = '<div class="empty-state" style="width: 100%; padding: 20px;">No BPM data yet.</div>';
-                return;
-            }
-
-            let html = allBPMs.map(({ bpm, count }) => {
-                const isActive = filters.bpm.has(bpm);
-                const className = isActive ? 'tag-button can-have' : 'tag-button';
-                return `<button class="${className}" onclick="handleBPMClick(${bpm}, event)">${bpm} BPM (${count})</button>`;
-            }).join('');
-
-            container.innerHTML = html;
-        }
-
-        // Render Key filters
-        function renderKeys() {
-            const container = document.getElementById('keyContainer');
-            const allKeys = getAllKeys();
-
-            if (allKeys.length === 0) {
-                container.innerHTML = '<div class="empty-state" style="width: 100%; padding: 20px;">No key data yet.</div>';
-                return;
-            }
-
-            let html = allKeys.map(({ key, count }) => {
-                const isActive = filters.key.has(key);
-                const className = isActive ? 'tag-button can-have' : 'tag-button';
-                return `<button class="${className}" onclick="handleKeyClick('${key}', event)">${key} (${count})</button>`;
-            }).join('');
-
-            container.innerHTML = html;
-        }
+        // BPM/Key filtering functions removed - were unused (no UI containers exist)
 
 
         // File list rendering moved to src/views/fileListRenderer.js
@@ -2642,8 +2548,6 @@
 // Expose functions to global scope for HTML onclick handlers
 window.handleTagClick = handleTagClick;
 window.toggleShowAllTags = toggleShowAllTags;
-window.handleBPMClick = handleBPMClick;
-window.handleKeyClick = handleKeyClick;
 window.generateStems = generateStems;
 
 // Expose TagManager functions to window (used by onclick handlers in rendered HTML)

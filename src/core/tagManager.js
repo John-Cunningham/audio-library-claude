@@ -1,7 +1,7 @@
 /**
  * Tag Management Module
  *
- * Handles all tag-related functionality including:
+ * Handles tag filtering functionality:
  * - Tag cloud rendering with filtering
  * - Tag click handling (canHave, mustHave, exclude modes)
  * - Active filter display

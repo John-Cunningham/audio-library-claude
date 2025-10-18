@@ -5,6 +5,7 @@
         import { PlayerBarComponent } from '../components/playerBar.js';
         import { WaveformComponent } from '../components/waveform.js';
         import { FileLoader } from '../services/fileLoader.js';
+        import { ActionRecorder } from '../services/actionRecorder.js';
 
         // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
@@ -38,6 +39,7 @@
         let parentWaveform = null; // WaveformComponent instance for parent player
         let parentPlayerComponent = null; // PlayerBarComponent instance for parent player
         let fileLoader = null; // FileLoader service instance
+        let actionRecorder = null; // ActionRecorder service instance
         let stemPlayerComponents = {}; // PlayerBarComponent instances for stem players {vocals: component, drums: component, ...}
         let currentFileId = null;
         let selectedFiles = new Set();
@@ -84,13 +86,8 @@
         let bpmLockEnabled = false; // Whether to lock BPM across file changes
         let lockedBPM = null; // The BPM to maintain when switching files
 
-        // Loop action recorder
-        let isRecordingActions = false; // Whether recording is active
-        let recordingWaitingForStart = false; // Whether we're waiting for first keypress to start
-        let recordedActions = []; // Array of {time: number, action: string, data: object}
-        let recordingStartTime = null; // When recording actually started (first keypress time)
-        let isPlayingBackActions = false; // Whether we're currently playing back recorded actions
-        let playbackTimeouts = []; // Track all scheduled timeouts for playback so we can cancel them
+        // Loop action recorder - MOVED TO actionRecorder.js (Phase 10a)
+        // All action recording state now managed by ActionRecorder service
 
         // Metronome state - MOVED TO metronome.js (ROUND 2)
         // All metronome state now managed by Metronome module
@@ -1456,36 +1453,9 @@
                 wavesurfer
             });
 
-            // Update record actions button state (not loop-related)
-            const recordActionsBtn = document.getElementById('recordActionsBtn');
-            if (recordActionsBtn) {
-                if (recordingWaitingForStart) {
-                    recordActionsBtn.classList.add('active');
-                    recordActionsBtn.classList.remove('flashing');
-                    recordActionsBtn.style.background = '#ff9944'; // Orange when waiting
-                } else if (isRecordingActions) {
-                    recordActionsBtn.classList.add('active');
-                    recordActionsBtn.classList.add('flashing'); // Smooth flash while recording
-                    recordActionsBtn.style.background = '#ff4444'; // Red when recording
-                } else {
-                    recordActionsBtn.classList.remove('active');
-                    recordActionsBtn.classList.remove('flashing');
-                    recordActionsBtn.style.background = '';
-                }
-            }
-
-            // Update play actions button state (not loop-related)
-            const playActionsBtn = document.getElementById('playActionsBtn');
-            if (playActionsBtn) {
-                if (isPlayingBackActions) {
-                    playActionsBtn.classList.add('active');
-                    playActionsBtn.classList.add('flashing-green'); // Smooth green flash while playing back
-                    playActionsBtn.style.background = '#44ff44'; // Green when playing back
-                } else {
-                    playActionsBtn.classList.remove('active');
-                    playActionsBtn.classList.remove('flashing-green');
-                    playActionsBtn.style.background = '';
-                }
+            // Update record/playback actions button states (delegated to ActionRecorder)
+            if (actionRecorder) {
+                actionRecorder.updateButtonStates();
             }
         }
 
@@ -1576,183 +1546,34 @@
             updateLoopVisuals();
         }
 
+        // THIN WRAPPER: Delegates to ActionRecorder service
         function toggleRecordActions() {
-            if (!isRecordingActions && !recordingWaitingForStart) {
-                // Start recording mode - wait for first keypress
-                recordingWaitingForStart = true;
-                isRecordingActions = false;
-                recordedActions = [];
-                recordingStartTime = null;
-                console.log('[RECORD] Recording armed - waiting for first keypress to start...');
-                updateLoopVisuals();
-            } else {
-                // Stop recording
-                recordingWaitingForStart = false;
-                isRecordingActions = false;
-                console.log('[RECORD] Recording stopped');
-                console.log(`[RECORD] Captured ${recordedActions.length} actions:`);
-                recordedActions.forEach((action, i) => {
-                    console.log(`  [${i}] ${action.time.toFixed(3)}s: ${action.action}`, action.data);
-                });
-                updateLoopVisuals();
+            if (!actionRecorder) {
+                console.error('[app.js] ActionRecorder not initialized');
+                return;
             }
+            return actionRecorder.toggleRecording();
         }
 
+        // THIN WRAPPER: Delegates to ActionRecorder service
         function recordAction(actionName, data = {}) {
-            if (!isRecordingActions || !recordingStartTime) return;
-
-            const currentTime = wavesurfer ? wavesurfer.getCurrentTime() : 0;
-            const relativeTime = currentTime - recordingStartTime;
-
-            const action = {
-                time: relativeTime,
-                playbackTime: currentTime,
-                action: actionName,
-                data: data
-            };
-
-            recordedActions.push(action);
-            console.log(`[RECORD] ${relativeTime.toFixed(3)}s: ${actionName}`, data);
+            if (!actionRecorder) return;
+            return actionRecorder.recordAction(actionName, data);
         }
 
+        // THIN WRAPPER: Delegates to ActionRecorder service
         function stopPlayback() {
-            // Cancel all scheduled timeouts
-            playbackTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
-            playbackTimeouts = [];
-
-            // Reset state
-            isPlayingBackActions = false;
-            updateLoopVisuals();
-            console.log('[PLAYBACK] Playback stopped');
+            if (!actionRecorder) return;
+            return actionRecorder.stopPlayback();
         }
 
+        // THIN WRAPPER: Delegates to ActionRecorder service
         function playRecordedActions() {
-            console.log(`[PLAYBACK] playRecordedActions() called`);
-
-            // If already playing, STOP playback instead
-            if (isPlayingBackActions) {
-                stopPlayback();
+            if (!actionRecorder) {
+                console.error('[app.js] ActionRecorder not initialized');
                 return;
             }
-
-            console.log(`[PLAYBACK] recordedActions.length = ${recordedActions.length}`);
-
-            if (recordedActions.length === 0) {
-                console.log('[PLAYBACK] No recorded actions to play');
-                alert('No recorded actions to play. Press RECORD button first, then perform actions, then stop recording.');
-                return;
-            }
-
-            console.log(`[PLAYBACK] Starting playback of ${recordedActions.length} actions`);
-            console.log('[PLAYBACK] Recorded actions:', recordedActions);
-
-            // Set playback state and update button
-            isPlayingBackActions = true;
-            updateLoopVisuals();
-
-            // Calculate total duration of playback
-            const lastAction = recordedActions[recordedActions.length - 1];
-            const totalDuration = lastAction.time * 1000; // Convert to milliseconds
-
-            // Schedule cleanup when playback finishes
-            const cleanupTimeout = setTimeout(() => {
-                isPlayingBackActions = false;
-                playbackTimeouts = [];
-                updateLoopVisuals();
-                console.log('[PLAYBACK] Playback complete');
-            }, totalDuration + 100); // Add 100ms buffer
-
-            playbackTimeouts.push(cleanupTimeout);
-
-            // Schedule each action
-            recordedActions.forEach((action) => {
-                const actionTimeout = setTimeout(() => {
-                    console.log(`[PLAYBACK] ${action.time.toFixed(3)}s: ${action.action}`, action.data);
-
-                    // Execute the action
-                    switch(action.action) {
-                        case 'initialState':
-                            // Restore initial state
-                            const state = action.data;
-                            console.log(`[PLAYBACK] Restoring initial state - isPlaying was: ${state.isPlaying}`);
-                            if (state.loopStart !== null && state.loopEnd !== null) {
-                                loopStart = state.loopStart;
-                                loopEnd = state.loopEnd;
-                            }
-                            cycleMode = state.cycleMode;
-                            if (state.rate) setPlaybackRate(state.rate);
-                            if (state.volume) document.getElementById('volumeSlider').value = state.volume;
-                            if (wavesurfer) {
-                                wavesurfer.seekTo(state.playbackTime / wavesurfer.getDuration());
-                                console.log(`[PLAYBACK] Seeked to ${state.playbackTime.toFixed(3)}s`);
-                                if (state.isPlaying && !wavesurfer.isPlaying()) {
-                                    console.log('[PLAYBACK] Starting playback (was playing in recording)');
-                                    wavesurfer.play();
-                                } else if (!state.isPlaying && wavesurfer.isPlaying()) {
-                                    console.log('[PLAYBACK] Pausing playback (was paused in recording)');
-                                    wavesurfer.pause();
-                                } else {
-                                    console.log(`[PLAYBACK] No playback state change needed (isPlaying: ${state.isPlaying})`);
-                                }
-                            }
-                            updateLoopVisuals();
-                            console.log('[PLAYBACK] Initial state restored');
-                            break;
-                        case 'shiftLoopLeft':
-                            shiftLoopLeft();
-                            break;
-                        case 'shiftLoopRight':
-                            shiftLoopRight();
-                            break;
-                        case 'moveStartRight':
-                            moveStartRight();
-                            break;
-                        case 'moveEndLeft':
-                            moveEndLeft();
-                            break;
-                        case 'halfLoopLength':
-                            halfLoopLength();
-                            break;
-                        case 'doubleLoopLength':
-                            doubleLoopLength();
-                            break;
-                        case 'setLoopStart':
-                            if (cycleMode) {
-                                loopStart = action.data.loopStart;
-                                loopEnd = null;
-                                nextClickSets = 'end';
-                                updateLoopVisuals();
-                            }
-                            break;
-                        case 'setLoopEnd':
-                            if (cycleMode && loopStart !== null) {
-                                loopEnd = action.data.loopEnd;
-                                cycleMode = true;
-                                updateLoopVisuals();
-                            }
-                            break;
-                        case 'play':
-                            if (wavesurfer && !wavesurfer.isPlaying()) {
-                                wavesurfer.play();
-                            }
-                            break;
-                        case 'pause':
-                            if (wavesurfer && wavesurfer.isPlaying()) {
-                                wavesurfer.pause();
-                            }
-                            break;
-                        case 'setRate':
-                            setPlaybackRate(action.data.rate);
-                            break;
-                        default:
-                            console.log(`[PLAYBACK] Unknown action: ${action.action}`);
-                    }
-                }, action.time * 1000); // Convert to milliseconds
-
-                playbackTimeouts.push(actionTimeout);
-            });
-
-            console.log('[PLAYBACK] All actions scheduled');
+            return actionRecorder.playRecordedActions();
         }
 
         // Helper function to find which bar marker index a time corresponds to
@@ -2382,11 +2203,11 @@
                 getLoopEnd: () => loopEnd,
                 getUserPaused: () => userPaused,
                 getWavesurfer: () => wavesurfer,
-                getRecordingWaitingForStart: () => recordingWaitingForStart,
-                setRecordingWaitingForStart: (val) => { recordingWaitingForStart = val; },
-                setIsRecordingActions: (val) => { isRecordingActions = val; },
-                setRecordingStartTime: (val) => { recordingStartTime = val; },
-                getRecordedActions: () => recordedActions,
+                getRecordingWaitingForStart: () => actionRecorder ? actionRecorder.getRecordingWaiting() : false,
+                setRecordingWaitingForStart: (val) => { if (actionRecorder) actionRecorder.setRecordingWaiting(val); },
+                setIsRecordingActions: (val) => { if (actionRecorder) actionRecorder.setIsRecording(val); },
+                setRecordingStartTime: (val) => { if (actionRecorder) actionRecorder.setRecordingStartTime(val); },
+                getRecordedActions: () => actionRecorder ? actionRecorder.getRecordedActions() : [],
                 getMarkersEnabled: () => markersEnabled,
                 getLoopFadesEnabled: () => loopFadesEnabled,
                 getImmediateJump: () => immediateJump,
@@ -2541,6 +2362,45 @@
             getCurrentRate: () => currentRate,
             initWaveSurfer
         });
+
+        // Initialize ActionRecorder service
+        actionRecorder = new ActionRecorder({
+            getWavesurfer: () => wavesurfer,
+            updateLoopVisuals,
+            loopActions: {
+                shiftLoopLeft,
+                shiftLoopRight,
+                moveStartRight,
+                moveEndLeft,
+                halfLoopLength,
+                doubleLoopLength,
+                setLoopStart: (data) => {
+                    if (cycleMode) {
+                        loopStart = data.loopStart;
+                        loopEnd = null;
+                        nextClickSets = 'end';
+                        updateLoopVisuals();
+                    }
+                },
+                setLoopEnd: (data) => {
+                    if (cycleMode && loopStart !== null) {
+                        loopEnd = data.loopEnd;
+                        cycleMode = true;
+                        updateLoopVisuals();
+                    }
+                },
+                restoreLoop: (start, end) => {
+                    loopStart = start;
+                    loopEnd = end;
+                },
+                setCycleMode: (mode) => {
+                    cycleMode = mode;
+                }
+            },
+            setPlaybackRate
+        });
+
+        console.log('[app.js] ActionRecorder service initialized');
 
         // Initialize view tab click handlers
         ViewManager.initViewTabs();

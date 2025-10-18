@@ -1518,256 +1518,39 @@
 
         // Load audio file
         // Add bar markers from beatmap data
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function addBarMarkers(file) {
-            // Use MarkerSystem module to render markers
-            currentMarkers = MarkerSystem.addBarMarkers(
-                file,
-                wavesurfer,
-                'waveform',
-                { markersEnabled, markerFrequency, barStartOffset }
-            );
-
-            // Marker rendering now handled by MarkerSystem module
-            // currentMarkers array is updated by MarkerSystem.addBarMarkers() above
-
-            const waveformContainer = document.getElementById('waveform');
-            if (!waveformContainer) return;
-
-            // Add click-to-snap functionality to waveform
-            waveformContainer.style.cursor = 'pointer';
-
-            // Remove old click listeners if they exist
-            if (waveformContainer._clickHandler) {
-                waveformContainer.removeEventListener('click', waveformContainer._clickHandler, true);
+            if (parentPlayerComponent) {
+                parentPlayerComponent.addBarMarkers(file);
             }
-
-            // Create new click handler with capture phase to intercept BEFORE WaveSurfer
-            const clickHandler = (e) => {
-                // If markers are disabled, let WaveSurfer handle click normally
-                if (!markersEnabled || currentMarkers.length === 0 || !wavesurfer) return;
-
-                // Get click position relative to waveform container
-                const rect = waveformContainer.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const relativeX = clickX / rect.width;
-
-                // Calculate time at click position
-                const duration = wavesurfer.getDuration();
-                const clickTime = relativeX * duration;
-
-                // Find nearest marker to the left
-                const snapTime = MarkerSystem.findNearestMarkerToLeft(clickTime, currentMarkers);
-
-                // AUTO-SET LOOP POINTS (only if in edit loop mode)
-                if (cycleMode) {
-                    // CRITICAL: Stop event propagation BEFORE WaveSurfer handles it (unless seek mode is 'seek')
-                    if (seekOnClick !== 'seek') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.stopImmediatePropagation();
-                    }
-
-                    // Check if clicking left of loop start (reset start) or right of loop end (reset end)
-                    if (cycleMode && loopStart !== null && loopEnd !== null) {
-                        if (snapTime < loopStart) {
-                            // Clicking left of loop start: reset loop start
-                            loopStart = snapTime;
-                            console.log(`Loop start moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
-                            updateLoopVisuals();
-                            if (seekOnClick === 'seek') {
-                                wavesurfer.seekTo(snapTime / duration);
-                            }
-                            return false;
-                        } else if (snapTime > loopEnd) {
-                            // Clicking right of loop end: reset loop end
-                            loopEnd = snapTime;
-                            console.log(`Loop end moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
-                            updateLoopVisuals();
-                            if (seekOnClick === 'seek') {
-                                wavesurfer.seekTo(snapTime / duration);
-                            }
-                            return false;
-                        }
-                    }
-
-                    // Normal loop setting flow
-                    let justSetLoopEnd = false;
-
-                    if (nextClickSets === 'start') {
-                        loopStart = snapTime;
-                        loopEnd = null;
-                        nextClickSets = 'end';
-                        console.log(`Loop start set to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
-                        recordAction('setLoopStart', { loopStart: snapTime });
-                    } else if (nextClickSets === 'end') {
-                        if (snapTime <= loopStart) {
-                            console.log('Loop end must be after loop start - ignoring click');
-                            return;
-                        }
-                        loopEnd = snapTime;
-                        cycleMode = true;
-                        justSetLoopEnd = true;
-                        console.log(`Loop end set to ${snapTime.toFixed(2)}s - Loop active! ${seekOnClick === 'clock' ? '(seeking to loop start)' : seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
-                        recordAction('setLoopEnd', { loopStart, loopEnd: snapTime, loopDuration: snapTime - loopStart });
-                    }
-
-                    updateLoopVisuals();
-
-                    // Handle seeking based on mode
-                    if (seekOnClick === 'seek') {
-                        // Seek mode: jump to clicked position
-                        wavesurfer.seekTo(snapTime / duration);
-                    } else if (seekOnClick === 'clock' && justSetLoopEnd) {
-                        // Clock mode: ONLY after setting loop end, jump to loop start
-                        wavesurfer.seekTo(loopStart / duration);
-                    }
-
-                    // Important: return early to prevent any seeking (if seekOnClick is off)
-                    return false;
-                } else {
-                    // Normal mode: Markers enabled, not in edit loop mode
-                    // Seek to the nearest marker and prevent WaveSurfer from handling
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    wavesurfer.seekTo(snapTime / duration);
-                    console.log(`Snapped to marker at ${snapTime.toFixed(2)}s`);
-                    return false;
-                }
-            };
-
-            // Add listener in CAPTURE phase to intercept before WaveSurfer's handler
-            waveformContainer.addEventListener('click', clickHandler, true);
-            waveformContainer._clickHandler = clickHandler; // Store reference for cleanup
-
-            // Add hover preview for loop selection
-            const mousemoveHandler = (e) => {
-                // Only show preview when in edit mode and start is set but end is not
-                if (!cycleMode || loopStart === null || loopEnd !== null) {
-                    // Remove any existing preview
-                    const existingPreview = waveformContainer.querySelector('.loop-preview');
-                    if (existingPreview) existingPreview.remove();
-                    return;
-                }
-
-                if (!wavesurfer || currentMarkers.length === 0) return;
-
-                // Get mouse position
-                const rect = waveformContainer.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const relativeX = mouseX / rect.width;
-                const duration = wavesurfer.getDuration();
-                const mouseTime = relativeX * duration;
-
-                // Find nearest marker to the left
-                const hoverSnapTime = MarkerSystem.findNearestMarkerToLeft(mouseTime, currentMarkers);
-
-                // Only show preview if hover position is after loop start
-                if (hoverSnapTime <= loopStart) {
-                    const existingPreview = waveformContainer.querySelector('.loop-preview');
-                    if (existingPreview) existingPreview.remove();
-                    return;
-                }
-
-                // Remove existing preview
-                const existingPreview = waveformContainer.querySelector('.loop-preview');
-                if (existingPreview) existingPreview.remove();
-
-                // Create new preview
-                const startPercent = (loopStart / duration) * 100;
-                const hoverPercent = (hoverSnapTime / duration) * 100;
-                const widthPercent = hoverPercent - startPercent;
-
-                const preview = document.createElement('div');
-                preview.className = 'loop-preview';
-                preview.style.left = `${startPercent}%`;
-                preview.style.width = `${widthPercent}%`;
-                waveformContainer.appendChild(preview);
-            };
-
-            const mouseoutHandler = () => {
-                // Remove preview when mouse leaves waveform
-                const existingPreview = waveformContainer.querySelector('.loop-preview');
-                if (existingPreview) existingPreview.remove();
-            };
-
-            // Remove old handlers if they exist
-            if (waveformContainer._mousemoveHandler) {
-                waveformContainer.removeEventListener('mousemove', waveformContainer._mousemoveHandler);
-            }
-            if (waveformContainer._mouseoutHandler) {
-                waveformContainer.removeEventListener('mouseout', waveformContainer._mouseoutHandler);
-            }
-
-            waveformContainer.addEventListener('mousemove', mousemoveHandler);
-            waveformContainer.addEventListener('mouseout', mouseoutHandler);
-            waveformContainer._mousemoveHandler = mousemoveHandler;
-            waveformContainer._mouseoutHandler = mouseoutHandler;
         }
 
-        // Toggle bar markers on/off
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleMarkers() {
-            const result = MarkerSystem.toggleMarkers({
-                markersEnabled,
-                audioFiles,
-                currentFileId
-            });
-
-            markersEnabled = result.markersEnabled;
-
-            // Update button state
-            const btn = document.getElementById('markersBtn');
-            if (btn) {
-                if (markersEnabled) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            }
-
-            // Re-render markers with new state
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addBarMarkers(file);
+            if (parentPlayerComponent) {
+                parentPlayerComponent.toggleMarkers();
             }
         }
 
-        // Change marker frequency
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function setMarkerFrequency(freq) {
-            const result = MarkerSystem.setMarkerFrequency({
-                markerFrequency,
-                audioFiles,
-                currentFileId,
-                multiStemPlayerExpanded
-            }, freq, addBarMarkers, stemPlayerComponents);
-
-            markerFrequency = result.markerFrequency;
+            if (parentPlayerComponent) {
+                parentPlayerComponent.setMarkerFrequency(freq);
+            }
         }
 
-        // Shift bar start left (make an earlier marker be bar 1)
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function shiftBarStartLeft() {
-            const result = MarkerSystem.shiftBarStartLeft({
-                barStartOffset,
-                markerFrequency,
-                audioFiles,
-                currentFileId,
-                multiStemPlayerExpanded
-            }, addBarMarkers, stemPlayerComponents);
-
-            barStartOffset = result.barStartOffset;
+            if (parentPlayerComponent) {
+                parentPlayerComponent.shiftBarStartLeft();
+            }
         }
 
-        // Shift bar start right (make a later marker be bar 1)
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function shiftBarStartRight() {
-            const result = MarkerSystem.shiftBarStartRight({
-                barStartOffset,
-                markerFrequency,
-                audioFiles,
-                currentFileId,
-                multiStemPlayerExpanded
-            }, addBarMarkers, stemPlayerComponents);
-
-            barStartOffset = result.barStartOffset;
+            if (parentPlayerComponent) {
+                parentPlayerComponent.shiftBarStartRight();
+            }
         }
 
         // ============================================
@@ -1777,87 +1560,32 @@
 
         // === STEM MARKER WRAPPERS (delegate to PlayerBarComponent) ===
 
-        // Toggle markers for a specific stem
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleStemMarkers(stemType) {
-            // Delegate to component if available
             if (stemPlayerComponents[stemType]) {
                 stemPlayerComponents[stemType].toggleMarkers();
-                return;
             }
-
-            // Call pure function from StemMarkerSystem module
-            const result = StemMarkerSystem.toggleStemMarkers({
-                stemType,
-                stemMarkersEnabled,
-                audioFiles,
-                currentFileId,
-                stemPlayerWavesurfers
-            }, addStemBarMarkers);
-
-            // Apply result to app.js state
-            stemMarkersEnabled = result.stemMarkersEnabled;
         }
 
-        // Change marker frequency for a specific stem
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function setStemMarkerFrequency(stemType, freq) {
-            // Delegate to component if available
             if (stemPlayerComponents[stemType]) {
                 stemPlayerComponents[stemType].setMarkerFrequency(freq);
-                return;
             }
-
-            // Call pure function from StemMarkerSystem module
-            const result = StemMarkerSystem.setStemMarkerFrequency({
-                stemType,
-                stemMarkerFrequency,
-                audioFiles,
-                currentFileId
-            }, freq, addStemBarMarkers);
-
-            // Apply result to app.js state
-            stemMarkerFrequency = result.stemMarkerFrequency;
         }
 
-        // Shift stem bar start left
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function shiftStemBarStartLeft(stemType) {
-            // Delegate to component if available
             if (stemPlayerComponents[stemType]) {
                 stemPlayerComponents[stemType].shiftBarStartLeft();
-                return;
             }
-
-            // Call pure function from StemMarkerSystem module
-            const result = StemMarkerSystem.shiftStemBarStartLeft({
-                stemType,
-                stemBarStartOffset,
-                stemMarkerFrequency,
-                audioFiles,
-                currentFileId
-            }, addStemBarMarkers);
-
-            // Apply result to app.js state
-            stemBarStartOffset = result.stemBarStartOffset;
         }
 
-        // Shift stem bar start right
+        // THIN WRAPPER: Delegates to PlayerBarComponent
         function shiftStemBarStartRight(stemType) {
-            // Delegate to component if available
             if (stemPlayerComponents[stemType]) {
                 stemPlayerComponents[stemType].shiftBarStartRight();
-                return;
             }
-
-            // Call pure function from StemMarkerSystem module
-            const result = StemMarkerSystem.shiftStemBarStartRight({
-                stemType,
-                stemBarStartOffset,
-                stemMarkerFrequency,
-                audioFiles,
-                currentFileId
-            }, addStemBarMarkers);
-
-            // Apply result to app.js state
-            stemBarStartOffset = result.stemBarStartOffset;
         }
 
         // Add bar markers to stem waveform

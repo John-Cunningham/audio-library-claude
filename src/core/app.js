@@ -1049,7 +1049,7 @@
                 if (options.stems) estimatedTime += 120;
 
                 // Start animation
-                startProgressAnimation(estimatedTime);
+                ProgressBar.startAnimation(estimatedTime);
 
                 try {
                     // Call Railway webhook for on-demand processing
@@ -1099,8 +1099,8 @@
             }
 
             // Final progress
-            updateProgress(totalFiles, totalFiles, 'Complete!');
-            completeProgress();
+            ProgressBar.update(totalFiles, totalFiles, 'Complete!');
+            ProgressBar.complete();
 
             setTimeout(() => {
                 ProgressBar.hide();
@@ -5874,7 +5874,7 @@
                 ProgressBar.update(i + 1, totalFiles, `Detecting: ${file.name}`);
 
                 // Start animation (estimate 15 seconds per file)
-                startProgressAnimation(15);
+                ProgressBar.startAnimation(15);
 
                 try {
                     // Call Python script
@@ -5904,8 +5904,8 @@
             }
 
             // Final progress
-            updateProgress(totalFiles, totalFiles, 'Complete!');
-            completeProgress();
+            ProgressBar.update(totalFiles, totalFiles, 'Complete!');
+            ProgressBar.complete();
 
             setTimeout(async () => {
                 ProgressBar.hide();
@@ -5932,7 +5932,7 @@
                 ProgressBar.update(i + 1, totalFiles, `Separating: ${file.name}`);
 
                 // Start animation (estimate 120 seconds per file for stems)
-                startProgressAnimation(120);
+                ProgressBar.startAnimation(120);
 
                 try {
                     // Call Python script (process_stems.py)
@@ -5961,8 +5961,8 @@
             }
 
             // Final progress
-            updateProgress(totalFiles, totalFiles, 'Complete!');
-            completeProgress();
+            ProgressBar.update(totalFiles, totalFiles, 'Complete!');
+            ProgressBar.complete();
 
             setTimeout(async () => {
                 ProgressBar.hide();

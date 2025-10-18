@@ -101,6 +101,18 @@ window.stemLoopStates = {
     bass: { enabled: false, start: null, end: null },
     other: { enabled: false, start: null, end: null }
 };
+window.stemCycleModes = {
+    vocals: false,
+    drums: false,
+    bass: false,
+    other: false
+};
+window.stemNextClickSets = {
+    vocals: 'start',
+    drums: 'start',
+    bass: 'start',
+    other: 'start'
+};
 
 // ============================================
 // PUBLIC API - Global State
@@ -284,6 +296,16 @@ function syncToWindow(stemType, key, value) {
     if (key === 'loopState') {
         window.stemLoopStates[stemType] = value;
     }
+
+    // Sync cycleMode
+    if (key === 'cycleMode') {
+        window.stemCycleModes[stemType] = value;
+    }
+
+    // Sync nextClickSets
+    if (key === 'nextClickSets') {
+        window.stemNextClickSets[stemType] = value;
+    }
 }
 
 /**
@@ -294,6 +316,8 @@ export function syncAllToWindow() {
     stemTypes.forEach(stemType => {
         window.stemPlaybackIndependent[stemType] = state.stems[stemType].playbackIndependent;
         window.stemLoopStates[stemType] = state.stems[stemType].loopState;
+        window.stemCycleModes[stemType] = state.stems[stemType].cycleMode;
+        window.stemNextClickSets[stemType] = state.stems[stemType].nextClickSets;
     });
 }
 

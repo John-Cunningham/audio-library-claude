@@ -24,6 +24,7 @@
         import * as StemMarkerSystem from '../components/stemMarkerSystem.js';
         import * as StemPlayerManager from '../components/stemPlayerManager.js';
         import * as StemLegacyPlayer from '../components/stemLegacyPlayer.js';
+        import * as StemState from '../state/stemStateManager.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -202,14 +203,14 @@
                 wavesurfer
             });
 
-            // Apply new state
+            // Apply new state (sync to StemState)
             stemWavesurfers = result.stemWavesurfers;
-            stemPlayerWavesurfers = result.stemPlayerWavesurfers;
-            stemPlayerComponents = result.stemPlayerComponents;
+            syncWavesurfersToState(result.stemPlayerWavesurfers);
+            syncComponentsToState(result.stemPlayerComponents);
             stemFiles = result.stemFiles;
-            multiStemReadyCount = result.multiStemReadyCount;
-            stemsPreloaded = result.stemsPreloaded;
-            multiStemPlayerExpanded = result.multiStemPlayerExpanded;
+            syncReadyCountToState(result.multiStemReadyCount);
+            syncPreloadedToState(result.stemsPreloaded);
+            syncExpandedToState(result.multiStemPlayerExpanded);
         }
 
         // Create WaveSurfer instance for a single stem (hidden, no container)
@@ -388,168 +389,66 @@
             }
         }
 
-        // Multi-Stem Player Functions (Galaxy View Style - Phase 1: Pre-loaded Silent Stems)
-        let multiStemPlayerExpanded = false;
-        let stemPlayerWavesurfers = {}; // Separate WaveSurfer instances for multi-stem player
-        let multiStemReadyCount = 0; // Track how many stems are loaded and ready
-        let multiStemAutoPlayOnReady = false; // Whether to auto-play stems when all are ready
-        let stemsPreloaded = false; // Track if stems are pre-loaded for current file
-
-        // Phase 2A: Individual Rate Controls
-        let stemIndependentRates = {}; // {vocals: 1.0, drums: 1.25, ...} - user's rate multiplier per stem
-        let stemRateLocked = {}; // {vocals: true, drums: false, ...} - whether stem follows parent rate
-        let stemPlaybackIndependent = {
-            vocals: true,
-            drums: true,
-            bass: true,
-            other: true
-        }; // whether stem should play when parent plays (user's active selection) - initialize all as active
-        let currentParentFileBPM = null; // Store parent file's original BPM for calculations
-
-        // CRITICAL: Expose to window so event handlers can access it
-        window.stemPlaybackIndependent = stemPlaybackIndependent;
-
-        // CRITICAL: Expose stemPlayerComponents so parent component can propagate to stems
-        window.stemPlayerComponents = stemPlayerComponents;
-
-        // Phase 2B: Individual Loop Controls (Version 27b)
-        let stemLoopStates = {
-            vocals: { enabled: false, start: null, end: null },
-            drums: { enabled: false, start: null, end: null },
-            bass: { enabled: false, start: null, end: null },
-            other: { enabled: false, start: null, end: null }
-        };
-
-        // CRITICAL: Expose to window so PlayerBarComponent can sync to it
-        window.stemLoopStates = stemLoopStates;
-
-        // Phase 4: Cycle Mode Controls (Version 27c)
-        let stemCycleModes = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemNextClickSets = {
-            vocals: 'start',
-            drums: 'start',
-            bass: 'start',
-            other: 'start'
-        };
-
         // ============================================
-        // VERSION 27D: FULL TEMPLATE SYSTEM - PER-STEM STATE OBJECTS
+        // STEM STATE MANAGEMENT - HYBRID APPROACH
+        // ============================================
+        // All stem state (162 lines) extracted to src/state/stemStateManager.js
+        // This enables multi-view architecture where stems persist across Library/Galaxy/Sphere views
+        //
+        // HYBRID APPROACH:
+        // - Local variables act as "caches" for performance
+        // - Changes are synced TO StemState (single source of truth)
+        // - On load, initialize FROM StemState
+        //
+        // This approach ensures compatibility while enabling multi-view persistence
         // ============================================
 
-        // Markers
-        let stemMarkersEnabled = {
-            vocals: true,
-            drums: true,
-            bass: true,
-            other: true
-        };
-        let stemMarkerFrequency = {
-            vocals: 'bar',
-            drums: 'bar',
-            bass: 'bar',
-            other: 'bar'
-        };
-        let stemCurrentMarkers = {
-            vocals: [],
-            drums: [],
-            bass: [],
-            other: []
-        };
-        let stemBarStartOffset = {
-            vocals: 0,
-            drums: 0,
-            bass: 0,
-            other: 0
-        };
+        // Initialize local cache variables from StemState on startup
+        let multiStemPlayerExpanded = StemState.isExpanded();
+        let stemPlayerWavesurfers = StemState.getPlayerWavesurfers();
+        // Note: stemPlayerComponents already declared at line 46
+        stemPlayerComponents = StemState.getPlayerComponents();
+        let multiStemReadyCount = StemState.getReadyCount();
+        let multiStemAutoPlayOnReady = StemState.getAutoPlayOnReady();
+        let stemsPreloaded = StemState.isPreloaded();
+        let currentParentFileBPM = StemState.getCurrentParentFileBPM();
 
-        // Metronome
-        let stemMetronomeEnabled = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemMetronomeSound = {
-            vocals: 'click',
-            drums: 'click',
-            bass: 'click',
-            other: 'click'
-        };
+        // Helper functions to sync local cache to StemState (single source of truth)
+        function syncExpandedToState(value) {
+            multiStemPlayerExpanded = value;
+            StemState.setExpanded(value);
+        }
 
-        // Loop/Cycle additional controls
-        let stemSeekOnClick = {
-            vocals: 'off',
-            drums: 'off',
-            bass: 'off',
-            other: 'off'
-        };
-        let stemImmediateJump = {
-            vocals: 'off',
-            drums: 'off',
-            bass: 'off',
-            other: 'off'
-        };
-        let stemLoopControlsExpanded = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemLoopFadesEnabled = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemFadeTime = {
-            vocals: 15,
-            drums: 15,
-            bass: 15,
-            other: 15
-        };
-        let stemPreserveLoop = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemBPMLock = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemRecordingActions = {
-            vocals: false,
-            drums: false,
-            bass: false,
-            other: false
-        };
-        let stemRecordedActions = {
-            vocals: [],
-            drums: [],
-            bass: [],
-            other: []
-        };
+        function syncWavesurfersToState(wavesurfers) {
+            stemPlayerWavesurfers = wavesurfers;
+            StemState.setPlayerWavesurfers(wavesurfers);
+        }
 
-        // Preserved loop positions (for file changes)
-        let stemPreservedLoopStartBar = {
-            vocals: null,
-            drums: null,
-            bass: null,
-            other: null
-        };
-        let stemPreservedLoopEndBar = {
-            vocals: null,
-            drums: null,
-            bass: null,
-            other: null
-        };
+        function syncComponentsToState(components) {
+            stemPlayerComponents = components;
+            StemState.setPlayerComponents(components);
+            window.stemPlayerComponents = components; // Legacy window exposure
+        }
+
+        function syncReadyCountToState(count) {
+            multiStemReadyCount = count;
+            StemState.setReadyCount(count);
+        }
+
+        function syncAutoPlayToState(value) {
+            multiStemAutoPlayOnReady = value;
+            StemState.setAutoPlayOnReady(value);
+        }
+
+        function syncPreloadedToState(value) {
+            stemsPreloaded = value;
+            StemState.setPreloaded(value);
+        }
+
+        function syncParentBPMToState(bpm) {
+            currentParentFileBPM = bpm;
+            StemState.setCurrentParentFileBPM(bpm);
+        }
 
         // Phase 1: Pre-load stems silently in background when file loads
         async function preloadMultiStemWavesurfers(fileId) {
@@ -568,12 +467,9 @@
                     currentFileId,
                     stemPlayerWavesurfers,
                     stemPlayerComponents,
-                    stemLoopStates,
-                    stemMarkersEnabled,
-                    stemIndependentRates,
-                    stemRateLocked,
                     currentParentFileBPM,
                     wavesurfer
+                    // Note: Per-stem state (stemLoopStates, stemMarkersEnabled, etc.) accessed via window objects from StemState
                 },
                 {
                     addStemBarMarkers,
@@ -581,15 +477,13 @@
                 }
             );
 
-            // Update app.js state with results
+            // Update app.js state with results (sync to StemState)
             stemFiles = result.stemFiles;
-            stemPlayerWavesurfers = result.stemPlayerWavesurfers;
-            stemPlayerComponents = result.stemPlayerComponents;
-            stemIndependentRates = result.stemIndependentRates;
-            stemRateLocked = result.stemRateLocked;
-            currentParentFileBPM = result.currentParentFileBPM;
-            window.currentParentFileBPM = result.currentParentFileBPM; // Expose to window for PlayerBarComponent
-            stemsPreloaded = result.stemsPreloaded;
+            syncWavesurfersToState(result.stemPlayerWavesurfers);
+            syncComponentsToState(result.stemPlayerComponents);
+            // Note: stemIndependentRates, stemRateLocked managed by PlayerBarComponent internally
+            syncParentBPMToState(result.currentParentFileBPM);
+            syncPreloadedToState(result.stemsPreloaded);
         }
 
         // Phase 1: Simplified toggle - just mute/unmute, no loading/destroying
@@ -606,8 +500,8 @@
                 }
             );
 
-            // Update app.js state
-            multiStemPlayerExpanded = result.multiStemPlayerExpanded;
+            // Update app.js state (sync to StemState)
+            syncExpandedToState(result.multiStemPlayerExpanded);
 
             // CRITICAL: Set up parent-stem sync when expanding
             if (multiStemPlayerExpanded && wavesurfer && Object.keys(stemPlayerWavesurfers).length > 0) {
@@ -639,8 +533,8 @@
                     wavesurfer,
                     stemFiles,
                     stemPlayerWavesurfers,
-                    stemPlaybackIndependent,
-                    stemLoopStates,
+                    stemPlaybackIndependent: window.stemPlaybackIndependent,
+                    stemLoopStates: window.stemLoopStates,
                     multiStemReadyCount,
                     multiStemAutoPlayOnReady,
                     cycleMode,
@@ -659,9 +553,9 @@
                 setupParentStemSync
             );
 
-            // Update app.js state
-            stemPlayerWavesurfers = result.stemPlayerWavesurfers;
-            stemPlaybackIndependent = result.stemPlaybackIndependent;
+            // Update app.js state (sync to StemState)
+            syncWavesurfersToState(result.stemPlayerWavesurfers);
+            // Note: stemPlaybackIndependent managed via window object from StemState
         }
 
         // THIN WRAPPER: Delegates to StemPlayerManager
@@ -685,8 +579,8 @@
                     wavesurfer,
                     stemPlayerWavesurfers,
                     multiStemPlayerExpanded,
-                    stemPlaybackIndependent,
-                    stemLoopStates
+                    stemPlaybackIndependent: window.stemPlaybackIndependent,
+                    stemLoopStates: window.stemLoopStates
                 }
             );
         }
@@ -850,27 +744,31 @@
         // Add bar markers to stem waveform
         function addStemBarMarkers(stemType, file) {
             // Call pure function from StemMarkerSystem module
+            // Per-stem state is accessed via window objects from StemStateManager
             const markerTimes = StemMarkerSystem.addStemBarMarkers(
                 stemType,
                 file,
                 stemPlayerWavesurfers,
                 {
-                    stemMarkersEnabled,
-                    stemMarkerFrequency,
-                    stemBarStartOffset,
-                    stemCurrentMarkers
+                    stemMarkersEnabled: window.stemMarkersEnabled || {},
+                    stemMarkerFrequency: window.stemMarkerFrequency || {},
+                    stemBarStartOffset: window.stemBarStartOffset || {},
+                    stemCurrentMarkers: window.stemCurrentMarkers || {}
                 }
             );
 
-            // Update app.js state with new marker times
-            stemCurrentMarkers[stemType] = markerTimes;
+            // Update window object with new marker times (per-stem state lives in StemStateManager)
+            if (!window.stemCurrentMarkers) window.stemCurrentMarkers = {};
+            window.stemCurrentMarkers[stemType] = markerTimes;
         }
 
         // Find nearest marker to the left for stem
         function findStemNearestMarkerToLeft(stemType, clickTime) {
+            // Per-stem state is accessed via window objects from StemStateManager
+            const stemMarkers = window.stemCurrentMarkers?.[stemType] || [];
             return StemMarkerSystem.findStemNearestMarkerToLeft(
                 clickTime,
-                stemCurrentMarkers[stemType]
+                stemMarkers
             );
         }
 
@@ -881,13 +779,14 @@
         // Toggle Cycle Mode (combined edit + active loop)
         function toggleCycleMode() {
             // Call pure function from LoopControls module
+            // Note: stemCycleModes, stemNextClickSets, stemLoopStates accessed via window objects from StemState
             const result = LoopControls.toggleCycleMode({
                 cycleMode,
                 nextClickSets,
                 multiStemPlayerExpanded,
-                stemCycleModes,
-                stemNextClickSets,
-                stemLoopStates
+                stemCycleModes: window.stemCycleModes,
+                stemNextClickSets: window.stemNextClickSets,
+                stemLoopStates: window.stemLoopStates
             });
 
             // Apply results to app.js state
@@ -2065,7 +1964,7 @@ window.toggleSpeedPitchLock = toggleSpeedPitchLock;
         });
         Object.defineProperty(window, 'stemPlayerWavesurfers', {
             get: () => stemPlayerWavesurfers,
-            set: (value) => { stemPlayerWavesurfers = value; },
+            set: (value) => { syncWavesurfersToState(value); },
             configurable: true
         });
 // Wrapper functions that delegate to PlayerBarComponent

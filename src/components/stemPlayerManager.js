@@ -460,9 +460,9 @@ export async function preloadMultiStemWavesurfers(fileId, dependencies, state, c
                 timeDisplay.textContent = `${Utils.formatTime(currentTime)} / ${Utils.formatTime(duration)}`;
             }
 
-            // Check if we need to loop this stem
-            const loopState = state.stemLoopStates[stemType];
-            if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
+            // Check if we need to loop this stem (access from window object)
+            const loopState = window.stemLoopStates?.[stemType];
+            if (loopState && loopState.enabled && loopState.start !== null && loopState.end !== null) {
                 if (currentTime >= loopState.end) {
                     ws.seekTo(loopState.start / duration);
                     console.log(`[${stemType}] Looping back to ${loopState.start.toFixed(2)}s`);
@@ -479,16 +479,9 @@ export async function preloadMultiStemWavesurfers(fileId, dependencies, state, c
 
             // Load file into PlayerBarComponent
             const file = audioFiles.find(f => f.id === state.currentFileId);
-            if (file) {
-                if (stemPlayerComponents[stemType]) {
-                    stemPlayerComponents[stemType].loadFile(file);
-                    console.log(`[STEM COMPONENTS] Loaded file into ${stemType} component (markers: ${stemPlayerComponents[stemType].markersEnabled})`);
-                }
-
-                // Fallback for markers if component not handling
-                if (state.stemMarkersEnabled[stemType] && !stemPlayerComponents[stemType]) {
-                    addStemBarMarkers(stemType, file);
-                }
+            if (file && stemPlayerComponents[stemType]) {
+                stemPlayerComponents[stemType].loadFile(file);
+                console.log(`[STEM COMPONENTS] Loaded file into ${stemType} component (markers: ${stemPlayerComponents[stemType].markersEnabled})`);
             }
         });
 
@@ -765,15 +758,16 @@ export async function initializeMultiStemPlayerWavesurfers(state, dependencies, 
                     timeDisplay.textContent = `${Utils.formatTime(currentTime)} / ${Utils.formatTime(duration)}`;
                 }
 
-                // Check for loop playback
-                const loopState = state.stemLoopStates[stemType];
-                const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
+                // Check for loop playback (access from window objects)
+                const loopState = window.stemLoopStates?.[stemType];
+                const playbackIndependent = window.stemPlaybackIndependent?.[stemType];
+                const followsParent = playbackIndependent && !(loopState && loopState.enabled);
 
                 if (followsParent && state.cycleMode && state.loopStart !== null && state.loopEnd !== null) {
                     if (currentTime >= state.loopEnd) {
                         ws.seekTo(state.loopStart / duration);
                     }
-                } else if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
+                } else if (loopState && loopState.enabled && loopState.start !== null && loopState.end !== null) {
                     if (currentTime >= loopState.end) {
                         ws.seekTo(loopState.start / duration);
                         console.log(`${stemType} looped back to ${loopState.start}s`);
@@ -783,13 +777,14 @@ export async function initializeMultiStemPlayerWavesurfers(state, dependencies, 
 
             // Handle finish
             ws.on('finish', () => {
-                const loopState = state.stemLoopStates[stemType];
-                const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
+                const loopState = window.stemLoopStates?.[stemType];
+                const playbackIndependent = window.stemPlaybackIndependent?.[stemType];
+                const followsParent = playbackIndependent && !(loopState && loopState.enabled);
 
                 if (followsParent && state.cycleMode && state.loopStart !== null && state.loopEnd !== null) {
                     ws.seekTo(state.loopStart / ws.getDuration());
                     ws.play();
-                } else if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
+                } else if (loopState && loopState.enabled && loopState.start !== null && loopState.end !== null) {
                     ws.seekTo(loopState.start / ws.getDuration());
                     ws.play();
                     console.log(`${stemType} finished - looping back to ${loopState.start}s`);

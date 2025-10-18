@@ -3125,51 +3125,21 @@
 
         // Toggle Cycle Mode (combined edit + active loop)
         function toggleCycleMode() {
-            cycleMode = !cycleMode;
+            // Call pure function from LoopControls module
+            const result = LoopControls.toggleCycleMode({
+                cycleMode,
+                nextClickSets,
+                multiStemPlayerExpanded,
+                stemCycleModes,
+                stemNextClickSets,
+                stemLoopStates
+            });
 
-            if (cycleMode) {
-                // Entering cycle mode - can edit loop AND loop is active
-                // Do NOT reset loop markers - they stay where they were
-                nextClickSets = 'start';
-                console.log('CYCLE MODE ON - click to set loop start/end, loop will play');
+            // Apply results to app.js state
+            cycleMode = result.cycleMode;
+            nextClickSets = result.nextClickSets;
 
-                // If stems are expanded, also enable cycle mode for all stems
-                if (multiStemPlayerExpanded) {
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                    stemTypes.forEach(type => {
-                        const loopBtn = document.getElementById(`stem-cycle-${type}`);
-                        if (loopBtn && !stemCycleModes[type]) {
-                            // Enable stem cycle mode
-                            stemCycleModes[type] = true;
-                            stemNextClickSets[type] = 'start';
-                            loopBtn.classList.add('active', 'cycle-mode');
-                            console.log(`[${type}] CYCLE MODE ON (synced with parent)`);
-                        }
-                    });
-                }
-            } else {
-                // Exiting cycle mode - editing disabled AND loop disabled
-                console.log('CYCLE MODE OFF - loop disabled');
-
-                // If stems are expanded, also disable cycle mode for all stems
-                if (multiStemPlayerExpanded) {
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                    stemTypes.forEach(type => {
-                        const loopBtn = document.getElementById(`stem-cycle-${type}`);
-                        const loopState = stemLoopStates[type];
-                        if (loopBtn && stemCycleModes[type]) {
-                            // Disable stem cycle mode
-                            stemCycleModes[type] = false;
-                            loopBtn.classList.remove('active', 'cycle-mode');
-                            loopState.enabled = false;
-                            loopState.start = null;
-                            loopState.end = null;
-                            console.log(`[${type}] CYCLE MODE OFF (synced with parent)`);
-                        }
-                    });
-                }
-            }
-
+            // Update UI
             updateLoopVisuals();
         }
 
@@ -3187,158 +3157,40 @@
         }
 
         function resetLoop() {
-            loopStart = null;
-            loopEnd = null;
-            cycleMode = false;
-            nextClickSets = 'start';
+            const result = LoopControls.resetLoop();
+            loopStart = result.loopStart;
+            loopEnd = result.loopEnd;
+            cycleMode = result.cycleMode;
+            nextClickSets = result.nextClickSets;
             updateLoopVisuals();
-            console.log('Loop cleared');
         }
 
         function clearLoopKeepCycle() {
-            loopStart = null;
-            loopEnd = null;
-            nextClickSets = 'start';
+            const result = LoopControls.clearLoopKeepCycle();
+            loopStart = result.loopStart;
+            loopEnd = result.loopEnd;
+            nextClickSets = result.nextClickSets;
             // Keep cycleMode = true so user can immediately set new loop
             updateLoopVisuals();
-            console.log('Loop cleared (cycle mode still ON - click to set new loop)');
         }
 
         function updateLoopVisuals() {
-            const cycleBtn = document.getElementById('cycleBtn');
-            const seekOnClickBtn = document.getElementById('seekOnClickBtn');
-            const loopStatus = document.getElementById('loopStatus');
-            const expandLoopBtn = document.getElementById('expandLoopBtn');
-            const loopControlsContainer = document.getElementById('loopControlsContainer');
-            const jumpBtn = document.getElementById('jumpBtn');
+            // Call pure function from LoopControls module (handles loop-specific UI)
+            LoopControls.updateLoopVisuals({
+                cycleMode,
+                loopStart,
+                loopEnd,
+                nextClickSets,
+                seekOnClick,
+                loopControlsExpanded,
+                immediateJump,
+                loopFadesEnabled,
+                preserveLoopOnFileChange,
+                bpmLockEnabled,
+                wavesurfer
+            });
 
-            // Update button state based on cycle mode
-            if (cycleMode) {
-                cycleBtn.classList.add('active');
-            } else {
-                cycleBtn.classList.remove('active');
-            }
-
-            // Show/hide seek on click button (only in cycle mode)
-            if (seekOnClickBtn) {
-                seekOnClickBtn.style.display = cycleMode ? 'inline-block' : 'none';
-
-                // Update button text and state based on mode
-                const buttonText = seekOnClick === 'off' ? 'SEEK' : seekOnClick.toUpperCase();
-                seekOnClickBtn.querySelector('span').textContent = buttonText;
-
-                // Active state when not off
-                if (seekOnClick !== 'off') {
-                    seekOnClickBtn.classList.add('active');
-                } else {
-                    seekOnClickBtn.classList.remove('active');
-                }
-            }
-
-            // Show/hide clear loop button (only in cycle mode)
-            const clearLoopBtn = document.getElementById('clearLoopBtn');
-            if (clearLoopBtn) {
-                clearLoopBtn.style.display = cycleMode ? 'inline-block' : 'none';
-            }
-
-            // Update status text
-            const hasLoop = loopStart !== null && loopEnd !== null;
-            if (!cycleMode && !hasLoop) {
-                loopStatus.textContent = 'Off';
-                loopStatus.style.color = '#666';
-            } else if (cycleMode && loopStart === null) {
-                loopStatus.textContent = 'Click start';
-                loopStatus.style.color = '#f59e0b';
-            } else if (cycleMode && loopEnd === null) {
-                loopStatus.textContent = 'Click end →';
-                loopStatus.style.color = '#f59e0b';
-            } else if (hasLoop) {
-                const duration = loopEnd - loopStart;
-                let statusText = `${duration.toFixed(1)}s`;
-
-                // Add bar/beat count if file has beatmap data
-                const currentFile = audioFiles.find(f => f.id === currentFileId);
-                if (currentFile && currentFile.beatmap && currentFile.beatmap.length > 0) {
-                    // Calculate number of beats in loop
-                    const beatsInLoop = currentFile.beatmap.filter(beat =>
-                        beat.time >= loopStart && beat.time < loopEnd
-                    ).length;
-
-                    // Calculate bars (assuming 4 beats per bar)
-                    const bars = Math.floor(beatsInLoop / 4);
-                    const remainingBeats = beatsInLoop % 4;
-
-                    if (bars > 0 && remainingBeats === 0) {
-                        // Exact bar count
-                        statusText += ` (${bars} ${bars === 1 ? 'Bar' : 'Bars'})`;
-                    } else if (bars > 0) {
-                        // Bars + beats
-                        statusText += ` (${bars} ${bars === 1 ? 'Bar' : 'Bars'}, ${remainingBeats} ${remainingBeats === 1 ? 'Beat' : 'Beats'})`;
-                    } else if (beatsInLoop > 0) {
-                        // Just beats
-                        statusText += ` (${beatsInLoop} ${beatsInLoop === 1 ? 'Beat' : 'Beats'})`;
-                    }
-                }
-
-                loopStatus.textContent = statusText;
-                loopStatus.style.color = '#10b981';
-            }
-
-            // Show/hide expand button and loop controls based on loop state
-            const showExpandBtn = cycleMode && loopStart !== null && loopEnd !== null;
-            if (expandLoopBtn) {
-                expandLoopBtn.style.display = showExpandBtn ? 'inline-block' : 'none';
-                expandLoopBtn.querySelector('span').textContent = loopControlsExpanded ? '▲' : '▼';
-            }
-
-            // Show/hide loop controls container
-            if (loopControlsContainer) {
-                loopControlsContainer.style.display = (showExpandBtn && loopControlsExpanded) ? 'flex' : 'none';
-            }
-
-            // Update jump button state and text
-            if (jumpBtn) {
-                const buttonText = immediateJump === 'off' ? 'JMP' : immediateJump.toUpperCase();
-                jumpBtn.querySelector('span').textContent = buttonText;
-
-                if (immediateJump !== 'off') {
-                    jumpBtn.classList.add('active');
-                } else {
-                    jumpBtn.classList.remove('active');
-                }
-            }
-
-            // Update fade button state
-            const fadeBtn = document.getElementById('fadeBtn');
-            if (fadeBtn) {
-                if (loopFadesEnabled) {
-                    fadeBtn.classList.add('active');
-                } else {
-                    fadeBtn.classList.remove('active');
-                }
-            }
-
-            // Update preserve loop button state
-            const preserveLoopBtn = document.getElementById('preserveLoopBtn');
-            if (preserveLoopBtn) {
-                if (preserveLoopOnFileChange) {
-                    preserveLoopBtn.classList.add('active');
-                } else {
-                    preserveLoopBtn.classList.remove('active');
-                }
-            }
-
-            // Update BPM lock button state
-            const bpmLockBtn = document.getElementById('bpmLockBtn');
-            if (bpmLockBtn) {
-                if (bpmLockEnabled) {
-                    bpmLockBtn.classList.add('active');
-                } else {
-                    bpmLockBtn.classList.remove('active');
-                }
-            }
-
-            // Update record actions button state
+            // Update record actions button state (not loop-related)
             const recordActionsBtn = document.getElementById('recordActionsBtn');
             if (recordActionsBtn) {
                 if (recordingWaitingForStart) {
@@ -3356,7 +3208,7 @@
                 }
             }
 
-            // Update play actions button state
+            // Update play actions button state (not loop-related)
             const playActionsBtn = document.getElementById('playActionsBtn');
             if (playActionsBtn) {
                 if (isPlayingBackActions) {
@@ -3369,9 +3221,6 @@
                     playActionsBtn.style.background = '';
                 }
             }
-
-            // Update visual loop region
-            updateLoopRegion();
         }
 
         function toggleLoopControlsExpanded() {
@@ -4798,25 +4647,13 @@
             renderModalTags: () => TagEditModal.render()
         });
 
-        // Initialize loop controls (moved to loopControls.js)
-        LoopControls.init(
-            // Callbacks
-            {
-                recordAction,
-                getAudioFiles: () => audioFiles,
-                getCurrentFileId: () => currentFileId,
-                setPendingJumpTarget: (target) => { pendingJumpTarget = target; }
-            },
-            // State getters
-            {
-                getWavesurfer: () => wavesurfer,
-                getCurrentMarkers: () => currentMarkers,
-                getMultiStemPlayerExpanded: () => multiStemPlayerExpanded,
-                getStemCycleModes: () => stemCycleModes,
-                getStemNextClickSets: () => stemNextClickSets,
-                getStemLoopStates: () => stemLoopStates
-            }
-        );
+        // Initialize loop controls (pure function approach - state passed to each function call)
+        LoopControls.init({
+            recordAction,
+            getAudioFiles: () => audioFiles,
+            getCurrentFileId: () => currentFileId,
+            setPendingJumpTarget: (target) => { pendingJumpTarget = target; }
+        });
 
         // Initialize on load
         loadData();

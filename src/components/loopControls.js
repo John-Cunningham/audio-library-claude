@@ -1,100 +1,34 @@
 /**
- * Loop Controls Module
+ * Loop Controls Module (Pure Functions)
  *
- * Manages loop/cycle mode functionality for the audio player:
- * - Loop toggling and cycle mode
- * - Loop region manipulation (shift, resize, move markers)
- * - Loop visual updates and UI state management
- * - Immediate jump and clock mode support
- * - Preserve loop across file changes
+ * Manages loop/cycle mode functionality using pure functions.
+ * All state is maintained in app.js. Functions accept state and return new state.
  *
- * Usage:
+ * Usage Pattern:
  *   import * as LoopControls from './loopControls.js';
  *
- *   LoopControls.init(callbacks, state);
- *   LoopControls.toggleLoop();
- *   LoopControls.shiftLoopLeft();
+ *   // In app.js:
+ *   const result = LoopControls.toggleCycleMode({ cycleMode, loopStart, ... });
+ *   cycleMode = result.cycleMode;
+ *   nextClickSets = result.nextClickSets;
+ *   LoopControls.updateLoopVisuals({ cycleMode, loopStart, ... });
  */
 
-// Module state
-let state = {};
+// Module callbacks (set once during init)
 let callbacks = {};
 
-// Loop state
-let loopStart = null;
-let loopEnd = null;
-let cycleMode = false;
-let nextClickSets = 'start';
-let loopControlsExpanded = false;
-let loopFadesEnabled = false;
-let fadeTime = 0.05; // Default 50ms
-let preserveLoopOnFileChange = false;
-let immediateJump = 'off'; // 'off', 'on', or 'clock'
-let seekOnClick = 'off'; // 'off', 'seek', or 'clock'
-let isLooping = false;
-let bpmLockEnabled = false;
-let lockedBPM = null;
-
-// Preserved loop state for file changes
-let preservedLoopStartBar = null;
-let preservedLoopEndBar = null;
-let preservedCycleMode = false;
-let preservedPlaybackPositionInLoop = null;
-
 /**
- * Initialize loop controls with callbacks and state
+ * Initialize loop controls with callbacks
  * @param {Object} cbs - Callback functions
  * @param {Function} cbs.recordAction - Record action for playback
  * @param {Function} cbs.getAudioFiles - Get audio files array
  * @param {Function} cbs.getCurrentFileId - Get current file ID
- * @param {Object} st - State getters
- * @param {Function} st.getWavesurfer - Get wavesurfer instance
- * @param {Function} st.getCurrentMarkers - Get current bar markers
- * @param {Function} st.getMultiStemPlayerExpanded - Get stem player expanded state
- * @param {Function} st.getStemCycleModes - Get stem cycle modes object
- * @param {Function} st.getStemNextClickSets - Get stem next click sets object
- * @param {Function} st.getStemLoopStates - Get stem loop states object
+ * @param {Function} cbs.setPendingJumpTarget - Set pending jump target for clock mode
  */
-export function init(cbs, st) {
+export function init(cbs) {
     callbacks = cbs;
-    state = st;
-    console.log('[LoopControls] Initialized');
+    console.log('[LoopControls] Initialized with pure function approach');
 }
-
-// ===================================================================
-// GETTERS (for app.js to access loop state)
-// ===================================================================
-
-export function getLoopStart() { return loopStart; }
-export function getLoopEnd() { return loopEnd; }
-export function getCycleMode() { return cycleMode; }
-export function getNextClickSets() { return nextClickSets; }
-export function setNextClickSets(value) { nextClickSets = value; }
-export function getLoopControlsExpanded() { return loopControlsExpanded; }
-export function getLoopFadesEnabled() { return loopFadesEnabled; }
-export function getFadeTime() { return fadeTime; }
-export function getPreserveLoopOnFileChange() { return preserveLoopOnFileChange; }
-export function getImmediateJump() { return immediateJump; }
-export function getSeekOnClick() { return seekOnClick; }
-export function getIsLooping() { return isLooping; }
-export function getBpmLockEnabled() { return bpmLockEnabled; }
-export function getLockedBPM() { return lockedBPM; }
-export function getPreservedLoopStartBar() { return preservedLoopStartBar; }
-export function getPreservedLoopEndBar() { return preservedLoopEndBar; }
-export function getPreservedCycleMode() { return preservedCycleMode; }
-export function getPreservedPlaybackPositionInLoop() { return preservedPlaybackPositionInLoop; }
-
-// ===================================================================
-// SETTERS (for app.js to modify loop state)
-// ===================================================================
-
-export function setLoopStart(value) { loopStart = value; }
-export function setLoopEnd(value) { loopEnd = value; }
-export function setCycleMode(value) { cycleMode = value; }
-export function setPreservedLoopStartBar(value) { preservedLoopStartBar = value; }
-export function setPreservedLoopEndBar(value) { preservedLoopEndBar = value; }
-export function setPreservedCycleMode(value) { preservedCycleMode = value; }
-export function setPreservedPlaybackPositionInLoop(value) { preservedPlaybackPositionInLoop = value; }
 
 // ===================================================================
 // CYCLE MODE & BASIC LOOP CONTROLS
@@ -102,26 +36,26 @@ export function setPreservedPlaybackPositionInLoop(value) { preservedPlaybackPos
 
 /**
  * Toggle cycle mode (combined edit + active loop)
+ * @param {Object} state - Current loop state
+ * @returns {Object} Updated state values { cycleMode, nextClickSets }
  */
-export function toggleCycleMode() {
-    cycleMode = !cycleMode;
+export function toggleCycleMode(state) {
+    const newCycleMode = !state.cycleMode;
+    let newNextClickSets = state.nextClickSets;
 
-    if (cycleMode) {
+    if (newCycleMode) {
         // Entering cycle mode - can edit loop AND loop is active
-        nextClickSets = 'start';
+        newNextClickSets = 'start';
         console.log('CYCLE MODE ON - click to set loop start/end, loop will play');
 
         // If stems are expanded, also enable cycle mode for all stems
-        const multiStemPlayerExpanded = state.getMultiStemPlayerExpanded();
-        if (multiStemPlayerExpanded) {
-            const stemCycleModes = state.getStemCycleModes();
-            const stemNextClickSets = state.getStemNextClickSets();
+        if (state.multiStemPlayerExpanded) {
             const stemTypes = ['vocals', 'drums', 'bass', 'other'];
             stemTypes.forEach(type => {
                 const loopBtn = document.getElementById(`stem-cycle-${type}`);
-                if (loopBtn && !stemCycleModes[type]) {
-                    stemCycleModes[type] = true;
-                    stemNextClickSets[type] = 'start';
+                if (loopBtn && !state.stemCycleModes[type]) {
+                    state.stemCycleModes[type] = true;
+                    state.stemNextClickSets[type] = 'start';
                     loopBtn.classList.add('active', 'cycle-mode');
                     console.log(`[${type}] CYCLE MODE ON (synced with parent)`);
                 }
@@ -132,16 +66,13 @@ export function toggleCycleMode() {
         console.log('CYCLE MODE OFF - loop disabled');
 
         // If stems are expanded, also disable cycle mode for all stems
-        const multiStemPlayerExpanded = state.getMultiStemPlayerExpanded();
-        if (multiStemPlayerExpanded) {
-            const stemCycleModes = state.getStemCycleModes();
-            const stemLoopStates = state.getStemLoopStates();
+        if (state.multiStemPlayerExpanded) {
             const stemTypes = ['vocals', 'drums', 'bass', 'other'];
             stemTypes.forEach(type => {
                 const loopBtn = document.getElementById(`stem-cycle-${type}`);
-                const loopState = stemLoopStates[type];
-                if (loopBtn && stemCycleModes[type]) {
-                    stemCycleModes[type] = false;
+                const loopState = state.stemLoopStates[type];
+                if (loopBtn && state.stemCycleModes[type]) {
+                    state.stemCycleModes[type] = false;
                     loopBtn.classList.remove('active', 'cycle-mode');
                     loopState.enabled = false;
                     loopState.start = null;
@@ -152,50 +83,63 @@ export function toggleCycleMode() {
         }
     }
 
-    updateLoopVisuals();
+    return {
+        cycleMode: newCycleMode,
+        nextClickSets: newNextClickSets
+    };
 }
 
 /**
  * Toggle loop on/off
+ * @param {Object} state - Current loop state
+ * @returns {Object} Updated state { isLooping }
  */
-export function toggleLoop() {
-    isLooping = !isLooping;
+export function toggleLoop(state) {
+    const newIsLooping = !state.isLooping;
     const loopBtn = document.getElementById('loopBtn');
     const shuffleBtn = document.getElementById('shuffleBtn');
 
-    loopBtn.classList.toggle('active', isLooping);
+    if (loopBtn) loopBtn.classList.toggle('active', newIsLooping);
 
     // Gray out shuffle button when loop is active
-    if (isLooping) {
-        shuffleBtn.style.opacity = '0.4';
-        shuffleBtn.style.cursor = 'not-allowed';
-    } else {
-        shuffleBtn.style.opacity = '1';
-        shuffleBtn.style.cursor = 'pointer';
+    if (shuffleBtn) {
+        if (newIsLooping) {
+            shuffleBtn.style.opacity = '0.4';
+            shuffleBtn.style.cursor = 'not-allowed';
+        } else {
+            shuffleBtn.style.opacity = '1';
+            shuffleBtn.style.cursor = 'pointer';
+        }
     }
+
+    return { isLooping: newIsLooping };
 }
 
 /**
  * Reset/clear loop markers
+ * @returns {Object} Updated state
  */
 export function resetLoop() {
-    loopStart = null;
-    loopEnd = null;
-    cycleMode = false;
-    nextClickSets = 'start';
-    updateLoopVisuals();
     console.log('Loop cleared');
+    return {
+        loopStart: null,
+        loopEnd: null,
+        cycleMode: false,
+        nextClickSets: 'start'
+    };
 }
 
 /**
  * Clear loop but keep cycle mode active
+ * @returns {Object} Updated state
  */
 export function clearLoopKeepCycle() {
-    loopStart = null;
-    loopEnd = null;
-    nextClickSets = 'start';
-    updateLoopVisuals();
     console.log('Loop cleared (cycle mode still ON - click to set new loop)');
+    return {
+        loopStart: null,
+        loopEnd: null,
+        nextClickSets: 'start'
+    };
 }
 
 // ===================================================================
@@ -204,133 +148,156 @@ export function clearLoopKeepCycle() {
 
 /**
  * Shift loop left by one loop duration
+ * @param {Object} state - Current loop state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @returns {Object|null} Updated state or null if operation failed
  */
-export function shiftLoopLeft() {
-    if (!cycleMode || loopStart === null || loopEnd === null) {
+export function shiftLoopLeft(state, wavesurfer) {
+    if (!state.cycleMode || state.loopStart === null || state.loopEnd === null) {
         console.log('No active loop to shift');
-        return;
+        return null;
     }
 
-    const loopDuration = loopEnd - loopStart;
-    const newStart = loopStart - loopDuration;
-    const newEnd = loopEnd - loopDuration;
+    const loopDuration = state.loopEnd - state.loopStart;
+    const newStart = state.loopStart - loopDuration;
+    const newEnd = state.loopEnd - loopDuration;
 
     if (newStart < 0) {
         console.log('Cannot shift loop before start of track');
-        return;
+        return null;
     }
 
-    loopStart = newStart;
-    loopEnd = newEnd;
-    console.log(`Loop shifted left: ${loopStart.toFixed(2)}s - ${loopEnd.toFixed(2)}s`);
-    callbacks.recordAction('shiftLoopLeft', { loopStart, loopEnd, loopDuration });
+    console.log(`Loop shifted left: ${newStart.toFixed(2)}s - ${newEnd.toFixed(2)}s`);
+    callbacks.recordAction('shiftLoopLeft', { loopStart: newStart, loopEnd: newEnd, loopDuration });
 
-    handleJumpAfterLoopChange();
-    updateLoopVisuals();
+    // Handle jump based on immediateJump mode
+    handleJumpAfterLoopChange(state, wavesurfer, newStart, newEnd, loopDuration);
+
+    return {
+        loopStart: newStart,
+        loopEnd: newEnd
+    };
 }
 
 /**
  * Shift loop right by one loop duration
+ * @param {Object} state - Current loop state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @returns {Object|null} Updated state or null if operation failed
  */
-export function shiftLoopRight() {
-    const wavesurfer = state.getWavesurfer();
-    if (!cycleMode || loopStart === null || loopEnd === null || !wavesurfer) {
+export function shiftLoopRight(state, wavesurfer) {
+    if (!state.cycleMode || state.loopStart === null || state.loopEnd === null || !wavesurfer) {
         console.log('No active loop to shift');
-        return;
+        return null;
     }
 
-    const loopDuration = loopEnd - loopStart;
+    const loopDuration = state.loopEnd - state.loopStart;
     const trackDuration = wavesurfer.getDuration();
-    const newStart = loopStart + loopDuration;
-    const newEnd = loopEnd + loopDuration;
+    const newStart = state.loopStart + loopDuration;
+    const newEnd = state.loopEnd + loopDuration;
 
     if (newEnd > trackDuration) {
         console.log('Cannot shift loop past end of track');
-        return;
+        return null;
     }
 
-    loopStart = newStart;
-    loopEnd = newEnd;
-    console.log(`Loop shifted right: ${loopStart.toFixed(2)}s - ${loopEnd.toFixed(2)}s`);
-    callbacks.recordAction('shiftLoopRight', { loopStart, loopEnd, loopDuration });
+    console.log(`Loop shifted right: ${newStart.toFixed(2)}s - ${newEnd.toFixed(2)}s`);
+    callbacks.recordAction('shiftLoopRight', { loopStart: newStart, loopEnd: newEnd, loopDuration });
 
-    handleJumpAfterLoopChange();
-    updateLoopVisuals();
+    handleJumpAfterLoopChange(state, wavesurfer, newStart, newEnd, loopDuration);
+
+    return {
+        loopStart: newStart,
+        loopEnd: newEnd
+    };
 }
 
 /**
  * Halve loop length
+ * @param {Object} state - Current loop state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @returns {Object|null} Updated state or null if operation failed
  */
-export function halfLoopLength() {
-    if (!cycleMode || loopStart === null || loopEnd === null) {
+export function halfLoopLength(state, wavesurfer) {
+    if (!state.cycleMode || state.loopStart === null || state.loopEnd === null) {
         console.log('No active loop to modify');
-        return;
+        return null;
     }
 
-    const loopDuration = loopEnd - loopStart;
+    const loopDuration = state.loopEnd - state.loopStart;
     const newDuration = loopDuration / 2;
 
     if (newDuration < 0.1) {
         console.log('Loop too short to halve');
-        return;
+        return null;
     }
 
-    loopEnd = loopStart + newDuration;
-    console.log(`Loop halved: ${loopStart.toFixed(2)}s - ${loopEnd.toFixed(2)}s (${newDuration.toFixed(1)}s)`);
-    callbacks.recordAction('halfLoopLength', { loopStart, loopEnd, loopDuration: newDuration });
+    const newEnd = state.loopStart + newDuration;
+    console.log(`Loop halved: ${state.loopStart.toFixed(2)}s - ${newEnd.toFixed(2)}s (${newDuration.toFixed(1)}s)`);
+    callbacks.recordAction('halfLoopLength', { loopStart: state.loopStart, loopEnd: newEnd, loopDuration: newDuration });
 
-    handleJumpToLoopStart();
-    updateLoopVisuals();
+    handleJumpToLoopStart(state, wavesurfer, state.loopStart);
+
+    return {
+        loopEnd: newEnd
+    };
 }
 
 /**
  * Double loop length
+ * @param {Object} state - Current loop state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @returns {Object|null} Updated state or null if operation failed
  */
-export function doubleLoopLength() {
-    const wavesurfer = state.getWavesurfer();
-    if (!cycleMode || loopStart === null || loopEnd === null || !wavesurfer) {
+export function doubleLoopLength(state, wavesurfer) {
+    if (!state.cycleMode || state.loopStart === null || state.loopEnd === null || !wavesurfer) {
         console.log('No active loop to modify');
-        return;
+        return null;
     }
 
-    const loopDuration = loopEnd - loopStart;
+    const loopDuration = state.loopEnd - state.loopStart;
     const newDuration = loopDuration * 2;
-    const newEnd = loopStart + newDuration;
+    const newEnd = state.loopStart + newDuration;
     const trackDuration = wavesurfer.getDuration();
 
     if (newEnd > trackDuration) {
         console.log('Cannot double loop - would exceed track duration');
-        return;
+        return null;
     }
 
-    loopEnd = newEnd;
-    console.log(`Loop doubled: ${loopStart.toFixed(2)}s - ${loopEnd.toFixed(2)}s (${newDuration.toFixed(1)}s)`);
-    callbacks.recordAction('doubleLoopLength', { loopStart, loopEnd, loopDuration: newDuration });
+    console.log(`Loop doubled: ${state.loopStart.toFixed(2)}s - ${newEnd.toFixed(2)}s (${newDuration.toFixed(1)}s)`);
+    callbacks.recordAction('doubleLoopLength', { loopStart: state.loopStart, loopEnd: newEnd, loopDuration: newDuration });
 
-    handleJumpToLoopStart();
-    updateLoopVisuals();
+    handleJumpToLoopStart(state, wavesurfer, state.loopStart);
+
+    return {
+        loopEnd: newEnd
+    };
 }
 
 /**
  * Move loop start marker left (expand from left)
+ * @param {Object} state - Current loop state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @returns {Object|null} Updated state or null if operation failed
  */
-export function moveStartLeft() {
-    if (!cycleMode || loopStart === null || loopEnd === null) {
+export function moveStartLeft(state, wavesurfer) {
+    if (!state.cycleMode || state.loopStart === null || state.loopEnd === null) {
         console.log('No active loop');
-        return;
+        return null;
     }
 
-    const currentMarkers = state.getCurrentMarkers();
+    const currentMarkers = state.currentMarkers || [];
     let newLoopStart;
 
     if (currentMarkers.length === 0) {
-        newLoopStart = Math.max(0, loopStart - 0.01);
-        console.log(`Start marker nudged left to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(2)}s)`);
+        newLoopStart = Math.max(0, state.loopStart - 0.01);
+        console.log(`Start marker nudged left to ${newLoopStart.toFixed(2)}s (loop now ${(state.loopEnd - newLoopStart).toFixed(2)}s)`);
     } else {
         let prevMarker = null;
         for (let i = currentMarkers.length - 1; i >= 0; i--) {
             const markerTime = currentMarkers[i];
-            if (markerTime < loopStart) {
+            if (markerTime < state.loopStart) {
                 prevMarker = markerTime;
                 break;
             }
@@ -338,39 +305,43 @@ export function moveStartLeft() {
 
         if (prevMarker === null) {
             console.log('No marker found before loop start');
-            return;
+            return null;
         }
 
         newLoopStart = prevMarker;
-        console.log(`Start marker moved left to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(1)}s)`);
+        console.log(`Start marker moved left to ${newLoopStart.toFixed(2)}s (loop now ${(state.loopEnd - newLoopStart).toFixed(1)}s)`);
     }
 
-    loopStart = newLoopStart;
-    callbacks.recordAction('moveStartLeft', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
+    callbacks.recordAction('moveStartLeft', { loopStart: newLoopStart, loopEnd: state.loopEnd, loopDuration: state.loopEnd - newLoopStart });
+    handleJumpToLoopStart(state, wavesurfer, newLoopStart);
 
-    handleJumpToLoopStart();
-    updateLoopVisuals();
+    return {
+        loopStart: newLoopStart
+    };
 }
 
 /**
  * Move loop start marker right (shrink from left)
+ * @param {Object} state - Current loop state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @returns {Object|null} Updated state or null if operation failed
  */
-export function moveStartRight() {
-    if (!cycleMode || loopStart === null || loopEnd === null) {
+export function moveStartRight(state, wavesurfer) {
+    if (!state.cycleMode || state.loopStart === null || state.loopEnd === null) {
         console.log('No active loop');
-        return;
+        return null;
     }
 
-    const currentMarkers = state.getCurrentMarkers();
+    const currentMarkers = state.currentMarkers || [];
     let newLoopStart;
 
     if (currentMarkers.length === 0) {
-        newLoopStart = Math.min(loopEnd - 0.01, loopStart + 0.01);
-        console.log(`Start marker nudged right to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(2)}s)`);
+        newLoopStart = Math.min(state.loopEnd - 0.01, state.loopStart + 0.01);
+        console.log(`Start marker nudged right to ${newLoopStart.toFixed(2)}s (loop now ${(state.loopEnd - newLoopStart).toFixed(2)}s)`);
     } else {
         let nextMarker = null;
         for (const markerTime of currentMarkers) {
-            if (markerTime > loopStart && markerTime < loopEnd) {
+            if (markerTime > state.loopStart && markerTime < state.loopEnd) {
                 nextMarker = markerTime;
                 break;
             }
@@ -378,41 +349,44 @@ export function moveStartRight() {
 
         if (nextMarker === null) {
             console.log('No marker found between start and end');
-            return;
+            return null;
         }
 
         newLoopStart = nextMarker;
-        console.log(`Start marker moved right to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(1)}s)`);
+        console.log(`Start marker moved right to ${newLoopStart.toFixed(2)}s (loop now ${(state.loopEnd - newLoopStart).toFixed(1)}s)`);
     }
 
-    loopStart = newLoopStart;
-    callbacks.recordAction('moveStartRight', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
+    callbacks.recordAction('moveStartRight', { loopStart: newLoopStart, loopEnd: state.loopEnd, loopDuration: state.loopEnd - newLoopStart });
+    handleJumpToLoopStart(state, wavesurfer, newLoopStart);
 
-    handleJumpToLoopStart();
-    updateLoopVisuals();
+    return {
+        loopStart: newLoopStart
+    };
 }
 
 /**
  * Move loop end marker right (expand from right)
+ * @param {Object} state - Current loop state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @returns {Object|null} Updated state or null if operation failed
  */
-export function moveEndRight() {
-    const wavesurfer = state.getWavesurfer();
-    if (!cycleMode || loopStart === null || loopEnd === null) {
+export function moveEndRight(state, wavesurfer) {
+    if (!state.cycleMode || state.loopStart === null || state.loopEnd === null) {
         console.log('No active loop');
-        return;
+        return null;
     }
 
-    const currentMarkers = state.getCurrentMarkers();
+    const currentMarkers = state.currentMarkers || [];
     let newLoopEnd;
 
     if (currentMarkers.length === 0) {
         const duration = wavesurfer ? wavesurfer.getDuration() : Infinity;
-        newLoopEnd = Math.min(duration, loopEnd + 0.01);
-        console.log(`End marker nudged right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(2)}s)`);
+        newLoopEnd = Math.min(duration, state.loopEnd + 0.01);
+        console.log(`End marker nudged right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - state.loopStart).toFixed(2)}s)`);
     } else {
         let nextMarker = null;
         for (const markerTime of currentMarkers) {
-            if (markerTime > loopEnd) {
+            if (markerTime > state.loopEnd) {
                 nextMarker = markerTime;
                 break;
             }
@@ -420,40 +394,44 @@ export function moveEndRight() {
 
         if (nextMarker === null) {
             console.log('No marker found after loop end');
-            return;
+            return null;
         }
 
         newLoopEnd = nextMarker;
-        console.log(`End marker moved right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(1)}s)`);
+        console.log(`End marker moved right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - state.loopStart).toFixed(1)}s)`);
     }
 
-    loopEnd = newLoopEnd;
-    callbacks.recordAction('moveEndRight', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
+    callbacks.recordAction('moveEndRight', { loopStart: state.loopStart, loopEnd: newLoopEnd, loopDuration: newLoopEnd - state.loopStart });
+    handleJumpToLoopStart(state, wavesurfer, state.loopStart);
 
-    handleJumpToLoopStart();
-    updateLoopVisuals();
+    return {
+        loopEnd: newLoopEnd
+    };
 }
 
 /**
  * Move loop end marker left (shrink from right)
+ * @param {Object} state - Current loop state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @returns {Object|null} Updated state or null if operation failed
  */
-export function moveEndLeft() {
-    if (!cycleMode || loopStart === null || loopEnd === null) {
+export function moveEndLeft(state, wavesurfer) {
+    if (!state.cycleMode || state.loopStart === null || state.loopEnd === null) {
         console.log('No active loop');
-        return;
+        return null;
     }
 
-    const currentMarkers = state.getCurrentMarkers();
+    const currentMarkers = state.currentMarkers || [];
     let newLoopEnd;
 
     if (currentMarkers.length === 0) {
-        newLoopEnd = Math.max(loopStart + 0.01, loopEnd - 0.01);
-        console.log(`End marker nudged left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(2)}s)`);
+        newLoopEnd = Math.max(state.loopStart + 0.01, state.loopEnd - 0.01);
+        console.log(`End marker nudged left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - state.loopStart).toFixed(2)}s)`);
     } else {
         let prevMarker = null;
         for (let i = currentMarkers.length - 1; i >= 0; i--) {
             const markerTime = currentMarkers[i];
-            if (markerTime < loopEnd && markerTime > loopStart) {
+            if (markerTime < state.loopEnd && markerTime > state.loopStart) {
                 prevMarker = markerTime;
                 break;
             }
@@ -461,66 +439,19 @@ export function moveEndLeft() {
 
         if (prevMarker === null) {
             console.log('No marker found between start and end');
-            return;
+            return null;
         }
 
         newLoopEnd = prevMarker;
-        console.log(`End marker moved left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(1)}s)`);
+        console.log(`End marker moved left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - state.loopStart).toFixed(1)}s)`);
     }
 
-    loopEnd = newLoopEnd;
-    callbacks.recordAction('moveEndLeft', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
+    callbacks.recordAction('moveEndLeft', { loopStart: state.loopStart, loopEnd: newLoopEnd, loopDuration: newLoopEnd - state.loopStart });
+    handleJumpToLoopStart(state, wavesurfer, state.loopStart);
 
-    handleJumpToLoopStart();
-    updateLoopVisuals();
-}
-
-// ===================================================================
-// JUMP HELPERS (Immediate vs Clock Mode)
-// ===================================================================
-
-/**
- * Handle jump after loop change (shift operations)
- */
-function handleJumpAfterLoopChange() {
-    const wavesurfer = state.getWavesurfer();
-    if (!wavesurfer) return;
-
-    const loopDuration = loopEnd - loopStart;
-
-    if (immediateJump === 'on') {
-        const currentTime = wavesurfer.getCurrentTime();
-        const oldLoopStart = loopStart + loopDuration;
-        const oldLoopEnd = loopEnd + loopDuration;
-
-        let relativePosition = 0;
-        if (currentTime >= oldLoopStart && currentTime <= oldLoopEnd) {
-            relativePosition = (currentTime - oldLoopStart) / loopDuration;
-        }
-
-        const newTime = loopStart + (relativePosition * loopDuration);
-        wavesurfer.seekTo(newTime / wavesurfer.getDuration());
-        console.log(`Jumped to relative position in new loop: ${newTime.toFixed(2)}s (${(relativePosition * 100).toFixed(1)}% through loop)`);
-    } else if (immediateJump === 'clock') {
-        callbacks.setPendingJumpTarget(loopStart);
-        console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-    }
-}
-
-/**
- * Handle jump to loop start (resize/move operations)
- */
-function handleJumpToLoopStart() {
-    const wavesurfer = state.getWavesurfer();
-    if (!wavesurfer) return;
-
-    if (immediateJump === 'on') {
-        wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
-        console.log(`Jumped to loop start: ${loopStart.toFixed(2)}s`);
-    } else if (immediateJump === 'clock') {
-        callbacks.setPendingJumpTarget(loopStart);
-        console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-    }
+    return {
+        loopEnd: newLoopEnd
+    };
 }
 
 // ===================================================================
@@ -529,97 +460,121 @@ function handleJumpToLoopStart() {
 
 /**
  * Toggle seek on click mode (off → seek → clock → off)
+ * @param {Object} state - Current state
+ * @returns {Object} Updated state { seekOnClick }
  */
-export function toggleSeekOnClick() {
-    if (seekOnClick === 'off') {
-        seekOnClick = 'seek';
-    } else if (seekOnClick === 'seek') {
-        seekOnClick = 'clock';
+export function toggleSeekOnClick(state) {
+    let newSeekOnClick = 'off';
+
+    if (state.seekOnClick === 'off') {
+        newSeekOnClick = 'seek';
+    } else if (state.seekOnClick === 'seek') {
+        newSeekOnClick = 'clock';
     } else {
-        seekOnClick = 'off';
+        newSeekOnClick = 'off';
     }
-    console.log(`Seek mode: ${seekOnClick.toUpperCase()}`);
-    updateLoopVisuals();
+
+    console.log(`Seek mode: ${newSeekOnClick.toUpperCase()}`);
+    return { seekOnClick: newSeekOnClick };
 }
 
 /**
  * Toggle immediate jump mode (off → on → clock → off)
+ * @param {Object} state - Current state
+ * @returns {Object} Updated state { immediateJump }
  */
-export function toggleImmediateJump() {
-    if (immediateJump === 'off') {
-        immediateJump = 'on';
-    } else if (immediateJump === 'on') {
-        immediateJump = 'clock';
+export function toggleImmediateJump(state) {
+    let newImmediateJump = 'off';
+
+    if (state.immediateJump === 'off') {
+        newImmediateJump = 'on';
+    } else if (state.immediateJump === 'on') {
+        newImmediateJump = 'clock';
     } else {
-        immediateJump = 'off';
+        newImmediateJump = 'off';
     }
-    console.log(`Jump mode: ${immediateJump.toUpperCase()}`);
-    updateLoopVisuals();
+
+    console.log(`Jump mode: ${newImmediateJump.toUpperCase()}`);
+    return { immediateJump: newImmediateJump };
 }
 
 /**
  * Toggle loop fades on/off
+ * @param {Object} state - Current state
+ * @returns {Object} Updated state { loopFadesEnabled }
  */
-export function toggleLoopFades() {
-    loopFadesEnabled = !loopFadesEnabled;
-    console.log(`Loop fades: ${loopFadesEnabled ? 'ON' : 'OFF'}`);
-    updateLoopVisuals();
+export function toggleLoopFades(state) {
+    const newLoopFadesEnabled = !state.loopFadesEnabled;
+    console.log(`Loop fades: ${newLoopFadesEnabled ? 'ON' : 'OFF'}`);
+    return { loopFadesEnabled: newLoopFadesEnabled };
 }
 
 /**
  * Set fade time in milliseconds
+ * @param {number} milliseconds - Fade time in ms
+ * @returns {Object} Updated state { fadeTime }
  */
 export function setFadeTime(milliseconds) {
-    fadeTime = milliseconds / 1000;
     console.log(`Fade time: ${milliseconds}ms`);
 
     const display = document.getElementById('fadeTimeValue');
     if (display) {
         display.textContent = `${milliseconds}ms`;
     }
+
+    return { fadeTime: milliseconds / 1000 };
 }
 
 /**
  * Toggle preserve loop on file change
+ * @param {Object} state - Current state
+ * @returns {Object} Updated state { preserveLoopOnFileChange }
  */
-export function togglePreserveLoop() {
-    preserveLoopOnFileChange = !preserveLoopOnFileChange;
-    console.log(`Preserve loop on file change: ${preserveLoopOnFileChange ? 'ON' : 'OFF'}`);
-    updateLoopVisuals();
+export function togglePreserveLoop(state) {
+    const newPreserveLoop = !state.preserveLoopOnFileChange;
+    console.log(`Preserve loop on file change: ${newPreserveLoop ? 'ON' : 'OFF'}`);
+    return { preserveLoopOnFileChange: newPreserveLoop };
 }
 
 /**
  * Toggle BPM lock
+ * @param {Object} state - Current state
+ * @returns {Object} Updated state { bpmLockEnabled, lockedBPM }
  */
-export function toggleBPMLock() {
-    bpmLockEnabled = !bpmLockEnabled;
+export function toggleBPMLock(state) {
+    const newBpmLockEnabled = !state.bpmLockEnabled;
+    let newLockedBPM = null;
 
-    if (bpmLockEnabled) {
+    if (newBpmLockEnabled) {
         const audioFiles = callbacks.getAudioFiles();
         const currentFileId = callbacks.getCurrentFileId();
         const currentFile = audioFiles.find(f => f.id === currentFileId);
+
         if (currentFile && currentFile.bpm) {
-            lockedBPM = currentFile.bpm;
-            console.log(`[BPM LOCK] Enabled - locked to ${lockedBPM} BPM`);
+            newLockedBPM = currentFile.bpm;
+            console.log(`[BPM LOCK] Enabled - locked to ${newLockedBPM} BPM`);
         } else {
             console.log('[BPM LOCK] Enabled but no BPM data for current file');
-            lockedBPM = null;
         }
     } else {
         console.log('[BPM LOCK] Disabled');
-        lockedBPM = null;
     }
 
-    updateLoopVisuals();
+    return {
+        bpmLockEnabled: newBpmLockEnabled,
+        lockedBPM: newLockedBPM
+    };
 }
 
 /**
  * Toggle loop controls expanded/collapsed
+ * @param {Object} state - Current state
+ * @returns {Object} Updated state { loopControlsExpanded }
  */
-export function toggleLoopControlsExpanded() {
-    loopControlsExpanded = !loopControlsExpanded;
-    console.log(`Loop controls ${loopControlsExpanded ? 'expanded' : 'collapsed'}`);
-    updateLoopVisuals();
+export function toggleLoopControlsExpanded(state) {
+    const newExpanded = !state.loopControlsExpanded;
+    console.log(`Loop controls ${newExpanded ? 'expanded' : 'collapsed'}`);
+    return { loopControlsExpanded: newExpanded };
 }
 
 // ===================================================================
@@ -628,8 +583,9 @@ export function toggleLoopControlsExpanded() {
 
 /**
  * Update all loop-related UI elements
+ * @param {Object} state - Current loop state (all loop-related variables)
  */
-export function updateLoopVisuals() {
+export function updateLoopVisuals(state) {
     const cycleBtn = document.getElementById('cycleBtn');
     const seekOnClickBtn = document.getElementById('seekOnClickBtn');
     const loopStatus = document.getElementById('loopStatus');
@@ -642,82 +598,84 @@ export function updateLoopVisuals() {
 
     // Update cycle button state
     if (cycleBtn) {
-        cycleBtn.classList.toggle('active', cycleMode);
+        cycleBtn.classList.toggle('active', state.cycleMode);
     }
 
     // Show/hide seek on click button
     if (seekOnClickBtn) {
-        seekOnClickBtn.style.display = cycleMode ? 'inline-block' : 'none';
-        const buttonText = seekOnClick === 'off' ? 'SEEK' : seekOnClick.toUpperCase();
+        seekOnClickBtn.style.display = state.cycleMode ? 'inline-block' : 'none';
+        const buttonText = state.seekOnClick === 'off' ? 'SEEK' : state.seekOnClick.toUpperCase();
         seekOnClickBtn.querySelector('span').textContent = buttonText;
-        seekOnClickBtn.classList.toggle('active', seekOnClick !== 'off');
+        seekOnClickBtn.classList.toggle('active', state.seekOnClick !== 'off');
     }
 
     // Show/hide clear loop button
     const clearLoopBtn = document.getElementById('clearLoopBtn');
     if (clearLoopBtn) {
-        clearLoopBtn.style.display = cycleMode ? 'inline-block' : 'none';
+        clearLoopBtn.style.display = state.cycleMode ? 'inline-block' : 'none';
     }
 
     // Update loop status text
     if (loopStatus) {
-        updateLoopStatusText(loopStatus);
+        updateLoopStatusText(state, loopStatus);
     }
 
     // Show/hide expand button and loop controls
-    const showExpandBtn = cycleMode && loopStart !== null && loopEnd !== null;
+    const showExpandBtn = state.cycleMode && state.loopStart !== null && state.loopEnd !== null;
     if (expandLoopBtn) {
         expandLoopBtn.style.display = showExpandBtn ? 'inline-block' : 'none';
-        expandLoopBtn.querySelector('span').textContent = loopControlsExpanded ? '▲' : '▼';
+        expandLoopBtn.querySelector('span').textContent = state.loopControlsExpanded ? '▲' : '▼';
     }
 
     if (loopControlsContainer) {
-        loopControlsContainer.style.display = (showExpandBtn && loopControlsExpanded) ? 'flex' : 'none';
+        loopControlsContainer.style.display = (showExpandBtn && state.loopControlsExpanded) ? 'flex' : 'none';
     }
 
     // Update jump button
     if (jumpBtn) {
-        const buttonText = immediateJump === 'off' ? 'JMP' : immediateJump.toUpperCase();
+        const buttonText = state.immediateJump === 'off' ? 'JMP' : state.immediateJump.toUpperCase();
         jumpBtn.querySelector('span').textContent = buttonText;
-        jumpBtn.classList.toggle('active', immediateJump !== 'off');
+        jumpBtn.classList.toggle('active', state.immediateJump !== 'off');
     }
 
     // Update fade button
     if (fadeBtn) {
-        fadeBtn.classList.toggle('active', loopFadesEnabled);
+        fadeBtn.classList.toggle('active', state.loopFadesEnabled);
     }
 
     // Update preserve loop button
     if (preserveLoopBtn) {
-        preserveLoopBtn.classList.toggle('active', preserveLoopOnFileChange);
+        preserveLoopBtn.classList.toggle('active', state.preserveLoopOnFileChange);
     }
 
     // Update BPM lock button
     if (bpmLockBtn) {
-        bpmLockBtn.classList.toggle('active', bpmLockEnabled);
+        bpmLockBtn.classList.toggle('active', state.bpmLockEnabled);
     }
 
     // Update visual loop region
-    updateLoopRegion();
+    updateLoopRegion(state);
 }
 
 /**
  * Update loop status text with duration and bar/beat info
+ * @param {Object} state - Current loop state
+ * @param {HTMLElement} loopStatus - Loop status element
  */
-function updateLoopStatusText(loopStatus) {
-    const hasLoop = loopStart !== null && loopEnd !== null;
+function updateLoopStatusText(state, loopStatus) {
+    const hasLoop = state.loopStart !== null && state.loopEnd !== null;
 
-    if (!cycleMode && !hasLoop) {
+    if (!state.cycleMode && !hasLoop) {
         loopStatus.textContent = 'Off';
         loopStatus.style.color = '#666';
-    } else if (cycleMode && loopStart === null) {
+    } else if (state.cycleMode && state.loopStart === null) {
         loopStatus.textContent = 'Click start';
         loopStatus.style.color = '#f59e0b';
-    } else if (cycleMode && loopEnd === null) {
+    } else if (state.cycleMode && state.loopEnd === null) {
         loopStatus.textContent = 'Click end →';
         loopStatus.style.color = '#f59e0b';
     } else if (hasLoop) {
-        const duration = loopEnd - loopStart;
+        const duration = state.loopEnd - state.loopStart;
         let statusText = `${duration.toFixed(1)}s`;
 
         // Add bar/beat count if beatmap data exists
@@ -727,7 +685,7 @@ function updateLoopStatusText(loopStatus) {
 
         if (currentFile && currentFile.beatmap && currentFile.beatmap.length > 0) {
             const beatsInLoop = currentFile.beatmap.filter(beat =>
-                beat.time >= loopStart && beat.time < loopEnd
+                beat.time >= state.loopStart && beat.time < state.loopEnd
             ).length;
 
             const bars = Math.floor(beatsInLoop / 4);
@@ -749,8 +707,9 @@ function updateLoopStatusText(loopStatus) {
 
 /**
  * Update visual loop region overlay
+ * @param {Object} state - Current loop state
  */
-export function updateLoopRegion() {
+export function updateLoopRegion(state) {
     const waveformContainer = document.getElementById('waveform');
     if (!waveformContainer) return;
 
@@ -761,14 +720,13 @@ export function updateLoopRegion() {
     if (existingMask) existingMask.remove();
 
     // Don't draw if cycle mode is off or loop not fully set
-    const wavesurfer = state.getWavesurfer();
-    if (!cycleMode || loopStart === null || loopEnd === null || !wavesurfer) return;
+    if (!state.cycleMode || state.loopStart === null || state.loopEnd === null || !state.wavesurfer) return;
 
-    const duration = wavesurfer.getDuration();
+    const duration = state.wavesurfer.getDuration();
     if (duration === 0) return;
 
-    const startPercent = (loopStart / duration) * 100;
-    const endPercent = (loopEnd / duration) * 100;
+    const startPercent = (state.loopStart / duration) * 100;
+    const endPercent = (state.loopEnd / duration) * 100;
     const widthPercent = endPercent - startPercent;
 
     const loopRegion = document.createElement('div');
@@ -778,10 +736,62 @@ export function updateLoopRegion() {
     waveformContainer.appendChild(loopRegion);
 
     // Add progress mask to hide blue progress before loop start
-    if (cycleMode && startPercent > 0) {
+    if (state.cycleMode && startPercent > 0) {
         const progressMask = document.createElement('div');
         progressMask.className = 'loop-progress-mask';
         progressMask.style.width = `${startPercent}%`;
         waveformContainer.appendChild(progressMask);
+    }
+}
+
+// ===================================================================
+// INTERNAL HELPERS
+// ===================================================================
+
+/**
+ * Handle jump after loop change (shift operations)
+ * @param {Object} state - Current state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @param {number} newLoopStart - New loop start time
+ * @param {number} newLoopEnd - New loop end time
+ * @param {number} loopDuration - Loop duration
+ */
+function handleJumpAfterLoopChange(state, wavesurfer, newLoopStart, newLoopEnd, loopDuration) {
+    if (!wavesurfer) return;
+
+    if (state.immediateJump === 'on') {
+        const currentTime = wavesurfer.getCurrentTime();
+        const oldLoopStart = newLoopStart + loopDuration;
+        const oldLoopEnd = newLoopEnd + loopDuration;
+
+        let relativePosition = 0;
+        if (currentTime >= oldLoopStart && currentTime <= oldLoopEnd) {
+            relativePosition = (currentTime - oldLoopStart) / loopDuration;
+        }
+
+        const newTime = newLoopStart + (relativePosition * loopDuration);
+        wavesurfer.seekTo(newTime / wavesurfer.getDuration());
+        console.log(`Jumped to relative position in new loop: ${newTime.toFixed(2)}s (${(relativePosition * 100).toFixed(1)}% through loop)`);
+    } else if (state.immediateJump === 'clock') {
+        callbacks.setPendingJumpTarget(newLoopStart);
+        console.log(`Clock mode: will jump to loop start (${newLoopStart.toFixed(2)}s) on next beat`);
+    }
+}
+
+/**
+ * Handle jump to loop start (resize/move operations)
+ * @param {Object} state - Current state
+ * @param {Object} wavesurfer - Wavesurfer instance
+ * @param {number} loopStart - Loop start time
+ */
+function handleJumpToLoopStart(state, wavesurfer, loopStart) {
+    if (!wavesurfer) return;
+
+    if (state.immediateJump === 'on') {
+        wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
+        console.log(`Jumped to loop start: ${loopStart.toFixed(2)}s`);
+    } else if (state.immediateJump === 'clock') {
+        callbacks.setPendingJumpTarget(loopStart);
+        console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
     }
 }

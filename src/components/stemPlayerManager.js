@@ -477,6 +477,13 @@ export async function preloadMultiStemWavesurfers(fileId, dependencies, state, c
                 timeDisplay.textContent = `0:00 / ${Utils.formatTime(duration)}`;
             }
 
+            // Apply parent rate to stem WaveSurfer on initial load
+            // This ensures stems match parent rate when first expanded
+            if (currentRate && currentRate !== 1.0) {
+                ws.setPlaybackRate(currentRate, false);
+                console.log(`[STEM INIT] Applied parent rate ${currentRate}x to ${stemType} stem`);
+            }
+
             // Load file into PlayerBarComponent
             const file = audioFiles.find(f => f.id === state.currentFileId);
             if (file && stemPlayerComponents[stemType]) {

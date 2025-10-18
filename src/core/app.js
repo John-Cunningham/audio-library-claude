@@ -3,6 +3,7 @@
         import * as Utils from './utils.js';
         import { generateStemPlayerBar } from './playerTemplate.js';
         import { PlayerBarComponent } from '../components/playerBar.js';
+        import { WaveformComponent } from '../components/waveform.js';
 
         // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
@@ -33,6 +34,7 @@
 
         let audioFiles = [];
         let wavesurfer = null;
+        let parentWaveform = null; // WaveformComponent instance for parent player
         let parentPlayerComponent = null; // PlayerBarComponent instance for parent player
         let stemPlayerComponents = {}; // PlayerBarComponent instances for stem players {vocals: component, drums: component, ...}
         let currentFileId = null;
@@ -303,167 +305,34 @@
         // ========================================
 
         // Initialize WaveSurfer
+        // THIN WRAPPER: Delegates to WaveformComponent
         function initWaveSurfer() {
-            try {
-                console.log('Initializing WaveSurfer...');
-
-                wavesurfer = WaveSurfer.create({
+            // Create parent waveform component if doesn't exist
+            if (!parentWaveform) {
+                parentWaveform = new WaveformComponent({
+                    playerType: 'parent',
                     container: '#waveform',
-                    waveColor: '#666666',
-                    progressColor: '#4a9eff',
-                    cursorColor: '#ffffff',
-                    barWidth: 3,
-                    barRadius: 3,
-                    cursorWidth: 2,
-                    height: 60,
-                    barGap: 2,
-                    responsive: true,
-                    normalize: true,
-                    backend: 'WebAudio',
-                    autoScroll: false  // Disable auto-scrolling to keep markers in sync
-                });
-
-                console.log('WaveSurfer created:', wavesurfer);
-
-                // Create and initialize parent player component (only once)
-                if (!parentPlayerComponent) {
-                    parentPlayerComponent = new PlayerBarComponent({
-                        playerType: 'parent',
-                        waveform: wavesurfer
-                    });
-                    parentPlayerComponent.init();
-                    console.log('Parent PlayerBarComponent initialized');
-                } else {
-                    // Update waveform reference for existing component
-                    parentPlayerComponent.waveform = wavesurfer;
-                    console.log('Parent PlayerBarComponent waveform reference updated');
-                }
-
-                wavesurfer.on('finish', () => {
-                    if (isLooping) {
-                        wavesurfer.play();
-                    } else {
-                        nextTrack();
+                    dependencies: {
+                        Metronome: Metronome
                     }
                 });
+            }
 
-                wavesurfer.on('pause', () => {
-                    // Stop all metronome sounds immediately
-                    Metronome.stopAllMetronomeSounds();
-                    // Reset metronome scheduling when paused
-                    Metronome.setLastMetronomeScheduleTime(0);
+            // Create wavesurfer instance via component
+            wavesurfer = parentWaveform.create(WaveSurfer);
+
+            // Create and initialize parent player bar component (only once)
+            if (!parentPlayerComponent) {
+                parentPlayerComponent = new PlayerBarComponent({
+                    playerType: 'parent',
+                    waveform: wavesurfer
                 });
-
-                wavesurfer.on('play', () => {
-                    // Reset metronome scheduling when playback starts
-                    Metronome.setLastMetronomeScheduleTime(0);
-                });
-
-                wavesurfer.on('ready', () => {
-                    console.log('WaveSurfer ready');
-                    console.log('Waveform container HTML:', document.getElementById('waveform').innerHTML);
-                    console.log('Waveform container children:', document.getElementById('waveform').children);
-                    updatePlayerTime();
-
-                    // CRITICAL: Re-establish parent-stem sync for this new wavesurfer instance
-                    // This must be called every time wavesurfer is recreated
-                    if (Object.keys(stemPlayerWavesurfers).length > 0) {
-                        setupParentStemSync();
-                        console.log('✓ Parent-stem sync re-established for new wavesurfer instance');
-                    }
-                });
-
-                wavesurfer.on('audioprocess', () => {
-                    updatePlayerTime();
-
-                    // Handle clock-quantized jump (jump on next beat marker)
-                    if (pendingJumpTarget !== null && markersEnabled && currentFileId) {
-                        const currentFile = audioFiles.find(f => f.id === currentFileId);
-                        if (currentFile?.beatmap) {
-                            const currentTime = wavesurfer.getCurrentTime();
-
-                            // Find if we just crossed a beat marker (within 50ms tolerance)
-                            const crossedMarker = currentFile.beatmap.some(beat => {
-                                const markerTime = beat.time + barStartOffset;
-                                return markerTime >= currentTime - 0.05 && markerTime <= currentTime + 0.05;
-                            });
-
-                            if (crossedMarker) {
-                                wavesurfer.seekTo(pendingJumpTarget / wavesurfer.getDuration());
-                                console.log(`Clock jump executed at beat marker: jumped to ${pendingJumpTarget.toFixed(2)}s`);
-                                pendingJumpTarget = null; // Clear the pending jump
-                            }
-                        }
-                    }
-
-                    // Handle loop-between-markers
-                    if (cycleMode && loopStart !== null && loopEnd !== null) {
-                        const currentTime = wavesurfer.getCurrentTime();
-
-                        // Apply fades at loop boundaries if enabled
-                        if (loopFadesEnabled) {
-                            const fadeStartTime = loopEnd - fadeTime;
-                            const fadeInEndTime = loopStart + fadeTime;
-                            const userVolume = parseInt(document.getElementById('volumeSlider').value) / 100;
-
-                            // Fade out before loop end (from 100% to 0%)
-                            if (currentTime >= fadeStartTime && currentTime < loopEnd) {
-                                const fadeProgress = (currentTime - fadeStartTime) / fadeTime;
-                                const fadedVolume = userVolume * (1.0 - fadeProgress);
-                                wavesurfer.setVolume(fadedVolume);
-                                console.log(`[FADE OUT] time: ${currentTime.toFixed(3)}s, progress: ${(fadeProgress * 100).toFixed(1)}%, vol: ${(fadedVolume * 100).toFixed(1)}%`);
-                            }
-                            // If we've reached or passed loop end, mute completely to prevent blip
-                            else if (currentTime >= loopEnd) {
-                                wavesurfer.setVolume(0);
-                                console.log(`[FADE] Muted at ${currentTime.toFixed(3)}s (past loop end)`);
-                            }
-                            // Fade in after loop start (from 0% to 100%)
-                            else if (currentTime >= loopStart && currentTime < fadeInEndTime) {
-                                const fadeProgress = (currentTime - loopStart) / fadeTime;
-                                const fadedVolume = userVolume * fadeProgress;
-                                wavesurfer.setVolume(fadedVolume);
-                                console.log(`[FADE IN] time: ${currentTime.toFixed(3)}s, progress: ${(fadeProgress * 100).toFixed(1)}%, vol: ${(fadedVolume * 100).toFixed(1)}%`);
-                            }
-                            // Normal volume (but only when not in fade regions)
-                            else if (currentTime < fadeStartTime && currentTime >= fadeInEndTime) {
-                                wavesurfer.setVolume(userVolume);
-                            }
-                        }
-
-                        // Seek back to loop start when we reach loop end
-                        if (currentTime >= loopEnd) {
-                            wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
-                            console.log(`Loop: seeking back to ${loopStart.toFixed(2)}s`);
-                        }
-                    }
-
-                    // Schedule metronome clicks (only when playing)
-                    if (Metronome.isMetronomeEnabled() && wavesurfer.isPlaying()) {
-                        const now = Date.now();
-                        // Schedule every 0.5 seconds
-                        if (now - Metronome.getLastMetronomeScheduleTime() > 500) {
-                            Metronome.scheduleMetronome(audioFiles, currentFileId, wavesurfer, barStartOffset, currentRate);
-                            Metronome.setLastMetronomeScheduleTime(now);
-                        }
-                    }
-                });
-
-                wavesurfer.on('seeking', () => {
-                    updatePlayerTime();
-                    // Stop all scheduled metronome sounds to prevent double-play
-                    Metronome.stopAllMetronomeSounds();
-                    Metronome.setLastMetronomeScheduleTime(0); // Force rescheduling after seek
-                });
-
-                wavesurfer.on('error', (error) => {
-                    console.error('WaveSurfer error:', error);
-                });
-
-                // Enable bottom player when waveform is ready
-                document.getElementById('bottomPlayer').classList.remove('disabled');
-            } catch (error) {
-                console.error('Error initializing WaveSurfer:', error);
+                parentPlayerComponent.init();
+                console.log('Parent PlayerBarComponent initialized');
+            } else {
+                // Update waveform reference for existing component
+                parentPlayerComponent.waveform = wavesurfer;
+                console.log('Parent PlayerBarComponent waveform reference updated');
             }
         }
 
@@ -2998,6 +2867,57 @@ window.toggleSpeedPitchLock = toggleSpeedPitchLock;
         // Expose helper functions for component
         window.updateLoopVisuals = updateLoopVisuals;
         window.recordAction = recordAction;
+
+        // Expose functions needed by WaveformComponent
+        window.updatePlayerTime = updatePlayerTime;
+        window.setupParentStemSync = setupParentStemSync;
+
+        // Expose state variables needed by WaveformComponent event handlers
+        Object.defineProperty(window, 'isLooping', {
+            get: () => isLooping,
+            set: (value) => { isLooping = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'pendingJumpTarget', {
+            get: () => pendingJumpTarget,
+            set: (value) => { pendingJumpTarget = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'markersEnabled', {
+            get: () => markersEnabled,
+            set: (value) => { markersEnabled = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'currentFileId', {
+            get: () => currentFileId,
+            set: (value) => { currentFileId = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'audioFiles', {
+            get: () => audioFiles,
+            set: (value) => { audioFiles = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'barStartOffset', {
+            get: () => barStartOffset,
+            set: (value) => { barStartOffset = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'loopFadesEnabled', {
+            get: () => loopFadesEnabled,
+            set: (value) => { loopFadesEnabled = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'fadeTime', {
+            get: () => fadeTime,
+            set: (value) => { fadeTime = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'stemPlayerWavesurfers', {
+            get: () => stemPlayerWavesurfers,
+            set: (value) => { stemPlayerWavesurfers = value; },
+            configurable: true
+        });
 // Wrapper functions that delegate to PlayerBarComponent
         window.toggleMarkers = () => {
             if (parentPlayerComponent) {

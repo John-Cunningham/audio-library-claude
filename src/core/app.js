@@ -12,6 +12,7 @@
         import * as TagManager from './tagManager.js';
         import * as TagEditModal from '../components/tagEditModal.js';
         import * as FileProcessor from './fileProcessor.js';
+        import * as FileListRenderer from '../views/fileListRenderer.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -106,7 +107,7 @@
         function handleSearch(query) {
             searchQuery = query;
             TagManager.render(searchQuery);
-            renderFiles();
+            FileListRenderer.render();
         }
 
         function handleSearchKeydown(e) {
@@ -153,13 +154,13 @@
 
                     // Switch to library view with render functions
                     await ViewManager.switchView('library', {
-                        renderFunction: renderFiles,
+                        renderFunction: FileListRenderer.render,
                         renderTagsFunction: renderTags
                     });
                 } else {
                     // Just render if view already initialized
                     renderTags();
-                    renderFiles();
+                    FileListRenderer.render();
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -844,7 +845,7 @@
 
             // Mark files as processing
             filesToProcess.forEach(file => processingFiles.add(file.id));
-            renderFiles(); // Re-render to show spinners
+            FileListRenderer.render(); // Re-render to show spinners
 
             // No polling needed - we refresh after each file completes
 
@@ -1001,7 +1002,7 @@
             }
 
             renderBPMs();
-            renderFiles();
+            FileListRenderer.render();
         }
 
         // Handle Key click
@@ -1015,7 +1016,7 @@
             }
 
             renderKeys();
-            renderFiles();
+            FileListRenderer.render();
         }
 
         // Render BPM filters
@@ -1057,560 +1058,9 @@
         }
 
 
-        // Filter files based on current tag filters and search query
-        function filterFiles() {
-            let filtered = audioFiles;
+        // File list rendering moved to src/views/fileListRenderer.js
 
-            // Apply search query filter (searches filename AND tags)
-            if (searchQuery) {
-                filtered = filtered.filter(file => {
-                    const nameMatch = file.name.toLowerCase().includes(searchQuery.toLowerCase());
-                    const tagMatch = file.tags && file.tags.some(tag =>
-                        tag.toLowerCase().includes(searchQuery.toLowerCase())
-                    );
-                    return nameMatch || tagMatch;
-                });
-            }
-
-            // Apply tag filters
-            if (filters.canHave.size === 0 && filters.mustHave.size === 0 && filters.exclude.size === 0) {
-                return filtered;
-            }
-
-            return filtered.filter(file => {
-                const fileTags = new Set(file.tags);
-
-                // Check EXCLUDE - if file has any excluded tag, filter it out
-                for (let tag of filters.exclude) {
-                    if (fileTags.has(tag)) return false;
-                }
-
-                // Check MUST HAVE - file must have ALL must-have tags
-                for (let tag of filters.mustHave) {
-                    if (!fileTags.has(tag)) return false;
-                }
-
-                // Check CAN HAVE - if can-have filters exist, file must have at least one
-                if (filters.canHave.size > 0) {
-                    let hasCanHave = false;
-                    for (let tag of filters.canHave) {
-                        if (fileTags.has(tag)) {
-                            hasCanHave = true;
-                            break;
-                        }
-                    }
-                    if (!hasCanHave) return false;
-                }
-
-                return true;
-            });
-        }
-
-        // Toggle file selection
-        function toggleFileSelection(fileId, event) {
-            event.stopPropagation();
-            if (selectedFiles.has(fileId)) {
-                selectedFiles.delete(fileId);
-            } else {
-                selectedFiles.add(fileId);
-            }
-            updateSelectionUI();
-        }
-
-        // Update selection UI
-        function updateSelectionUI() {
-            const selectedCount = selectedFiles.size;
-            const selectedCountEl = document.getElementById('selectedCount');
-            const batchDeleteBtn = document.getElementById('batchDeleteBtn');
-            const batchEditBtn = document.getElementById('batchEditBtn');
-            const batchDetectBtn = document.getElementById('batchDetectBtn');
-            const batchStemsBtn = document.getElementById('batchStemsBtn');
-
-            if (selectedCount > 0) {
-                selectedCountEl.textContent = `| ${selectedCount} selected`;
-                batchDeleteBtn.disabled = false;
-                batchEditBtn.disabled = false;
-                batchDetectBtn.disabled = false;
-                batchStemsBtn.disabled = false;
-                batchDeleteBtn.style.opacity = '1';
-                batchEditBtn.style.opacity = '1';
-                batchDetectBtn.style.opacity = '1';
-                batchStemsBtn.style.opacity = '1';
-                batchDeleteBtn.style.cursor = 'pointer';
-                batchEditBtn.style.cursor = 'pointer';
-                batchDetectBtn.style.cursor = 'pointer';
-                batchStemsBtn.style.cursor = 'pointer';
-            } else {
-                selectedCountEl.textContent = '';
-                batchDeleteBtn.disabled = true;
-                batchEditBtn.disabled = true;
-                batchDetectBtn.disabled = true;
-                batchStemsBtn.disabled = true;
-                batchDeleteBtn.style.opacity = '0.5';
-                batchEditBtn.style.opacity = '0.5';
-                batchDetectBtn.style.opacity = '0.5';
-                batchStemsBtn.style.opacity = '0.5';
-                batchDeleteBtn.style.cursor = 'not-allowed';
-                batchEditBtn.style.cursor = 'not-allowed';
-                batchDetectBtn.style.cursor = 'not-allowed';
-                batchStemsBtn.style.cursor = 'not-allowed';
-            }
-
-            // Update checkboxes
-            const filteredFiles = filterFiles();
-            filteredFiles.forEach(file => {
-                const checkbox = document.getElementById(`checkbox-${file.id}`);
-                if (checkbox) {
-                    checkbox.checked = selectedFiles.has(file.id);
-                }
-            });
-        }
-
-        // Select all files
-        function selectAll() {
-            const filteredFiles = filterFiles();
-            filteredFiles.forEach(file => selectedFiles.add(file.id));
-            updateSelectionUI();
-        }
-
-        // Deselect all files
-        function deselectAll() {
-            selectedFiles.clear();
-            updateSelectionUI();
-        }
-
-        // Sort files
-        function sortFiles(files) {
-            const sorted = [...files];
-
-            sorted.sort((a, b) => {
-                let valA, valB;
-
-                switch(sortBy) {
-                    case 'name':
-                        valA = a.name.toLowerCase();
-                        valB = b.name.toLowerCase();
-                        break;
-                    case 'date':
-                        valA = new Date(a.created_at);
-                        valB = new Date(b.created_at);
-                        break;
-                    case 'bpm':
-                        valA = a.bpm || 0;
-                        valB = b.bpm || 0;
-                        break;
-                    case 'key':
-                        valA = a.key || '';
-                        valB = b.key || '';
-                        break;
-                    case 'length':
-                        valA = a.length || 0;
-                        valB = b.length || 0;
-                        break;
-                }
-
-                if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-                if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-                return 0;
-            });
-
-            return sorted;
-        }
-
-        // Handle sort column click
-        function handleSort(column) {
-            if (sortBy === column) {
-                sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
-            } else {
-                sortBy = column;
-                sortOrder = column === 'date' ? 'desc' : 'asc'; // Default to newest first for date
-            }
-            renderFiles();
-        }
-
-        // Render files
-        function renderFiles() {
-            const container = document.getElementById('fileList');
-            const filteredFiles = filterFiles();
-            const sortedFiles = sortFiles(filteredFiles);
-
-            document.getElementById('fileCount').textContent = `(${sortedFiles.length})`;
-
-            if (sortedFiles.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-                        </svg>
-                        <div>${audioFiles.length === 0 ? 'No audio files yet. Upload your first audio file to get started!' : 'No files match your filters.'}</div>
-                    </div>
-                `;
-                updateSelectionUI();
-                return;
-            }
-
-            // Build column headers - will be added to sticky header
-            const getSortIcon = (col) => {
-                if (sortBy !== col) return '↕';
-                return sortOrder === 'asc' ? '↑' : '↓';
-            };
-
-            const headers = `
-                <div style="display: grid; grid-template-columns: 16px 1fr 80px 110px 55px 60px 60px 40px 30px; gap: 8px; padding: 8px 10px; background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 6px; font-size: 11px; color: #999; font-weight: 600;">
-                    <div></div>
-                    <div onclick="handleSort('name')" style="cursor: pointer; user-select: none;">
-                        Name ${getSortIcon('name')}
-                    </div>
-                    <div style="text-align: center;">
-                        Wave
-                    </div>
-                    <div onclick="handleSort('date')" style="cursor: pointer; user-select: none; text-align: center;">
-                        Date ${getSortIcon('date')}
-                    </div>
-                    <div onclick="handleSort('length')" style="cursor: pointer; user-select: none; text-align: center;">
-                        Time ${getSortIcon('length')}
-                    </div>
-                    <div onclick="handleSort('bpm')" style="cursor: pointer; user-select: none; text-align: center;">
-                        BPM ${getSortIcon('bpm')}
-                    </div>
-                    <div onclick="handleSort('key')" style="cursor: pointer; user-select: none; text-align: center;">
-                        Key ${getSortIcon('key')}
-                    </div>
-                    <div style="text-align: center;">
-                        Stems
-                    </div>
-                    <div></div>
-                </div>
-            `;
-
-            const formatDate = (dateString) => {
-                const date = new Date(dateString);
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                const year = String(date.getFullYear()).slice(-2);
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                return `${month}/${day}/${year} ${hours}:${minutes}`;
-            };
-
-            const formatDuration = (seconds) => {
-                if (!seconds) return '-';
-                const mins = Math.floor(seconds / 60);
-                const secs = Math.floor(seconds % 60);
-                return `${mins}:${String(secs).padStart(2, '0')}`;
-            };
-
-            const fileRows = sortedFiles.map(file => {
-                // Build stem expansion UI (Phase 4 Step 2B) - Vertical stack layout
-                const stemsExpanded = expandedStems.has(file.id);
-                const stemsHTML = stemsExpanded && file.has_stems ? `
-                    <div class="stems-expansion" style="background: #0f0f0f; border: 1px solid #2a2a2a; border-top: none; border-radius: 0 0 6px 6px; padding: 15px; margin-top: -6px;">
-                        <div style="display: flex; flex-direction: column; gap: 12px;">
-                            <!-- Vocals Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <span style="font-size: 18px;">🎤</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Vocals</span>
-                                    <div style="flex: 1;">
-                                        <div id="stem-waveform-vocals-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
-                                    </div>
-                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
-                                        <!-- Volume Slider -->
-                                        <div style="display: flex; align-items: center; gap: 6px;">
-                                            <span style="color: #999; font-size: 11px;">Vol</span>
-                                            <input type="range" id="stem-volume-vocals-${file.id}" min="0" max="100" value="100"
-                                                   style="width: 80px;" oninput="handleStemVolumeChange('vocals', this.value)">
-                                            <span id="stem-volume-value-vocals-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
-                                        </div>
-                                        <!-- Mute Button -->
-                                        <button id="stem-mute-vocals-${file.id}" onclick="handleStemMute('vocals')"
-                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
-                                                title="Mute Vocals">🔊</button>
-                                        <!-- Solo Button -->
-                                        <button id="stem-solo-vocals-${file.id}" onclick="handleStemSolo('vocals')"
-                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
-                                                title="Solo Vocals">S</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Drums Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <span style="font-size: 18px;">🥁</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Drums</span>
-                                    <div style="flex: 1;">
-                                        <div id="stem-waveform-drums-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
-                                    </div>
-                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
-                                        <!-- Volume Slider -->
-                                        <div style="display: flex; align-items: center; gap: 6px;">
-                                            <span style="color: #999; font-size: 11px;">Vol</span>
-                                            <input type="range" id="stem-volume-drums-${file.id}" min="0" max="100" value="100"
-                                                   style="width: 80px;" oninput="handleStemVolumeChange('drums', this.value)">
-                                            <span id="stem-volume-value-drums-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
-                                        </div>
-                                        <!-- Mute Button -->
-                                        <button id="stem-mute-drums-${file.id}" onclick="handleStemMute('drums')"
-                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
-                                                title="Mute Drums">🔊</button>
-                                        <!-- Solo Button -->
-                                        <button id="stem-solo-drums-${file.id}" onclick="handleStemSolo('drums')"
-                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
-                                                title="Solo Drums">S</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Bass Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <span style="font-size: 18px;">🎸</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Bass</span>
-                                    <div style="flex: 1;">
-                                        <div id="stem-waveform-bass-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
-                                    </div>
-                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
-                                        <!-- Volume Slider -->
-                                        <div style="display: flex; align-items: center; gap: 6px;">
-                                            <span style="color: #999; font-size: 11px;">Vol</span>
-                                            <input type="range" id="stem-volume-bass-${file.id}" min="0" max="100" value="100"
-                                                   style="width: 80px;" oninput="handleStemVolumeChange('bass', this.value)">
-                                            <span id="stem-volume-value-bass-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
-                                        </div>
-                                        <!-- Mute Button -->
-                                        <button id="stem-mute-bass-${file.id}" onclick="handleStemMute('bass')"
-                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
-                                                title="Mute Bass">🔊</button>
-                                        <!-- Solo Button -->
-                                        <button id="stem-solo-bass-${file.id}" onclick="handleStemSolo('bass')"
-                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
-                                                title="Solo Bass">S</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Other Stem -->
-                            <div class="stem-card" style="background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 6px; padding: 12px;">
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <span style="font-size: 18px;">🎹</span>
-                                    <span style="color: #fff; font-weight: 600; font-size: 14px; min-width: 60px;">Other</span>
-                                    <div style="flex: 1;">
-                                        <div id="stem-waveform-other-${file.id}" style="height: 80px; background: #0f0f0f; border-radius: 4px; overflow: hidden;"></div>
-                                    </div>
-                                    <div style="display: flex; gap: 12px; align-items: center; min-width: 250px;">
-                                        <!-- Volume Slider -->
-                                        <div style="display: flex; align-items: center; gap: 6px;">
-                                            <span style="color: #999; font-size: 11px;">Vol</span>
-                                            <input type="range" id="stem-volume-other-${file.id}" min="0" max="100" value="100"
-                                                   style="width: 80px;" oninput="handleStemVolumeChange('other', this.value)">
-                                            <span id="stem-volume-value-other-${file.id}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
-                                        </div>
-                                        <!-- Mute Button -->
-                                        <button id="stem-mute-other-${file.id}" onclick="handleStemMute('other')"
-                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
-                                                title="Mute Other">🔊</button>
-                                        <!-- Solo Button -->
-                                        <button id="stem-solo-other-${file.id}" onclick="handleStemSolo('other')"
-                                                style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
-                                                title="Solo Other">S</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ` : '';
-
-                return `
-                <div class="file-item ${currentFileId === file.id ? 'active' : ''}" style="display: grid; grid-template-columns: 16px 1fr 80px 110px 55px 60px 60px 40px 30px; gap: 8px; align-items: center; ${stemsExpanded ? 'border-radius: 6px 6px 0 0;' : ''}">
-                    <input type="checkbox" id="checkbox-${file.id}" ${selectedFiles.has(file.id) ? 'checked' : ''}
-                           onclick="toggleFileSelection(${file.id}, event)"
-                           style="width: 16px; height: 16px; cursor: pointer;">
-                    <div onclick="handleFileClick(${file.id}, event)" style="cursor: pointer;">
-                        <div class="file-name">🎵 ${file.name}</div>
-                        <div class="file-tags">
-                            ${file.tags.map(tag => `<span class="file-tag">${tag}</span>`).join('')}
-                        </div>
-                    </div>
-                    <div id="miniwave-${file.id}" style="height: 32px; cursor: pointer; background: #1a1a1a; border-radius: 4px;"></div>
-                    <div onclick="handleFileClick(${file.id}, event)" style="text-align: center; color: #999; font-size: 11px; cursor: pointer;">
-                        ${formatDate(file.created_at)}
-                    </div>
-                    <div onclick="handleFileClick(${file.id}, event)" style="text-align: center; color: #999; font-size: 11px; cursor: pointer;">
-                        ${formatDuration(file.length)}
-                    </div>
-                    <div onclick="handleFileClick(${file.id}, event)" style="text-align: center; color: #999; font-size: 11px; cursor: pointer;">
-                        ${file.bpm ? file.bpm : (processingFiles.has(file.id) ? '<span class="spinner">⏳</span>' : '-')}
-                    </div>
-                    <div onclick="handleFileClick(${file.id}, event)" style="text-align: center; color: #999; font-size: 11px; cursor: pointer;">
-                        ${file.key ? file.key : (processingFiles.has(file.id) ? '<span class="spinner">⏳</span>' : '-')}
-                    </div>
-                    <div style="text-align: center;">
-                        ${file.has_stems ?
-                            `<span class="stems-icon active ${stemsExpanded ? 'expanded' : ''}" onclick="openStemsViewer(${file.id}, event)" title="${stemsExpanded ? 'Hide' : 'View'} stems">🎛️</span>` :
-                            `<span class="stems-icon" onclick="generateStems(${file.id}, event)" title="Generate stems">⚙️</span>`
-                        }
-                    </div>
-                    <button onclick="quickEditFile(${file.id}, event)" title="Edit file" style="background: transparent; border: none; color: #999; cursor: pointer; font-size: 16px; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;">
-                        ⋮
-                    </button>
-                </div>
-                ${stemsHTML}
-            `;
-            }).join('');
-
-            // Put headers in sticky section, fileRows in scrollable container
-            document.getElementById('columnHeaders').innerHTML = headers;
-            container.innerHTML = fileRows;
-            updateSelectionUI();
-
-            // Render mini waveforms after DOM update
-            setTimeout(() => MiniWaveform.renderAll(sortedFiles), 0);
-        }
-
-        // Track last clicked file for range selection
-        let lastClickedFileId = null;
-
-        // Handle file click - supports normal, option (range), and cmd/ctrl (multi-select)
-        function handleFileClick(fileId, event) {
-            const filteredFiles = filterFiles();
-
-            if (event.altKey && lastClickedFileId) {
-                // Option+click = range select from last clicked to this one
-                event.preventDefault();
-                event.stopPropagation();
-
-                const lastIndex = filteredFiles.findIndex(f => f.id === lastClickedFileId);
-                const currentIndex = filteredFiles.findIndex(f => f.id === fileId);
-
-                if (lastIndex !== -1 && currentIndex !== -1) {
-                    const start = Math.min(lastIndex, currentIndex);
-                    const end = Math.max(lastIndex, currentIndex);
-
-                    // Select all files in range
-                    for (let i = start; i <= end; i++) {
-                        selectedFiles.add(filteredFiles[i].id);
-                    }
-                }
-
-                // Update all checkboxes
-                document.querySelectorAll('.file-item input[type="checkbox"]').forEach(cb => {
-                    const checkboxFileId = parseInt(cb.id.replace('checkbox-', ''));
-                    cb.checked = selectedFiles.has(checkboxFileId);
-                });
-
-                updateSelectionUI();
-            } else if (event.metaKey || event.ctrlKey) {
-                // Cmd/Ctrl+click = toggle selection without changing playback
-                event.preventDefault();
-                event.stopPropagation();
-
-                if (selectedFiles.has(fileId)) {
-                    selectedFiles.delete(fileId);
-                } else {
-                    selectedFiles.add(fileId);
-                }
-
-                // Update checkbox
-                const checkbox = document.getElementById(`checkbox-${fileId}`);
-                if (checkbox) checkbox.checked = selectedFiles.has(fileId);
-
-                lastClickedFileId = fileId;
-                updateSelectionUI();
-            } else {
-                // Normal click = clear selection, select this file, and play
-                selectedFiles.clear();
-                selectedFiles.add(fileId);
-
-                // Update all checkboxes
-                document.querySelectorAll('.file-item input[type="checkbox"]').forEach(cb => {
-                    cb.checked = false;
-                });
-                const checkbox = document.getElementById(`checkbox-${fileId}`);
-                if (checkbox) checkbox.checked = true;
-
-                lastClickedFileId = fileId;
-                updateSelectionUI();
-
-                // Load and respect pause state
-                loadAudio(fileId, !userPaused);
-            }
-        }
-
-        // Quick edit button - open edit modal for single file
-        function quickEditFile(fileId, event) {
-            event.preventDefault();
-            event.stopPropagation();
-
-            // Select only this file
-            selectedFiles.clear();
-            selectedFiles.add(fileId);
-
-            // Update checkboxes
-            document.querySelectorAll('.file-item input[type="checkbox"]').forEach(cb => {
-                cb.checked = false;
-            });
-            const checkbox = document.getElementById(`checkbox-${fileId}`);
-            if (checkbox) checkbox.checked = true;
-
-            updateSelectionUI();
-
-            // Open edit modal
-            TagEditModal.open(selectedFiles, audioFiles);
-        }
-
-        // Open stems viewer in new window
-        // Toggle stems expansion for a file (Phase 4 Step 1)
-        function openStemsViewer(fileId, event) {
-            event.preventDefault();
-            event.stopPropagation();
-
-            // Toggle expansion state
-            if (expandedStems.has(fileId)) {
-                expandedStems.delete(fileId);
-            } else {
-                expandedStems.add(fileId);
-            }
-
-            // Re-render to show/hide stems
-            renderFiles();
-
-            // Phase 4 Step 2B: Render waveforms in expansion containers if stems are loaded
-            if (expandedStems.has(fileId) && Object.keys(stemWavesurfers).length > 0 && currentFileId === fileId) {
-                setTimeout(() => {
-                    renderStemWaveforms(fileId);
-                    restoreStemControlStates(fileId);
-                }, 100); // Small delay to ensure DOM is ready
-            }
-        }
-
-        // Phase 4: Toggle stems viewer from bottom player bar STEMS button
-        function toggleStemsViewer() {
-            if (!currentFileId) return;
-
-            // Toggle expansion state for current file
-            if (expandedStems.has(currentFileId)) {
-                expandedStems.delete(currentFileId);
-            } else {
-                expandedStems.add(currentFileId);
-            }
-
-            // Re-render to show/hide stems
-            renderFiles();
-
-            // Phase 4 Step 2B: Render waveforms in expansion containers if stems are loaded
-            if (expandedStems.has(currentFileId) && Object.keys(stemWavesurfers).length > 0) {
-                setTimeout(() => {
-                    renderStemWaveforms(currentFileId);
-                    restoreStemControlStates(currentFileId);
-                }, 100); // Small delay to ensure DOM is ready
-            }
-
-            // Update STEMS button appearance
-            updateStemsButton();
-        }
-
-        // Update STEMS button visibility and active state
+        // Update STEMS button visibility and active state (Player Bar UI - NOT file list)
         function updateStemsButton() {
             const stemsBtn = document.getElementById('stemsBtn');
             if (!stemsBtn) return;
@@ -4949,8 +4399,8 @@
         function playPause() {
             // If no file loaded, load the top file in the list
             if (!wavesurfer || !currentFileId) {
-                const filteredFiles = filterFiles();
-                const sortedFiles = sortFiles(filteredFiles);
+                const filteredFiles = FileListRenderer.filterFiles();
+                const sortedFiles = FileListRenderer.sortFiles(filteredFiles);
                 if (sortedFiles.length > 0) {
                     loadAudio(sortedFiles[0].id, true); // Load and play the top file
                 }
@@ -5326,7 +4776,7 @@
 
         // Next track
         function nextTrack() {
-            const filteredFiles = filterFiles();
+            const filteredFiles = FileListRenderer.filterFiles();
             if (filteredFiles.length === 0) return;
 
             let nextIndex;
@@ -5342,7 +4792,7 @@
 
         // Previous track
         function previousTrack() {
-            const filteredFiles = filterFiles();
+            const filteredFiles = FileListRenderer.filterFiles();
             if (filteredFiles.length === 0) return;
 
             // If in cycle mode with loop set, jump to loop start
@@ -5606,7 +5056,7 @@
                 setSearchQuery: (query) => { searchQuery = query; },
                 filters,
                 renderTags,
-                renderFiles,
+                renderFiles: FileListRenderer.render,
                 getAllTags: () => TagManager.getAllTags()
             });
         });
@@ -5638,7 +5088,7 @@
                 moveStartRight,
                 moveEndLeft,
                 moveEndRight,
-                filterFiles
+                filterFiles: FileListRenderer.filterFiles
             },
             // State getters object
             {
@@ -5675,7 +5125,7 @@
         TagManager.init(
             // Callbacks
             {
-                renderFiles
+                renderFiles: () => FileListRenderer.render()
             },
             // State getters/setters
             {
@@ -5690,6 +5140,30 @@
             }
         );
 
+        // Initialize file list renderer (moved to fileListRenderer.js)
+        FileListRenderer.init(
+            // Callbacks
+            {
+                loadFile: loadAudio,
+                renderMiniWaveforms: (files) => MiniWaveform.renderAll(files),
+                openTagEditModal: (selectedFiles, audioFiles) => TagEditModal.open(selectedFiles, audioFiles),
+                renderStemWaveforms,
+                restoreStemControlStates,
+                updateStemsButton
+            },
+            // State getters
+            {
+                getAudioFiles: () => audioFiles,
+                getSearchQuery: () => searchQuery,
+                getFilters: () => filters,
+                getSelectedFiles: () => selectedFiles,
+                getCurrentFileId: () => currentFileId,
+                getProcessingFiles: () => processingFiles,
+                getExpandedStems: () => expandedStems,
+                getStemWavesurfers: () => stemWavesurfers
+            }
+        );
+
         // Initialize on load
         loadData();
 
@@ -5697,20 +5171,22 @@
         ViewManager.initViewTabs();
 
 // Expose functions to global scope for HTML onclick handlers
-window.handleFileClick = handleFileClick;
 window.handleTagClick = handleTagClick;
 window.toggleShowAllTags = toggleShowAllTags;
 window.handleBPMClick = handleBPMClick;
 window.handleKeyClick = handleKeyClick;
-window.handleSort = handleSort;
+window.generateStems = generateStems;
 
 // Expose TagManager functions to window (used by onclick handlers in rendered HTML)
 window.tagManagerHandleClick = (tag, event) => TagManager.handleClick(tag, event);
 window.tagManagerToggleShowAll = () => TagManager.toggleShowAll();
-window.toggleFileSelection = toggleFileSelection;
-window.openStemsViewer = openStemsViewer;
-window.generateStems = generateStems;
-window.quickEditFile = quickEditFile;
+
+// Expose FileListRenderer functions to window (used by onclick handlers in rendered HTML)
+window.fileListHandleFileClick = (fileId, event) => FileListRenderer.handleFileClick(fileId, event);
+window.fileListHandleSort = (column) => FileListRenderer.handleSort(column);
+window.fileListToggleSelection = (fileId, event) => FileListRenderer.toggleFileSelection(fileId, event);
+window.fileListQuickEdit = (fileId, event) => FileListRenderer.quickEditFile(fileId, event);
+window.fileListOpenStemsViewer = (fileId, event) => FileListRenderer.openStemsViewer(fileId, event);
 window.addModalTag = (tag) => TagEditModal.addTag(tag);
 window.renderModalTags = () => TagEditModal.render();
 window.selectModalTag = (tag) => TagEditModal.selectTag(tag);
@@ -5721,8 +5197,8 @@ window.handleSearchKeydown = handleSearchKeydown;
 window.selectAllVisibleTags = selectAllVisibleTags;
 window.deselectAllTags = deselectAllTags;
 window.openUploadFlow = openUploadFlow;
-window.selectAll = selectAll;
-window.deselectAll = deselectAll;
+window.selectAll = () => FileListRenderer.selectAll();
+window.deselectAll = () => FileListRenderer.deselectAll();
 window.batchDelete = batchDelete;
 window.batchEditTags = () => TagEditModal.open(selectedFiles, audioFiles);
 window.batchDetect = batchDetect;
@@ -5732,7 +5208,7 @@ window.closeEditTagsModal = () => TagEditModal.close({
     setSearchQuery: (query) => { searchQuery = query; },
     filters,
     renderTags,
-    renderFiles
+    renderFiles: FileListRenderer.render
 });
 window.saveEditedTags = () => TagEditModal.save(
     {
@@ -5744,12 +5220,12 @@ window.saveEditedTags = () => TagEditModal.save(
             setSearchQuery: (query) => { searchQuery = query; },
             filters,
             renderTags,
-            renderFiles
+            renderFiles: FileListRenderer.render
         }),
         runSelectedProcessing,
         loadData,
         renderTags,
-        renderFiles
+        renderFiles: FileListRenderer.render
     },
     {
         selectedFiles,
@@ -5878,7 +5354,7 @@ window.playRecordedActions = playRecordedActions;
 window.handleStemVolumeChange = handleStemVolumeChange;
 window.handleStemMute = handleStemMute;
 window.handleStemSolo = handleStemSolo;
-window.toggleStemsViewer = toggleStemsViewer;
+window.toggleStemsViewer = () => FileListRenderer.toggleStemsViewer();
 window.toggleMultiStemPlayer = toggleMultiStemPlayer;
 window.toggleMultiStemPlay = toggleMultiStemPlay;
 window.toggleMultiStemMute = toggleMultiStemMute;

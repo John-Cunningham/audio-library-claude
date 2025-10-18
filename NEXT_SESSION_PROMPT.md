@@ -44,10 +44,11 @@ See `PROJECT_FILE_STRUCTURE.txt` for complete directory tree.
 ## 📚 Essential Reading (Start Here!)
 
 **CRITICAL - Read these first**:
-1. `NEXT_PHASE_HANDOFF.md` - Current state, recommendations
-2. `PHASE_10E_ACTUAL_STATE_ANALYSIS.md` - Detailed function analysis
-3. `PROJECT_STRUCTURE_AND_DEPENDENCIES.md` - Complete architecture overview
-4. `SESSION_SUMMARY_2025-10-18.md` - Recent session summary
+1. `PROJECT_FILE_STRUCTURE.txt` - **DIRECTORY TREE** (all files we're using)
+2. `NEXT_PHASE_HANDOFF.md` - Current state, recommendations
+3. `PHASE_10E_ACTUAL_STATE_ANALYSIS.md` - Detailed function analysis
+4. `PROJECT_STRUCTURE_AND_DEPENDENCIES.md` - Complete architecture overview
+5. `SESSION_SUMMARY_2025-10-18.md` - Recent session summary
 
 **Architecture Docs**:
 - `docs/PLAYER_ARCHITECTURE.md` - Why component-based architecture

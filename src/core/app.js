@@ -26,6 +26,7 @@
         import * as StemLegacyPlayer from '../components/stemLegacyPlayer.js';
         import * as StemState from '../state/stemStateManager.js';
         import * as LoopState from '../state/loopStateManager.js';
+        import * as PlayerState from '../state/playerStateManager.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -45,7 +46,6 @@
         let fileLoader = null; // FileLoader service instance
         let actionRecorder = null; // ActionRecorder service instance
         let stemPlayerComponents = {}; // PlayerBarComponent instances for stem players {vocals: component, drums: component, ...}
-        let currentFileId = null;
         let selectedFiles = new Set();
         let processingFiles = new Set(); // Track files currently being processed
         let expandedStems = new Set(); // Track files with expanded stems view (Phase 4 Step 1)
@@ -62,11 +62,6 @@
         let searchQuery = '';
         let currentTagMode = null; // Default mode for tag clicks (null = no mode, normal click behavior)
         let showAllTags = false; // Toggle for showing low-count tags
-        let isLooping = false;
-        let isShuffling = false;
-        let markersEnabled = true; // Toggle for bar markers
-        let markerFrequency = 'bar'; // 'bar8', 'bar4', 'bar2', 'bar', 'halfbar', 'beat'
-        let currentMarkers = []; // Store current marker positions for click-to-snap
 
         // ============================================
         // LOOP STATE MANAGEMENT - HYBRID APPROACH
@@ -101,20 +96,32 @@
         let bpmLockEnabled = LoopState.getBpmLockEnabled();
         let lockedBPM = LoopState.getLockedBPM();
 
-        let isMuted = false; // Track mute state (not part of loop state)
-        let volumeBeforeMute = 100; // Store volume before muting (not part of loop state)
-        let userPaused = false; // Track if user manually paused (not part of loop state)
+        // ============================================
+        // PLAYER STATE MANAGEMENT - HYBRID APPROACH
+        // ============================================
+        // All player state (11 variables) extracted to src/state/playerStateManager.js
+        // This enables multi-view architecture where player state persists across Library/Galaxy/Sphere views
+        //
+        // HYBRID APPROACH:
+        // - Local variables act as "caches" for performance
+        // - Changes are synced TO PlayerState (single source of truth)
+        // - On load, initialize FROM PlayerState
+        //
+        // This approach ensures compatibility while enabling multi-view persistence
+        // ============================================
 
-        // Loop action recorder - MOVED TO actionRecorder.js (Phase 10a)
-        // All action recording state now managed by ActionRecorder service
-
-        // Metronome state - MOVED TO metronome.js (ROUND 2)
-        // All metronome state now managed by Metronome module
-
-        // Bar start offset for Shift Start feature
-        let barStartOffset = 0; // Offset to shift which marker is considered bar 1
-
-        let currentRate = 1; // Track current playback rate (speed+pitch together)
+        // Initialize local cache variables from PlayerState on startup
+        let currentFileId = PlayerState.getCurrentFileId();
+        let currentRate = PlayerState.getCurrentRate();
+        let isShuffling = PlayerState.getIsShuffling();
+        let userPaused = PlayerState.getUserPaused();
+        let isMuted = PlayerState.getIsMuted();
+        let volumeBeforeMute = PlayerState.getVolumeBeforeMute();
+        let markersEnabled = PlayerState.getMarkersEnabled();
+        let markerFrequency = PlayerState.getMarkerFrequency();
+        let barStartOffset = PlayerState.getBarStartOffset();
+        let currentMarkers = PlayerState.getCurrentMarkers();
+        let isLooping = PlayerState.getIsLooping();
         let filters = {
             canHave: new Set(),
             mustHave: new Set(),
@@ -554,6 +561,66 @@
         function syncLockedBPMToState(value) {
             lockedBPM = value;
             LoopState.setLockedBPM(value);
+        }
+
+        // ============================================
+        // PLAYER STATE SYNC FUNCTIONS
+        // ============================================
+        // Helper functions to sync local cache to PlayerState (single source of truth)
+
+        function syncCurrentFileIdToState(value) {
+            currentFileId = value;
+            PlayerState.setCurrentFileId(value);
+        }
+
+        function syncCurrentRateToState(value) {
+            currentRate = value;
+            PlayerState.setCurrentRate(value);
+        }
+
+        function syncIsShufflingToState(value) {
+            isShuffling = value;
+            PlayerState.setIsShuffling(value);
+        }
+
+        function syncUserPausedToState(value) {
+            userPaused = value;
+            PlayerState.setUserPaused(value);
+        }
+
+        function syncIsMutedToState(value) {
+            isMuted = value;
+            PlayerState.setIsMuted(value);
+        }
+
+        function syncVolumeBeforeMuteToState(value) {
+            volumeBeforeMute = value;
+            PlayerState.setVolumeBeforeMute(value);
+        }
+
+        function syncMarkersEnabledToState(value) {
+            markersEnabled = value;
+            PlayerState.setMarkersEnabled(value);
+        }
+
+        function syncMarkerFrequencyToState(value) {
+            markerFrequency = value;
+            PlayerState.setMarkerFrequency(value);
+        }
+
+        function syncBarStartOffsetToState(value) {
+            barStartOffset = value;
+            PlayerState.setBarStartOffset(value);
+        }
+
+        function syncCurrentMarkersToState(value) {
+            currentMarkers = value;
+            PlayerState.setCurrentMarkers(value);
+        }
+
+        function syncIsLoopingToState(value) {
+            isLooping = value;
+            PlayerState.setIsLooping(value);
         }
 
         // Phase 1: Pre-load stems silently in background when file loads
@@ -1212,8 +1279,8 @@
                 return;
             }
 
-            // Reset bar start offset (managed by app.js)
-            barStartOffset = 0;
+            // Reset bar start offset (managed by app.js, sync to PlayerState)
+            syncBarStartOffsetToState(0);
 
             // Delegate to FileLoader service
             const result = await fileLoader.loadFile(fileId, autoplay);
@@ -1244,7 +1311,7 @@
             icon.textContent = wavesurfer.isPlaying() ? '⏸' : '▶';
 
             // Track user pause state (if pausing, set to true; if playing, set to false)
-            userPaused = !wavesurfer.isPlaying();
+            syncUserPausedToState(!wavesurfer.isPlaying());
 
             // Record action
             recordAction(wavesurfer.isPlaying() ? 'play' : 'pause', {});
@@ -1270,7 +1337,7 @@
         // Toggle loop
         function toggleLoop() {
             const result = LoopControls.toggleLoop({ isLooping });
-            isLooping = result.isLooping;
+            syncIsLoopingToState(result.isLooping);
         }
 
         // Toggle shuffle
@@ -1278,7 +1345,7 @@
             // Prevent toggling shuffle when loop is active
             if (isLooping) return;
 
-            isShuffling = !isShuffling;
+            syncIsShufflingToState(!isShuffling);
             const btn = document.getElementById('shuffleBtn');
             btn.classList.toggle('active', isShuffling);
         }
@@ -1319,21 +1386,21 @@
                 // Unmute: restore previous volume
                 volumeSlider.value = volumeBeforeMute;
                 setVolume(volumeBeforeMute);
-                isMuted = false;
+                syncIsMutedToState(false);
                 muteBtn.textContent = '🔊';
             } else {
                 // Mute: save current volume and set to 0
-                volumeBeforeMute = parseInt(volumeSlider.value);
+                syncVolumeBeforeMuteToState(parseInt(volumeSlider.value));
                 volumeSlider.value = 0;
                 setVolume(0);
-                isMuted = true;
+                syncIsMutedToState(true);
                 muteBtn.textContent = '🔇';
             }
         }
 
         // Set playback rate (natural analog - speed and pitch together)
         function setPlaybackRate(rate) {
-            currentRate = rate;
+            syncCurrentRateToState(rate);
             window.currentRate = rate; // Expose to window for PlayerBarComponent access
 
             // Check for OLD stem system (disabled but code still exists)
@@ -1763,7 +1830,7 @@
             {
                 loadData,
                 clearPlayer: () => {
-                    currentFileId = null;
+                    syncCurrentFileIdToState(null);
                     if (wavesurfer) {
                         wavesurfer.destroy();
                         wavesurfer = null;
@@ -1806,7 +1873,7 @@
             // State getters/setters
             audioFiles: () => audioFiles,
             getCurrentFileId: () => currentFileId,
-            setCurrentFileId: (id) => { currentFileId = id; },
+            setCurrentFileId: (id) => { syncCurrentFileIdToState(id); },
             getWavesurfer: () => wavesurfer,
             setWavesurfer: (ws) => { wavesurfer = ws; },
             getParentWaveform: () => parentWaveform,
@@ -1988,11 +2055,11 @@ window.toggleSpeedPitchLock = toggleSpeedPitchLock;
         // This allows waveform click handler (cycle mode) to access marker data
         // TODO: Remove once waveform click handling is moved into component
         window.updateCurrentMarkers = (markers) => {
-            currentMarkers = markers;
+            syncCurrentMarkersToState(markers);
             console.log(`[Global] currentMarkers updated, length: ${markers.length}`);
         };
         window.updateMarkersEnabled = (enabled) => {
-            markersEnabled = enabled;
+            syncMarkersEnabledToState(enabled);
             console.log(`[Global] markersEnabled updated: ${enabled}`);
         };
 
@@ -2035,22 +2102,22 @@ window.toggleSpeedPitchLock = toggleSpeedPitchLock;
         // Expose state variables needed by WaveformComponent event handlers
         Object.defineProperty(window, 'isLooping', {
             get: () => isLooping,
-            set: (value) => { isLooping = value; },
+            set: (value) => { syncIsLoopingToState(value); },
             configurable: true
         });
         Object.defineProperty(window, 'pendingJumpTarget', {
             get: () => pendingJumpTarget,
-            set: (value) => { pendingJumpTarget = value; },
+            set: (value) => { syncPendingJumpTargetToState(value); },
             configurable: true
         });
         Object.defineProperty(window, 'markersEnabled', {
             get: () => markersEnabled,
-            set: (value) => { markersEnabled = value; },
+            set: (value) => { syncMarkersEnabledToState(value); },
             configurable: true
         });
         Object.defineProperty(window, 'currentFileId', {
             get: () => currentFileId,
-            set: (value) => { currentFileId = value; },
+            set: (value) => { syncCurrentFileIdToState(value); },
             configurable: true
         });
         Object.defineProperty(window, 'audioFiles', {
@@ -2060,7 +2127,7 @@ window.toggleSpeedPitchLock = toggleSpeedPitchLock;
         });
         Object.defineProperty(window, 'barStartOffset', {
             get: () => barStartOffset,
-            set: (value) => { barStartOffset = value; },
+            set: (value) => { syncBarStartOffsetToState(value); },
             configurable: true
         });
         Object.defineProperty(window, 'loopFadesEnabled', {

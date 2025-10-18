@@ -17,6 +17,7 @@
         import * as UploadManager from './uploadManager.js';
         import * as LoopControls from '../components/loopControls.js';
         import * as MarkerSystem from '../components/markerSystem.js';
+        import * as StemMarkerSystem from '../components/stemMarkerSystem.js';
         import * as StemPlayerManager from '../components/stemPlayerManager.js';
 
         // Import modules (Phase 1 - View Manager)
@@ -2420,30 +2421,17 @@
                 return;
             }
 
-            // Fallback to old implementation
-            _oldToggleStemMarkers(stemType);
-        }
+            // Call pure function from StemMarkerSystem module
+            const result = StemMarkerSystem.toggleStemMarkers({
+                stemType,
+                stemMarkersEnabled,
+                audioFiles,
+                currentFileId,
+                stemPlayerWavesurfers
+            }, addStemBarMarkers);
 
-        // OLD IMPLEMENTATION (fallback)
-        function _oldToggleStemMarkers(stemType) {
-            stemMarkersEnabled[stemType] = !stemMarkersEnabled[stemType];
-            console.log(`[${stemType}] Bar markers: ${stemMarkersEnabled[stemType] ? 'ON' : 'OFF'}`);
-
-            // Update button state
-            const btn = document.getElementById(`stem-markers-btn-${stemType}`);
-            if (btn) {
-                if (stemMarkersEnabled[stemType]) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            }
-
-            // Re-render markers (or clear them)
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addStemBarMarkers(stemType, file);
-            }
+            // Apply result to app.js state
+            stemMarkersEnabled = result.stemMarkersEnabled;
         }
 
         // Change marker frequency for a specific stem
@@ -2454,33 +2442,16 @@
                 return;
             }
 
-            // Fallback to old implementation
-            _oldSetStemMarkerFrequency(stemType, freq);
-        }
+            // Call pure function from StemMarkerSystem module
+            const result = StemMarkerSystem.setStemMarkerFrequency({
+                stemType,
+                stemMarkerFrequency,
+                audioFiles,
+                currentFileId
+            }, freq, addStemBarMarkers);
 
-        // OLD IMPLEMENTATION (fallback)
-        function _oldSetStemMarkerFrequency(stemType, freq) {
-            stemMarkerFrequency[stemType] = freq;
-            console.log(`[${stemType}] Marker frequency: ${freq}`);
-
-            // Re-render current file's markers
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addStemBarMarkers(stemType, file);
-            }
-        }
-
-        // Get shift increment based on stem's marker frequency
-        function getStemShiftIncrement(stemType) {
-            switch (stemMarkerFrequency[stemType]) {
-                case 'bar8': return 8;
-                case 'bar4': return 4;
-                case 'bar2': return 2;
-                case 'bar': return 1;
-                case 'halfbar': return 0.5;
-                case 'beat': return 0.25;
-                default: return 1;
-            }
+            // Apply result to app.js state
+            stemMarkerFrequency = result.stemMarkerFrequency;
         }
 
         // Shift stem bar start left
@@ -2491,27 +2462,17 @@
                 return;
             }
 
-            // Fallback to old implementation
-            _oldShiftStemBarStartLeft(stemType);
-        }
+            // Call pure function from StemMarkerSystem module
+            const result = StemMarkerSystem.shiftStemBarStartLeft({
+                stemType,
+                stemBarStartOffset,
+                stemMarkerFrequency,
+                audioFiles,
+                currentFileId
+            }, addStemBarMarkers);
 
-        // OLD IMPLEMENTATION (fallback)
-        function _oldShiftStemBarStartLeft(stemType) {
-            const increment = getStemShiftIncrement(stemType);
-            stemBarStartOffset[stemType] -= increment;
-            console.log(`[${stemType}] Bar start offset: ${stemBarStartOffset[stemType]} (shifted by -${increment})`);
-
-            // Update display
-            const display = document.getElementById(`stem-bar-offset-${stemType}`);
-            if (display) {
-                display.textContent = stemBarStartOffset[stemType].toFixed(2).replace(/\.?0+$/, '');
-            }
-
-            // Re-render markers
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addStemBarMarkers(stemType, file);
-            }
+            // Apply result to app.js state
+            stemBarStartOffset = result.stemBarStartOffset;
         }
 
         // Shift stem bar start right
@@ -2522,191 +2483,44 @@
                 return;
             }
 
-            // Fallback to old implementation
-            _oldShiftStemBarStartRight(stemType);
+            // Call pure function from StemMarkerSystem module
+            const result = StemMarkerSystem.shiftStemBarStartRight({
+                stemType,
+                stemBarStartOffset,
+                stemMarkerFrequency,
+                audioFiles,
+                currentFileId
+            }, addStemBarMarkers);
+
+            // Apply result to app.js state
+            stemBarStartOffset = result.stemBarStartOffset;
         }
 
-        // OLD IMPLEMENTATION (fallback)
-        function _oldShiftStemBarStartRight(stemType) {
-            const increment = getStemShiftIncrement(stemType);
-            stemBarStartOffset[stemType] += increment;
-            console.log(`[${stemType}] Bar start offset: ${stemBarStartOffset[stemType]} (shifted by +${increment})`);
-
-            // Update display
-            const display = document.getElementById(`stem-bar-offset-${stemType}`);
-            if (display) {
-                display.textContent = stemBarStartOffset[stemType].toFixed(2).replace(/\.?0+$/, '');
-            }
-
-            // Re-render markers
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addStemBarMarkers(stemType, file);
-            }
-        }
-
-        // Add bar markers to stem waveform (adapted from parent addBarMarkers)
+        // Add bar markers to stem waveform
         function addStemBarMarkers(stemType, file) {
-            const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) return;
-
-            const waveformContainer = document.getElementById(`multi-stem-waveform-${stemType}`);
-            if (!waveformContainer) return;
-
-            // Don't add markers if disabled or no data
-            if (!stemMarkersEnabled[stemType] || !file.beatmap) {
-                // Clear any existing markers if disabled
-                const existingContainer = waveformContainer.querySelector('.marker-container');
-                if (existingContainer) existingContainer.remove();
-                stemCurrentMarkers[stemType] = [];
-                return;
-            }
-
-            // Get the duration to calculate marker positions
-            const duration = ws.getDuration();
-            if (!duration) return;
-
-            // Get or create marker container
-            let markerContainer = waveformContainer.querySelector('.marker-container');
-            if (!markerContainer) {
-                markerContainer = document.createElement('div');
-                markerContainer.className = 'marker-container';
-                waveformContainer.appendChild(markerContainer);
-            }
-
-            // Clear existing markers
-            const existingMarkers = markerContainer.querySelectorAll('.bar-marker, .beat-marker');
-            existingMarkers.forEach(marker => marker.remove());
-            stemCurrentMarkers[stemType] = [];
-
-            // Marker container fills the full width
-            markerContainer.style.width = '100%';
-
-            // Normalize beatmap (force first beat to be bar 1, beat 1)
-            const normalizedBeatmap = file.beatmap.map((beat, index) => {
-                if (index === 0) {
-                    return { ...beat, beatNum: 1, originalIndex: index };
+            // Call pure function from StemMarkerSystem module
+            const markerTimes = StemMarkerSystem.addStemBarMarkers(
+                stemType,
+                file,
+                stemPlayerWavesurfers,
+                {
+                    stemMarkersEnabled,
+                    stemMarkerFrequency,
+                    stemBarStartOffset,
+                    stemCurrentMarkers
                 }
-                return { ...beat, originalIndex: index };
-            });
+            );
 
-            // Split stemBarStartOffset into integer bars and fractional beats
-            const barOffset = Math.floor(stemBarStartOffset[stemType]);
-            const fractionalBeats = Math.round((stemBarStartOffset[stemType] - barOffset) * 4);
-
-            // Calculate original bar numbers
-            let barNumber = 0;
-            const beatmapWithOriginalBars = normalizedBeatmap.map(beat => {
-                if (beat.beatNum === 1) barNumber++;
-                return { ...beat, originalBarNumber: barNumber };
-            });
-
-            // Rotate beatNum values for fractional beat shifts
-            const beatmapWithRotatedBeats = beatmapWithOriginalBars.map(beat => {
-                if (fractionalBeats === 0) {
-                    return { ...beat };
-                } else {
-                    let newBeatNum = beat.beatNum - fractionalBeats;
-                    while (newBeatNum < 1) newBeatNum += 4;
-                    while (newBeatNum > 4) newBeatNum -= 4;
-                    return { ...beat, beatNum: newBeatNum };
-                }
-            });
-
-            // Recalculate bar numbers after beat rotation
-            barNumber = 0;
-            const beatmapWithNewBars = beatmapWithRotatedBeats.map(beat => {
-                if (beat.beatNum === 1) barNumber++;
-                return { ...beat, barNumber };
-            });
-
-            // Shift bar numbers by integer bar offset
-            const beatmapWithBars = beatmapWithNewBars.map(beat => {
-                return { ...beat, barNumber: beat.barNumber - barOffset };
-            });
-
-            // Filter based on frequency
-            let filteredBeats = [];
-            switch (stemMarkerFrequency[stemType]) {
-                case 'bar8':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 8 === 1);
-                    break;
-                case 'bar4':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 4 === 1);
-                    break;
-                case 'bar2':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 2 === 1);
-                    break;
-                case 'bar':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1);
-                    break;
-                case 'halfbar':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 || b.beatNum === 3);
-                    break;
-                case 'beat':
-                    filteredBeats = beatmapWithBars;
-                    break;
-            }
-
-            console.log(`[${stemType}] Adding ${filteredBeats.length} markers (frequency: ${stemMarkerFrequency[stemType]}, barOffset: ${barOffset}, beatOffset: ${fractionalBeats})`);
-
-            // Add a marker div for each filtered beat
-            filteredBeats.forEach((beat) => {
-                const marker = document.createElement('div');
-                const isBar = beat.beatNum === 1;
-                const isEmphasisBar = isBar && (beat.barNumber % 4 === 1);
-
-                if (isEmphasisBar) {
-                    marker.className = 'bar-marker';
-                    marker.title = `Bar ${beat.barNumber}`;
-                } else if (isBar) {
-                    marker.className = 'beat-marker';
-                    marker.title = `Bar ${beat.barNumber}`;
-                } else {
-                    marker.className = 'beat-marker';
-                    marker.title = `Beat ${beat.beatNum}`;
-                }
-
-                // Calculate position as percentage of duration
-                const position = (beat.time / duration) * 100;
-                marker.style.left = `${position}%`;
-
-                // Add bar number label at bottom for bars (beatNum === 1)
-                if (isBar) {
-                    const barLabel = document.createElement('span');
-                    barLabel.textContent = beat.barNumber;
-                    barLabel.style.cssText = `
-                        position: absolute;
-                        bottom: 0;
-                        left: 0;
-                        transform: translateX(-50%);
-                        font-size: 9px;
-                        color: rgba(255, 255, 255, 0.5);
-                        pointer-events: none;
-                        white-space: nowrap;
-                    `;
-                    marker.appendChild(barLabel);
-                }
-
-                markerContainer.appendChild(marker);
-
-                // Store marker time for snap-to-marker functionality
-                stemCurrentMarkers[stemType].push(beat.time);
-            });
+            // Update app.js state with new marker times
+            stemCurrentMarkers[stemType] = markerTimes;
         }
 
         // Find nearest marker to the left for stem
         function findStemNearestMarkerToLeft(stemType, clickTime) {
-            if (stemCurrentMarkers[stemType].length === 0) return clickTime;
-
-            let nearestMarker = 0;
-            for (let markerTime of stemCurrentMarkers[stemType]) {
-                if (markerTime <= clickTime && markerTime > nearestMarker) {
-                    nearestMarker = markerTime;
-                }
-            }
-
-            return nearestMarker;
+            return StemMarkerSystem.findStemNearestMarkerToLeft(
+                clickTime,
+                stemCurrentMarkers[stemType]
+            );
         }
 
         // ============================================

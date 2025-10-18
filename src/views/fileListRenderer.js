@@ -207,37 +207,23 @@ export function updateSelectionUI() {
     const selectedCountEl = document.getElementById('selectedCount');
     const batchDeleteBtn = document.getElementById('batchDeleteBtn');
     const batchEditBtn = document.getElementById('batchEditBtn');
-    const batchDetectBtn = document.getElementById('batchDetectBtn');
-    const batchStemsBtn = document.getElementById('batchStemsBtn');
 
     if (selectedCount > 0) {
         selectedCountEl.textContent = `| ${selectedCount} selected`;
         batchDeleteBtn.disabled = false;
         batchEditBtn.disabled = false;
-        batchDetectBtn.disabled = false;
-        batchStemsBtn.disabled = false;
         batchDeleteBtn.style.opacity = '1';
         batchEditBtn.style.opacity = '1';
-        batchDetectBtn.style.opacity = '1';
-        batchStemsBtn.style.opacity = '1';
         batchDeleteBtn.style.cursor = 'pointer';
         batchEditBtn.style.cursor = 'pointer';
-        batchDetectBtn.style.cursor = 'pointer';
-        batchStemsBtn.style.cursor = 'pointer';
     } else {
         selectedCountEl.textContent = '';
         batchDeleteBtn.disabled = true;
         batchEditBtn.disabled = true;
-        batchDetectBtn.disabled = true;
-        batchStemsBtn.disabled = true;
         batchDeleteBtn.style.opacity = '0.5';
         batchEditBtn.style.opacity = '0.5';
-        batchDetectBtn.style.opacity = '0.5';
-        batchStemsBtn.style.opacity = '0.5';
         batchDeleteBtn.style.cursor = 'not-allowed';
         batchEditBtn.style.cursor = 'not-allowed';
-        batchDetectBtn.style.cursor = 'not-allowed';
-        batchStemsBtn.style.cursor = 'not-allowed';
     }
 
     // Update checkboxes

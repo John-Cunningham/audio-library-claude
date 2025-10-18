@@ -163,3 +163,110 @@ export function updateStemsButton(state) {
         stemsBtn.classList.remove('active');
     }
 }
+
+/**
+ * Create WaveSurfer instance for a single stem (hidden, no container)
+ * @param {string} stemType - Type of stem (vocals, drums, bass, other)
+ * @param {Object} WaveSurfer - WaveSurfer constructor
+ * @returns {Object} - WaveSurfer instance
+ */
+export function createStemWaveSurfer(stemType, WaveSurfer) {
+    // Create a hidden container for this stem
+    const containerId = `stem-waveform-${stemType}`;
+    let container = document.getElementById(containerId);
+
+    if (!container) {
+        container = document.createElement('div');
+        container.id = containerId;
+        container.style.display = 'none'; // Hidden for now
+        document.body.appendChild(container);
+    }
+
+    const stemWS = WaveSurfer.create({
+        container: `#${containerId}`,
+        waveColor: '#666666',
+        progressColor: '#4a9eff',
+        cursorColor: '#ffffff',
+        barWidth: 3,
+        barRadius: 3,
+        cursorWidth: 2,
+        height: 40,
+        barGap: 2,
+        responsive: true,
+        normalize: true,
+        backend: 'WebAudio',
+        autoScroll: false
+    });
+
+    // Set initial volume to 1.0
+    stemWS.setVolume(1.0);
+
+    console.log(`Created WaveSurfer for ${stemType} stem`);
+    return stemWS;
+}
+
+/**
+ * Sync all stem WaveSurfers with main WaveSurfer
+ * Sets up event listeners for play, pause, seeking, and finish
+ * @param {Object} state - { wavesurfer, stemWavesurfers }
+ * @param {boolean} autoplay - Whether to auto-play after syncing
+ */
+export function syncStemsWithMain(state, autoplay = true) {
+    if (!state.wavesurfer) return;
+
+    // Track whether stems were playing before seek
+    let stemsWerePlaying = false;
+
+    // Sync play/pause
+    state.wavesurfer.on('play', () => {
+        stemsWerePlaying = true;
+        Object.keys(state.stemWavesurfers).forEach(stemType => {
+            const stemWS = state.stemWavesurfers[stemType];
+            if (stemWS && !stemWS.isPlaying()) {
+                stemWS.play();
+            }
+        });
+    });
+
+    state.wavesurfer.on('pause', () => {
+        stemsWerePlaying = false;
+        Object.keys(state.stemWavesurfers).forEach(stemType => {
+            const stemWS = state.stemWavesurfers[stemType];
+            if (stemWS && stemWS.isPlaying()) {
+                stemWS.pause();
+            }
+        });
+    });
+
+    // Sync seeking - convert time to progress ratio
+    state.wavesurfer.on('seeking', (currentTime) => {
+        const duration = state.wavesurfer.getDuration();
+        const progress = duration > 0 ? currentTime / duration : 0;
+
+        Object.keys(state.stemWavesurfers).forEach(stemType => {
+            const stemWS = state.stemWavesurfers[stemType];
+            if (stemWS) {
+                stemWS.seekTo(progress);
+            }
+        });
+    });
+
+    // Sync finish
+    state.wavesurfer.on('finish', () => {
+        Object.keys(state.stemWavesurfers).forEach(stemType => {
+            const stemWS = state.stemWavesurfers[stemType];
+            if (stemWS) {
+                stemWS.seekTo(0);
+            }
+        });
+    });
+
+    console.log('Stems synced with main WaveSurfer');
+
+    // Auto-play if requested
+    if (autoplay) {
+        setTimeout(() => {
+            state.wavesurfer.play();
+        }, 100); // Small delay to ensure everything is ready
+    }
+}

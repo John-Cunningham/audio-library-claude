@@ -210,38 +210,7 @@
 
         // Create WaveSurfer instance for a single stem (hidden, no container)
         function createStemWaveSurfer(stemType) {
-            // Create a hidden container for this stem
-            const containerId = `stem-waveform-${stemType}`;
-            let container = document.getElementById(containerId);
-
-            if (!container) {
-                container = document.createElement('div');
-                container.id = containerId;
-                container.style.display = 'none'; // Hidden for now (Step 2A)
-                document.body.appendChild(container);
-            }
-
-            const stemWS = WaveSurfer.create({
-                container: `#${containerId}`,
-                waveColor: '#666666',
-                progressColor: '#4a9eff',
-                cursorColor: '#ffffff',
-                barWidth: 3,
-                barRadius: 3,
-                cursorWidth: 2,
-                height: 40,
-                barGap: 2,
-                responsive: true,
-                normalize: true,
-                backend: 'WebAudio',
-                autoScroll: false
-            });
-
-            // Phase 4 Fix 2: Set initial volume to 1.0 (will be updated by updateStemAudioState)
-            stemWS.setVolume(1.0);
-
-            console.log(`Created WaveSurfer for ${stemType} stem`);
-            return stemWS;
+            return StemPlayerManager.createStemWaveSurfer(stemType, WaveSurfer);
         }
 
         // Load and sync all stems for a file
@@ -293,65 +262,10 @@
 
         // Sync all stem WaveSurfers with main WaveSurfer
         function syncStemsWithMain(autoplay = true) {
-            if (!wavesurfer) return;
-
-            // Track whether stems were playing before seek (fixes seek resume bug)
-            let stemsWerePlaying = false;
-
-            // Sync play/pause
-            wavesurfer.on('play', () => {
-                stemsWerePlaying = true;
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS && !stemWS.isPlaying()) {
-                        stemWS.play();
-                    }
-                });
-            });
-
-            wavesurfer.on('pause', () => {
-                stemsWerePlaying = false;
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS && stemWS.isPlaying()) {
-                        stemWS.pause();
-                    }
-                });
-            });
-
-            // Sync seeking - convert time to progress ratio
-            wavesurfer.on('seeking', (currentTime) => {
-                // The 'seeking' event passes currentTime in seconds, not progress (0-1)
-                // We need to convert to progress ratio for stems
-                const duration = wavesurfer.getDuration();
-                const progress = duration > 0 ? currentTime / duration : 0;
-
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS) {
-                        stemWS.seekTo(progress);
-                    }
-                });
-            });
-
-            // Sync finish
-            wavesurfer.on('finish', () => {
-                Object.keys(stemWavesurfers).forEach(stemType => {
-                    const stemWS = stemWavesurfers[stemType];
-                    if (stemWS) {
-                        stemWS.seekTo(0);
-                    }
-                });
-            });
-
-            console.log('Stems synced with main WaveSurfer');
-
-            // Auto-play if requested
-            if (autoplay) {
-                setTimeout(() => {
-                    wavesurfer.play();
-                }, 100); // Small delay to ensure everything is ready
-            }
+            StemPlayerManager.syncStemsWithMain({
+                wavesurfer,
+                stemWavesurfers
+            }, autoplay);
         }
 
         // Apply solo/mute logic to stems

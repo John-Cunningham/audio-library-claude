@@ -883,331 +883,66 @@
 
         // Phase 1: Pre-load stems silently in background when file loads
         async function preloadMultiStemWavesurfers(fileId) {
-            console.log('=== Pre-loading Multi-Stem Wavesurfers (Phase 1) ===');
-
-            // 1. Fetch stem files from database
-            console.log(`Fetching stem files for file ID: ${fileId}`);
-            const { data, error } = await supabase
-                .from('audio_files_stems')
-                .select('*')
-                .eq('audio_file_id', fileId);
-
-            if (error) {
-                console.error('Error fetching stems:', error);
-                throw error;
-            }
-
-            if (!data || data.length === 0) {
-                console.log('No stem files found');
-                throw new Error('No stems found');
-            }
-
-            // 2. Organize stems by type
-            stemFiles = {};
-            data.forEach(stem => {
-                stemFiles[stem.stem_type] = stem;
-            });
-            console.log('Organized stem files:', Object.keys(stemFiles));
-
-            // Phase 2A: Get parent file BPM and initialize rate controls
-            const parentFile = audioFiles.find(f => f.id === fileId);
-            currentParentFileBPM = parentFile ? parentFile.bpm : null;
-            console.log(`Parent file BPM: ${currentParentFileBPM}`);
-
-            // Initialize rate control state for each stem
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-            stemTypes.forEach(type => {
-                stemIndependentRates[type] = 1.0; // Start at 1x
-                stemRateLocked[type] = true; // Start locked to parent
-            });
-
-            // 3. Generate UI structure in multiStemPlayer
-            const multiStemPlayer = document.getElementById('multiStemPlayer');
-            if (!multiStemPlayer) {
-                console.error('multiStemPlayer element not found!');
-                throw new Error('multiStemPlayer not found');
-            }
-
-            // Clear existing content
-            multiStemPlayer.innerHTML = '';
-
-            // stemTypes already declared above at line 2279
-            const loadPromises = [];
-
-            for (const stemType of stemTypes) {
-                const stemFile = stemFiles[stemType];
-                if (!stemFile) {
-                    console.warn(`Missing ${stemType} stem`);
-                    continue;
+            const result = await StemPlayerManager.preloadMultiStemWavesurfers(
+                fileId,
+                {
+                    supabase,
+                    audioFiles,
+                    currentRate,
+                    WaveSurfer,
+                    PlayerBarComponent,
+                    Utils,
+                    generateStemPlayerBar
+                },
+                {
+                    currentFileId,
+                    stemPlayerWavesurfers,
+                    stemPlayerComponents,
+                    stemLoopStates,
+                    stemMarkersEnabled,
+                    stemIndependentRates,
+                    stemRateLocked,
+                    currentParentFileBPM,
+                    wavesurfer
+                },
+                {
+                    addStemBarMarkers,
+                    setupParentStemSync
                 }
+            );
 
-                console.log(`Creating UI and WaveSurfer for ${stemType}`);
-
-                // Use full filename from database (important for "empty" suffix filtering)
-                const fileName = stemFile.stem_file_name || stemType;
-                // Show full filename - user needs to see "empty" suffix
-                const displayName = fileName;
-
-                // Phase 2A: Calculate initial BPM display
-                const initialRate = currentRate || 1.0;
-                const initialBPM = currentParentFileBPM ? (currentParentFileBPM * initialRate).toFixed(1) : '---';
-
-                // Generate stem UI HTML using template system (Phase 4: Template Refactoring)
-                const stemBarHTML = generateStemPlayerBar(stemType, displayName, initialRate, initialBPM);
-
-                multiStemPlayer.insertAdjacentHTML('beforeend', stemBarHTML);
-            }
-
-            // 4. Create WaveSurfer instances for each stem (now that DOM exists)
-            for (const stemType of stemTypes) {
-                const stemFile = stemFiles[stemType];
-                if (!stemFile) continue;
-
-                const container = document.getElementById(`multi-stem-waveform-${stemType}`);
-                if (!container) {
-                    console.error(`Container not found for ${stemType}`);
-                    continue;
-                }
-
-                // Create WaveSurfer instance
-                const ws = WaveSurfer.create({
-                    container: container,
-                    waveColor: '#555',
-                    progressColor: '#667eea',
-                    height: 60,
-                    backend: 'WebAudio',
-                    barWidth: 2,
-                    responsive: true
-                });
-
-                // Load the stem file
-                ws.load(stemFile.file_url);
-
-                // Mute by default (stems are silent until user expands)
-                ws.setVolume(0);
-
-                // Store instance
-                stemPlayerWavesurfers[stemType] = ws;
-
-                // Create PlayerBarComponent for this stem (Phase: Stem Components)
-                stemPlayerComponents[stemType] = new PlayerBarComponent({
-                    playerType: 'stem',
-                    stemType: stemType,
-                    waveform: ws
-                });
-                stemPlayerComponents[stemType].init();
-                console.log(`[STEM COMPONENTS] Created and initialized PlayerBarComponent for ${stemType} stem`);
-
-                // Set up time display updates and loop checking
-                ws.on('audioprocess', () => {
-                    const currentTime = ws.getCurrentTime();
-                    const duration = ws.getDuration();
-                    const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
-                    if (timeDisplay) {
-                        timeDisplay.textContent = `${Utils.formatTime(currentTime)} / ${Utils.formatTime(duration)}`;
-                    }
-
-                    // Phase 4: Check if we need to loop this stem
-                    const loopState = stemLoopStates[stemType];
-                    if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                        if (currentTime >= loopState.end) {
-                            // Loop back to start
-                            ws.seekTo(loopState.start / duration);
-                            console.log(`[${stemType}] Looping back to ${loopState.start.toFixed(2)}s`);
-                        }
-                    }
-                });
-
-                ws.on('ready', () => {
-                    const duration = ws.getDuration();
-                    const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
-                    if (timeDisplay) {
-                        timeDisplay.textContent = `0:00 / ${Utils.formatTime(duration)}`;
-                    }
-
-                    // Phase 4: Cycle mode click handler is now handled by PlayerBarComponent.setupWaveformClickHandler()
-                    // OLD: setupStemCycleModeClickHandler(stemType, container, ws);
-                    // Component's init() already set up the click handler with snap-to-marker + cycle mode support
-
-                    // Version 27d: Load file into component (enables markers via component)
-                    const file = audioFiles.find(f => f.id === currentFileId);
-                    if (file) {
-                        // Load file into PlayerBarComponent (handles markers if enabled)
-                        if (stemPlayerComponents[stemType]) {
-                            stemPlayerComponents[stemType].loadFile(file);
-                            console.log(`[STEM COMPONENTS] Loaded file into ${stemType} component (markers: ${stemPlayerComponents[stemType].markersEnabled})`);
-                        }
-
-                        // OLD CODE (kept as fallback for now, but component should handle this)
-                        // TODO: Remove addStemBarMarkers() once all stems use components
-                        if (stemMarkersEnabled[stemType] && !stemPlayerComponents[stemType]) {
-                            addStemBarMarkers(stemType, file);
-                        }
-                    }
-                });
-
-                // Wait for ready
-                const readyPromise = new Promise(resolve => {
-                    ws.once('ready', () => {
-                        console.log(`✓ ${stemType} stem ready`);
-                        resolve();
-                    });
-                });
-
-                loadPromises.push(readyPromise);
-            }
-
-            // 5. Wait for all stems to be ready
-            await Promise.all(loadPromises);
-            console.log('All stems loaded and ready (muted, UI ready but collapsed)');
-
-            // 6. Set up synchronization with parent
-            setupParentStemSync();
-            console.log('Parent-stem sync established');
-
-            // 7. Start all stems playing (muted) to keep in sync
-            if (wavesurfer && wavesurfer.isPlaying()) {
-                console.log('Parent is playing - starting stems (muted)');
-                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                stemTypes.forEach(type => {
-                    const ws = stemPlayerWavesurfers[type];
-                    if (ws) {
-                        // Sync to parent position first
-                        const parentProgress = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
-                        ws.seekTo(parentProgress);
-                        // Play muted
-                        ws.play();
-                    }
-                });
-            }
-
-            stemsPreloaded = true;
-            console.log('=== Phase 1 Pre-load Complete ===');
+            // Update app.js state with results
+            stemFiles = result.stemFiles;
+            stemPlayerWavesurfers = result.stemPlayerWavesurfers;
+            stemPlayerComponents = result.stemPlayerComponents;
+            stemIndependentRates = result.stemIndependentRates;
+            stemRateLocked = result.stemRateLocked;
+            currentParentFileBPM = result.currentParentFileBPM;
+            stemsPreloaded = result.stemsPreloaded;
         }
 
         // Phase 1: Simplified toggle - just mute/unmute, no loading/destroying
         function toggleMultiStemPlayer() {
-            console.log('=== toggleMultiStemPlayer (Phase 1 - Volume Toggle Only) ===');
-            console.log('currentFileId:', currentFileId);
-
-            if (!currentFileId) {
-                console.log('No current file, returning');
-                return;
-            }
-
-            const multiStemPlayer = document.getElementById('multiStemPlayer');
-            if (!multiStemPlayer) {
-                console.log('multiStemPlayer element not found');
-                return;
-            }
-
-            multiStemPlayerExpanded = !multiStemPlayerExpanded;
-            console.log('multiStemPlayerExpanded:', multiStemPlayerExpanded);
-
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-
-            if (multiStemPlayerExpanded) {
-                console.log('🎵 EXPANDING: Switching from parent to stems (instant)');
-
-                // Check if parent is currently playing
-                const parentIsPlaying = wavesurfer && wavesurfer.isPlaying();
-                const parentTime = wavesurfer ? wavesurfer.getCurrentTime() : 0;
-                const parentDuration = wavesurfer ? wavesurfer.getDuration() : 1;
-                const parentProgress = parentDuration > 0 ? parentTime / parentDuration : 0;
-
-                console.log(`Parent state: ${parentIsPlaying ? 'playing' : 'paused'} at ${parentTime.toFixed(2)}s (${(parentProgress * 100).toFixed(1)}%)`);
-
-                // 1. SYNC ALL STEMS TO PARENT POSITION FIRST
-                stemTypes.forEach(type => {
-                    const ws = stemPlayerWavesurfers[type];
-                    if (ws) {
-                        ws.seekTo(parentProgress);
-                        console.log(`✓ ${type} synced to position ${(parentProgress * 100).toFixed(1)}%`);
-                    }
-                });
-
-                // 2. MUTE PARENT IMMEDIATELY (prevents double audio)
-                wavesurfer.setVolume(0);
-                console.log('✓ Parent muted');
-
-                // 3. UNMUTE ALL STEMS (inherit parent's volume on first expansion)
-                const parentVolumeSlider = document.getElementById('volumeSlider');
-                const parentVolume = parentVolumeSlider ? parentVolumeSlider.value / 100 : 1.0;
-
-                stemTypes.forEach(type => {
-                    const ws = stemPlayerWavesurfers[type];
-                    if (ws) {
-                        const volumeSlider = document.getElementById(`stem-volume-${type}`);
-                        // Use stem's own volume if it's been set, otherwise inherit from parent
-                        const targetVolume = (volumeSlider && volumeSlider.value != 100)
-                            ? volumeSlider.value / 100
-                            : parentVolume;
-                        ws.setVolume(targetVolume);
-                        // Update stem volume slider to match
-                        if (volumeSlider && volumeSlider.value == 100) {
-                            volumeSlider.value = parentVolume * 100;
-                        }
-                        console.log(`✓ ${type} unmuted (volume: ${targetVolume})`);
-                    }
-                });
-
-                // 4. IF PARENT WAS PLAYING, START ALL STEMS
-                if (parentIsPlaying) {
-                    console.log('Parent was playing - starting all stems');
-                    setTimeout(() => {
-                        stemTypes.forEach(type => {
-                            const ws = stemPlayerWavesurfers[type];
-                            if (ws && !ws.isPlaying()) {
-                                ws.play();
-                                console.log(`✓ ${type} playing`);
-                            }
-                        });
-                    }, 50); // Small delay to ensure seek completes
-                } else {
-                    console.log('Parent was paused - stems remain paused at position');
+            const result = StemPlayerManager.toggleMultiStemPlayer(
+                {
+                    currentFileId,
+                    multiStemPlayerExpanded,
+                    wavesurfer,
+                    stemPlayerWavesurfers
+                },
+                {
+                    // No dependencies needed - function accesses DOM directly
                 }
+            );
 
-                // 5. Show UI with animation (UI already exists, just reveal it)
-                setTimeout(() => {
-                    multiStemPlayer.classList.remove('collapsed');
-                    console.log('✓ UI expanded');
-                }, 10);
+            // Update app.js state
+            multiStemPlayerExpanded = result.multiStemPlayerExpanded;
 
-            } else {
-                console.log('🎵 COLLAPSING: Switching from stems to parent (instant)');
-
-                // 1. MUTE ALL STEMS IMMEDIATELY (prevents double audio)
-                stemTypes.forEach(type => {
-                    const ws = stemPlayerWavesurfers[type];
-                    if (ws) {
-                        ws.setVolume(0);
-                        console.log(`✓ ${type} muted`);
-                    }
-                });
-
-                // 2. UNMUTE PARENT (restore to user's volume setting)
-                const volumeSlider = document.getElementById('volumeSlider');
-                const volume = volumeSlider ? volumeSlider.value / 100 : 1.0;
-                wavesurfer.setVolume(volume);
-                console.log(`✓ Parent unmuted (volume: ${volume})`);
-
-                // 3. Hide UI (DON'T destroy - keep stems loaded for instant re-expansion)
-                multiStemPlayer.classList.add('collapsed');
-                console.log('✓ UI collapsed (stems still playing muted in background)');
+            // CRITICAL: Set up parent-stem sync when expanding
+            if (multiStemPlayerExpanded && wavesurfer && Object.keys(stemPlayerWavesurfers).length > 0) {
+                setupParentStemSync();
+                console.log('✓ Parent-stem sync established after expanding stems');
             }
-
-            // Update STEMS button appearance
-            const stemsBtn = document.getElementById('stemsBtn');
-            if (stemsBtn) {
-                stemsBtn.innerHTML = multiStemPlayerExpanded ? '<span>▼ STEMS</span>' : '<span>▲ STEMS</span>';
-                if (multiStemPlayerExpanded) {
-                    stemsBtn.classList.add('active');
-                } else {
-                    stemsBtn.classList.remove('active');
-                }
-            }
-
-            console.log('=== Toggle complete ===');
         }
 
         // Phase 1: UI generation only - stems already loaded by preloadMultiStemWavesurfers()
@@ -1228,165 +963,34 @@
         }
 
         async function initializeMultiStemPlayerWavesurfers() {
-            console.log('=== Initializing Multi-Stem Player Wavesurfers ===');
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-            multiStemReadyCount = 0;
+            const result = await StemPlayerManager.initializeMultiStemPlayerWavesurfers(
+                {
+                    wavesurfer,
+                    stemFiles,
+                    stemPlayerWavesurfers,
+                    stemPlaybackIndependent,
+                    stemLoopStates,
+                    multiStemReadyCount,
+                    multiStemAutoPlayOnReady,
+                    cycleMode,
+                    loopStart,
+                    loopEnd
+                },
+                {
+                    wavesurfer,
+                    WaveSurfer,
+                    Utils,
+                    stemFiles,
+                    audioFiles,
+                    currentFileId
+                },
+                playAllStems,
+                setupParentStemSync
+            );
 
-            // Capture parent state BEFORE loading stems
-            if (!wavesurfer) {
-                console.log('No parent wavesurfer - cannot load stems');
-                return;
-            }
-
-            const parentWasPlaying = wavesurfer.isPlaying();
-            const parentCurrentTime = wavesurfer.getCurrentTime();
-            const parentDuration = wavesurfer.getDuration();
-            const parentProgress = parentDuration > 0 ? parentCurrentTime / parentDuration : 0;
-
-            console.log(`Parent state: ${parentWasPlaying ? 'playing' : 'paused'} at ${parentCurrentTime.toFixed(2)}s (${(parentProgress * 100).toFixed(1)}%)`);
-
-            multiStemAutoPlayOnReady = parentWasPlaying;
-
-            for (const stemType of stemTypes) {
-                const stemFile = stemFiles[stemType];
-                if (!stemFile) {
-                    console.log(`No stem file for ${stemType}, skipping`);
-                    continue;
-                }
-
-                const containerId = `multi-stem-waveform-${stemType}`;
-                const container = document.getElementById(containerId);
-                if (!container) {
-                    console.log(`No container found for ${stemType}`);
-                    continue;
-                }
-
-                try {
-                    console.log(`Creating WaveSurfer for ${stemType}: ${stemFile.stem_file_name}`);
-                    const ws = WaveSurfer.create({
-                        container: `#${containerId}`,
-                        waveColor: '#555',
-                        progressColor: '#667eea',
-                        cursorColor: '#ffffff',
-                        height: 50,
-                        barWidth: 2,
-                        barGap: 1,
-                        barRadius: 2,
-                        cursorWidth: 1,
-                        normalize: true,
-                        responsive: true,
-                        backend: 'WebAudio',
-                        interact: true,
-                        hideScrollbar: true
-                    });
-
-                    // Store reference to stem data
-                    ws._stemFile = stemFile;
-                    ws._stemType = stemType;
-
-                    // Load the stem file
-                    ws.load(stemFile.file_url);
-
-                    // Store instance BEFORE ready event
-                    stemPlayerWavesurfers[stemType] = ws;
-
-                    // Initialize all stems as "active" (they should play when parent plays)
-                    stemPlaybackIndependent[stemType] = true;
-
-                    // Handle ready event
-                    ws.once('ready', () => {
-                        multiStemReadyCount++;
-                        console.log(`Stem ${multiStemReadyCount}/${stemTypes.length} ready: ${stemType}`);
-
-                        // When all stems are ready - perform seamless switch
-                        if (multiStemReadyCount === stemTypes.length) {
-                            console.log('All stems ready - performing seamless audio switch');
-
-                            // Step 1: Seek all stems to parent's current position
-                            console.log(`Syncing all stems to parent position: ${parentProgress.toFixed(3)}`);
-                            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                            stemTypes.forEach(type => {
-                                const stemWS = stemPlayerWavesurfers[type];
-                                if (stemWS) {
-                                    stemWS.seekTo(parentProgress);
-                                }
-                            });
-
-                            // Step 2: Mute parent player FIRST (avoid double audio)
-                            console.log('Muting parent player');
-                            wavesurfer.setVolume(0);
-
-                            // Step 3: If parent was playing, start all stems at synchronized position
-                            if (multiStemAutoPlayOnReady) {
-                                console.log('Parent was playing - starting all stems in sync');
-                                // Small delay to ensure seek completes before playing
-                                setTimeout(() => {
-                                    playAllStems();
-                                }, 50);
-                            } else {
-                                console.log('Parent was paused - keeping stems paused at position');
-                            }
-
-                            // Step 4: Set up ongoing sync between parent and stems
-                            setupParentStemSync();
-                        }
-                    });
-
-                    // Update time display and handle loop playback
-                    ws.on('timeupdate', (currentTime) => {
-                        const duration = ws.getDuration();
-                        const timeDisplay = document.getElementById(`multi-stem-time-${stemType}`);
-                        if (timeDisplay) {
-                            timeDisplay.textContent = `${Utils.formatTime(currentTime)} / ${Utils.formatTime(duration)}`;
-                        }
-
-                        // Check for loop playback
-                        const loopState = stemLoopStates[stemType];
-
-                        // Stem follows parent loop if:
-                        // 1. Stem is active (stemPlaybackIndependent = true)
-                        // 2. Stem doesn't have its own cycle enabled (loopState.enabled = false)
-                        // 3. Parent has cycle enabled with valid loop points
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        if (followsParent && cycleMode && loopStart !== null && loopEnd !== null) {
-                            // Follow parent's loop
-                            if (currentTime >= loopEnd) {
-                                ws.seekTo(loopStart / duration);
-                                // Don't log every loop - too spammy
-                            }
-                        } else if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                            // Use stem's own loop
-                            if (currentTime >= loopState.end) {
-                                ws.seekTo(loopState.start / duration);
-                                console.log(`${stemType} looped back to ${loopState.start}s`);
-                            }
-                        }
-                    });
-
-                    // Handle stem reaching end of file - loop if enabled
-                    ws.on('finish', () => {
-                        const loopState = stemLoopStates[stemType];
-
-                        // Stem follows parent loop if active and doesn't have own cycle
-                        const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
-
-                        if (followsParent && cycleMode && loopStart !== null && loopEnd !== null) {
-                            // Follow parent's loop
-                            ws.seekTo(loopStart / ws.getDuration());
-                            ws.play();
-                        } else if (loopState.enabled && loopState.start !== null && loopState.end !== null) {
-                            // Use stem's own loop
-                            ws.seekTo(loopState.start / ws.getDuration());
-                            ws.play();
-                            console.log(`${stemType} finished - looping back to ${loopState.start}s`);
-                        }
-                    });
-
-                } catch (error) {
-                    console.error(`Error loading multi-stem waveform for ${stemType}:`, error);
-                }
-            }
+            // Update app.js state
+            stemPlayerWavesurfers = result.stemPlayerWavesurfers;
+            stemPlaybackIndependent = result.stemPlaybackIndependent;
         }
 
         // Play all stems in sync
@@ -1417,28 +1021,44 @@
             });
         }
 
+        // Store parent-stem sync event handlers so we can clean them up
+        let parentStemSyncHandlers = {
+            play: null,
+            pause: null,
+            seeking: null
+        };
+
         // Set up synchronization between parent player and stems
         function setupParentStemSync() {
             if (!wavesurfer) return;
 
             console.log('Setting up parent-stem synchronization');
 
-            // When parent plays, resume all NON-INDEPENDENT stems
-            // Use same logic as pause for symmetry
-            wavesurfer.on('play', () => {
+            // Clean up old handlers first (prevent duplicates)
+            if (parentStemSyncHandlers.play) {
+                wavesurfer.un('play', parentStemSyncHandlers.play);
+            }
+            if (parentStemSyncHandlers.pause) {
+                wavesurfer.un('pause', parentStemSyncHandlers.pause);
+            }
+            if (parentStemSyncHandlers.seeking) {
+                wavesurfer.un('seeking', parentStemSyncHandlers.seeking);
+            }
+
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+
+            // When parent plays, resume stems that follow parent
+            parentStemSyncHandlers.play = () => {
                 if (multiStemPlayerExpanded) {
                     console.log('Parent play event - resuming stems that follow parent');
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
                         const loopState = stemLoopStates[stemType];
-                        // A stem follows parent if it's active AND doesn't have its own loop
                         const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
 
                         console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
 
                         if (ws && followsParent && !ws.isPlaying()) {
-                            // Only play stems that follow parent (not those with own loops)
                             console.log(`  → Playing ${stemType}`);
                             ws.play();
                             const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
@@ -1446,24 +1066,21 @@
                         }
                     });
                 }
-            });
+            };
+            wavesurfer.on('play', parentStemSyncHandlers.play);
 
-            // When parent pauses, pause only stems that follow parent
-            // Stems with their own loops continue playing independently
-            wavesurfer.on('pause', () => {
+            // When parent pauses, pause stems that follow parent
+            parentStemSyncHandlers.pause = () => {
                 if (multiStemPlayerExpanded) {
                     console.log('Parent pause event - pausing stems that follow parent');
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
                         const loopState = stemLoopStates[stemType];
-                        // A stem follows parent if it's active AND doesn't have its own loop
                         const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
 
                         console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
 
                         if (ws && followsParent) {
-                            // Only pause stems that follow parent (not those with own loops)
                             if (ws.isPlaying()) {
                                 console.log(`  → Pausing ${stemType}`);
                                 ws.pause();
@@ -1473,36 +1090,29 @@
                         }
                     });
                 }
-            });
+            };
+            wavesurfer.on('pause', parentStemSyncHandlers.pause);
 
-            // When parent seeks, seek only stems that follow parent
-            // Stems with their own loops maintain their own position
-            wavesurfer.on('seeking', (currentTime) => {
+            // When parent seeks, seek stems that follow parent
+            parentStemSyncHandlers.seeking = (currentTime) => {
                 if (multiStemPlayerExpanded) {
                     const seekPosition = currentTime / wavesurfer.getDuration();
                     console.log('Parent seek event - syncing stems that follow parent to:', seekPosition);
 
-                    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
                     stemTypes.forEach(stemType => {
                         const ws = stemPlayerWavesurfers[stemType];
                         const loopState = stemLoopStates[stemType];
-                        // A stem follows parent if it's active AND doesn't have its own loop
                         const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
 
                         console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}`);
 
                         if (ws && followsParent) {
-                            // Only seek stems that follow parent (not those with own loops)
                             ws.seekTo(seekPosition);
                         }
                     });
                 }
-            });
-
-            // REMOVED: Bidirectional sync that made parent follow stems
-            // Stems now have independent playback and loops
-            // Parent controls act as MODIFIERS (rate × rate, volume × volume)
-            // But parent timeline does NOT follow stem timelines
+            };
+            wavesurfer.on('seeking', parentStemSyncHandlers.seeking);
         }
 
         function destroyMultiStemPlayerWavesurfers() {
@@ -1510,9 +1120,18 @@
 
             // Clean up event listeners before destroying
             if (wavesurfer) {
-                wavesurfer.un('play');
-                wavesurfer.un('pause');
-                wavesurfer.un('seeking');
+                if (parentStemSyncHandlers.play) {
+                    wavesurfer.un('play', parentStemSyncHandlers.play);
+                    parentStemSyncHandlers.play = null;
+                }
+                if (parentStemSyncHandlers.pause) {
+                    wavesurfer.un('pause', parentStemSyncHandlers.pause);
+                    parentStemSyncHandlers.pause = null;
+                }
+                if (parentStemSyncHandlers.seeking) {
+                    wavesurfer.un('seeking', parentStemSyncHandlers.seeking);
+                    parentStemSyncHandlers.seeking = null;
+                }
             }
 
             // Destroy all stem wavesurfers

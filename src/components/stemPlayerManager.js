@@ -543,7 +543,7 @@ export function toggleMultiStemPlayer(state, dependencies) {
     console.log('multiStemPlayerExpanded:', newExpanded);
 
     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-    const { wavesurfer, stemPlayerWavesurfers } = dependencies;
+    const { wavesurfer, stemPlayerWavesurfers } = state;
 
     if (newExpanded) {
         console.log('🎵 EXPANDING: Switching from parent to stems (instant)');

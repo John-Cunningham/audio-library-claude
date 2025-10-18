@@ -7,6 +7,7 @@
         // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
         import { initKeyboardShortcuts } from './keyboardShortcuts.js';
+        import * as ProgressBar from '../utils/progressBar.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -1039,13 +1040,13 @@
             const taskList = tasks.join(', ');
 
             // Show progress bar
-            showProgressBar(`Processing: ${filesToProcess[0].name}`, 0, totalFiles);
+            ProgressBar.show(`Processing: ${filesToProcess[0].name}`, 0, totalFiles);
 
             for (let i = 0; i < filesToProcess.length; i++) {
                 const file = filesToProcess[i];
 
                 // Update progress
-                updateProgress(i + 1, totalFiles, `Processing (${taskList}): ${file.name}`);
+                ProgressBar.update(i + 1, totalFiles, `Processing (${taskList}): ${file.name}`);
 
                 // Estimate time based on what's being processed
                 let estimatedTime = 0;
@@ -1093,13 +1094,13 @@
                         processingFiles.delete(file.id);
                     }
 
-                    completeProgress();
+                    ProgressBar.complete();
                 } catch (error) {
                     console.error(`✗ Processing error: ${file.name}`, error);
                     // Remove from processing on error
                     processingFiles.delete(file.id);
                     await loadData(); // Refresh to remove hourglass
-                    completeProgress();
+                    ProgressBar.complete();
                 }
             }
 
@@ -1108,7 +1109,7 @@
             completeProgress();
 
             setTimeout(() => {
-                hideProgressBar();
+                ProgressBar.hide();
             }, 1500);
         }
 
@@ -6208,13 +6209,13 @@
             if (!confirm(`Detect BPM, Key, and Instruments for ${totalFiles} file(s)?`)) return;
 
             // Show progress bar
-            showProgressBar(`Detecting: ${filesToProcess[0].name}`, 0, totalFiles);
+            ProgressBar.show(`Detecting: ${filesToProcess[0].name}`, 0, totalFiles);
 
             for (let i = 0; i < filesToProcess.length; i++) {
                 const file = filesToProcess[i];
 
                 // Update progress
-                updateProgress(i + 1, totalFiles, `Detecting: ${file.name}`);
+                ProgressBar.update(i + 1, totalFiles, `Detecting: ${file.name}`);
 
                 // Start animation (estimate 15 seconds per file)
                 startProgressAnimation(15);
@@ -6235,14 +6236,14 @@
 
                     if (result.status === 'complete') {
                         console.log(`✓ Completed: ${file.name}`, result.data);
-                        completeProgress();
+                        ProgressBar.complete();
                     } else if (result.status === 'error') {
                         console.error(`✗ Error: ${file.name}`, result.message);
-                        completeProgress();
+                        ProgressBar.complete();
                     }
                 } catch (error) {
                     console.error(`✗ Error: ${file.name}`, error);
-                    completeProgress();
+                    ProgressBar.complete();
                 }
             }
 
@@ -6251,7 +6252,7 @@
             completeProgress();
 
             setTimeout(async () => {
-                hideProgressBar();
+                ProgressBar.hide();
                 await loadData(); // Reload to show updated data
             }, 1500);
         }
@@ -6266,13 +6267,13 @@
             if (!confirm(`Separate stems for ${totalFiles} file(s)? This may take several minutes per file.`)) return;
 
             // Show progress bar
-            showProgressBar(`Separating: ${filesToProcess[0].name}`, 0, totalFiles);
+            ProgressBar.show(`Separating: ${filesToProcess[0].name}`, 0, totalFiles);
 
             for (let i = 0; i < filesToProcess.length; i++) {
                 const file = filesToProcess[i];
 
                 // Update progress
-                updateProgress(i + 1, totalFiles, `Separating: ${file.name}`);
+                ProgressBar.update(i + 1, totalFiles, `Separating: ${file.name}`);
 
                 // Start animation (estimate 120 seconds per file for stems)
                 startProgressAnimation(120);
@@ -6292,14 +6293,14 @@
 
                     if (result.status === 'complete') {
                         console.log(`✓ Completed: ${file.name}`, result.stems);
-                        completeProgress();
+                        ProgressBar.complete();
                     } else if (result.status === 'error') {
                         console.error(`✗ Error: ${file.name}`, result.message);
-                        completeProgress();
+                        ProgressBar.complete();
                     }
                 } catch (error) {
                     console.error(`✗ Error: ${file.name}`, error);
-                    completeProgress();
+                    ProgressBar.complete();
                 }
             }
 
@@ -6308,80 +6309,12 @@
             completeProgress();
 
             setTimeout(async () => {
-                hideProgressBar();
+                ProgressBar.hide();
                 await loadData(); // Reload to show updated data
             }, 1500);
         }
 
-        // Progress bar functions
-        let progressInterval = null;
-        let progressStartTime = null;
-
-        function showProgressBar(text, current, total) {
-            const bar = document.getElementById('progressBar');
-            bar.style.height = '40px';
-            bar.style.opacity = '1';
-            document.getElementById('progressText').textContent = text;
-            document.getElementById('progressCounter').textContent = `${current}/${total}`;
-            document.getElementById('progressBarFill').style.width = '0%';
-        }
-
-        function hideProgressBar() {
-            const bar = document.getElementById('progressBar');
-            bar.style.opacity = '0';
-            setTimeout(() => {
-                bar.style.height = '0';
-            }, 300);
-            if (progressInterval) {
-                clearInterval(progressInterval);
-                progressInterval = null;
-            }
-        }
-
-        function startProgressAnimation(estimatedSeconds) {
-            // Animate progress bar over estimated time
-            progressStartTime = Date.now();
-            const incrementMs = 100; // Update every 100ms
-            const totalMs = estimatedSeconds * 1000;
-
-            if (progressInterval) clearInterval(progressInterval);
-
-            progressInterval = setInterval(() => {
-                const elapsed = Date.now() - progressStartTime;
-                const progress = Math.min((elapsed / totalMs) * 95, 95); // Cap at 95% until actually complete
-                document.getElementById('progressBarFill').style.width = progress + '%';
-
-                if (progress >= 95) {
-                    clearInterval(progressInterval);
-                    progressInterval = null;
-                }
-            }, incrementMs);
-        }
-
-        function completeProgress() {
-            if (progressInterval) {
-                clearInterval(progressInterval);
-                progressInterval = null;
-            }
-            document.getElementById('progressBarFill').style.width = '100%';
-        }
-
-        function showProgressModal(title, files) {
-            // Not used anymore, kept for compatibility
-        }
-
-        function updateProgress(current, total, statusText) {
-            document.getElementById('progressText').textContent = statusText;
-            document.getElementById('progressCounter').textContent = `${current}/${total}`;
-        }
-
-        function updateQueueItem(fileId, status, errorMessage = '') {
-            // Not used anymore, kept for compatibility
-        }
-
-        function closeProgressModal() {
-            // Not used anymore, kept for compatibility
-        }
+        // Progress bar functions moved to utils/progressBar.js
 
         // Render tag pills in modal
         function renderModalTags() {

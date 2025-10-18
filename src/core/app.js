@@ -11,6 +11,7 @@
         import * as MiniWaveform from '../components/miniWaveform.js';
         import * as TagManager from './tagManager.js';
         import * as TagEditModal from '../components/tagEditModal.js';
+        import * as FileProcessor from './fileProcessor.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -655,85 +656,9 @@
         }
 
         // Auto-tag from filename
-        function extractTagsFromFilename(filename) {
-            const tags = [];
-            let bpm = null;
-            let key = null;
-            const nameWithoutExt = filename.replace(/\.(wav|mp3|aiff|flac|m4a|ogg)$/i, '');
-
-            // Extract instrument/name from beginning (first word/segment)
-            const nameMatch = nameWithoutExt.match(/^([A-Za-z]+)/);
-            if (nameMatch) {
-                tags.push(nameMatch[1].toLowerCase());
-            }
-
-            // Extract BPM (2-3 digit numbers, allow underscores/spaces around them)
-            const bpmMatches = nameWithoutExt.match(/(?:^|[_\s])(\d{2,3})(?:[_\s]|$)/g);
-            if (bpmMatches) {
-                // Extract just the number from the first match
-                const bpmNumber = bpmMatches[0].match(/\d{2,3}/)[0];
-                bpm = parseInt(bpmNumber);
-                tags.push(`${bpmNumber}bpm`);
-            }
-
-            // Extract musical key - must be at word boundaries or surrounded by underscores/spaces
-            // Patterns: Gm, Db, C#, Abmaj, F#min, Dmaj, Fm, etc.
-            const keyPatterns = [
-                /(?:^|[_\s])([A-G][b#]?)(maj|min|major|minor)(?:[_\s\.]|$)/i,  // Cmaj, Gmin, Dbmaj, Fmin, etc.
-                /(?:^|[_\s])([A-G][b#]?)m(?![a-z])/i,                           // Gm, C#m, Fm (minor)
-                /(?:^|[_\s])([A-G][b#]?)(?=[_\s\.]|$)/                          // C, Db (standalone, default to major)
-            ];
-
-            for (let pattern of keyPatterns) {
-                const match = nameWithoutExt.match(pattern);
-                if (match) {
-                    let note = match[1];
-                    let quality = match[2];
-
-                    // Normalize note (capitalize first letter, preserve b or #)
-                    note = note.charAt(0).toUpperCase() + note.slice(1).toLowerCase();
-
-                    // Determine if major or minor
-                    if (quality && (quality.toLowerCase() === 'min' || quality.toLowerCase() === 'minor')) {
-                        key = `${note}min`;
-                        tags.push(`${note}min`);
-                    } else if (quality && (quality.toLowerCase() === 'maj' || quality.toLowerCase() === 'major')) {
-                        key = `${note}maj`;
-                        tags.push(`${note}maj`);
-                    } else if (pattern.source.includes('m(?!')) {
-                        // Pattern matched "Gm" style
-                        key = `${note}min`;
-                        tags.push(`${note}min`);
-                    } else {
-                        // Default to major
-                        key = `${note}maj`;
-                        tags.push(`${note}maj`);
-                    }
-                    break; // Only match first key found
-                }
-            }
-
-            return { tags, bpm, key };
-        }
-
-        // Get audio file duration
-        function getAudioDuration(file) {
-            return new Promise((resolve) => {
-                const audio = new Audio();
-                audio.addEventListener('loadedmetadata', () => {
-                    resolve(audio.duration);
-                    URL.revokeObjectURL(audio.src);
-                });
-                audio.addEventListener('error', () => {
-                    resolve(null);
-                    URL.revokeObjectURL(audio.src);
-                });
-                audio.src = URL.createObjectURL(file);
-            });
-        }
-
-        // BPM detection removed - using filename parsing only
-        // Future: Will integrate separate BPM detection solution
+        // Helper functions moved to fileProcessor.js
+        // - extractTagsFromFilename()
+        // - getAudioDuration()
 
         // Calculate BPM from onset positions with musical quantization
         // (Kept for future use when we integrate proper BPM detection)
@@ -1007,208 +932,9 @@
             }, 1500);
         }
 
-        // Perform the actual upload
-        async function performUpload(files, sharedTags) {
-            const progressBar = document.getElementById('uploadProgressBar');
-            const modalFileCount = document.getElementById('modalFileCount');
-
-            // Check if conversion to MP3 is requested
-            const shouldConvertMp3 = document.getElementById('processConvertMp3').checked;
-
-            try {
-                // Show progress bar
-                progressBar.style.display = 'block';
-                progressBar.style.width = '0%';
-
-                let successCount = 0;
-
-                for (let i = 0; i < files.length; i++) {
-                    let file = files[i];
-                    let originalFileName = file.name;
-
-                    // Update modal status - Analyzing
-                    modalFileCount.textContent = `Analyzing ${i + 1}/${files.length}: ${file.name}`;
-
-                    // Convert to MP3 if requested
-                    if (shouldConvertMp3) {
-                        modalFileCount.textContent = `Converting to MP3 ${i + 1}/${files.length}: ${file.name}`;
-
-                        const formData = new FormData();
-                        formData.append('file', file);
-
-                        const convertResponse = await fetch('https://web-production-bcf6c.up.railway.app/convert-for-upload', {
-                            method: 'POST',
-                            body: formData
-                        });
-
-                        if (!convertResponse.ok) {
-                            throw new Error(`MP3 conversion failed: ${convertResponse.statusText}`);
-                        }
-
-                        const mp3Blob = await convertResponse.blob();
-                        const newFileName = convertResponse.headers.get('X-Converted-Filename') || file.name.replace(/\.(wav|aiff|flac|m4a|ogg)$/i, '.mp3');
-
-                        // Create new File object with MP3 data
-                        file = new File([mp3Blob], newFileName, { type: 'audio/mpeg' });
-                        console.log(`✓ Converted ${originalFileName} → ${newFileName}`);
-                    }
-
-                    // Auto-extract tags from filename
-                    const extracted = extractTagsFromFilename(file.name);
-
-                    // Combine auto-tags + shared tags (remove duplicates)
-                    const allTags = [...new Set([...extracted.tags, ...sharedTags])];
-
-                    // Get audio length
-                    const length = await getAudioDuration(file);
-
-                    // Update modal status - Uploading
-                    modalFileCount.textContent = `Uploading ${i + 1}/${files.length}: ${file.name}`;
-
-                    // Upload file to Supabase Storage
-                    const fileName = `${Date.now()}-${i}-${file.name}`;
-                    const { data: uploadData, error: uploadError } = await supabase.storage
-                        .from('audio-files')
-                        .upload(fileName, file);
-
-                    if (uploadError) throw uploadError;
-
-                    // Get public URL
-                    const { data: urlData } = supabase.storage
-                        .from('audio-files')
-                        .getPublicUrl(fileName);
-
-                    // Save metadata to database
-                    const { data: dbData, error: dbError } = await supabase
-                        .from('audio_files')
-                        .insert([{
-                            name: file.name,
-                            file_url: urlData.publicUrl,
-                            tags: allTags,
-                            bpm: extracted.bpm,
-                            key: extracted.key,
-                            length: length
-                        }])
-                        .select();
-
-                    if (dbError) throw dbError;
-                    successCount++;
-
-                    // Update progress bar
-                    const progress = ((i + 1) / files.length) * 100;
-                    progressBar.style.width = progress + '%';
-                }
-
-                // Complete
-                progressBar.style.width = '100%';
-                modalFileCount.textContent = `✅ Successfully uploaded ${successCount} file(s)!`;
-
-                // Reload data
-                await loadData();
-
-                // Hide progress bar and close modal after a moment
-                setTimeout(() => {
-                    progressBar.style.display = 'none';
-                    progressBar.style.width = '0%';
-                    TagEditModal.close({
-                        setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
-                        setSearchQuery: (query) => { searchQuery = query; },
-                        filters,
-                        renderTags,
-                        renderFiles
-                    });
-                }, 1500);
-
-            } catch (error) {
-                console.error('Error uploading files:', error);
-                modalFileCount.textContent = '❌ Error uploading files';
-                progressBar.style.display = 'none';
-                progressBar.style.width = '0%';
-
-                setTimeout(() => {
-                    alert('Error uploading files. Check console for details.');
-                }, 100);
-            }
-        }
-
-        async function uploadAudio() {
-            const fileInput = document.getElementById('audioFile');
-            const tagsInput = document.getElementById('audioTags');
-            const statusDiv = document.getElementById('uploadStatus');
-
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert('Please select at least one audio file');
-                return;
-            }
-
-            const files = Array.from(fileInput.files);
-            const sharedTags = tagsInput.value
-                .split(',')
-                .map(tag => tag.trim().toLowerCase())
-                .filter(tag => tag.length > 0);
-
-            try {
-                statusDiv.textContent = `Uploading ${files.length} file(s)...`;
-                let successCount = 0;
-
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    statusDiv.textContent = `Uploading ${i + 1}/${files.length}: ${file.name}`;
-
-                    // Auto-extract tags from filename
-                    const extracted = extractTagsFromFilename(file.name);
-
-                    // Combine auto-tags + shared tags (remove duplicates)
-                    const allTags = [...new Set([...extracted.tags, ...sharedTags])];
-
-                    // Get audio length
-                    const length = await getAudioDuration(file);
-
-                    // Upload file to Supabase Storage
-                    const fileName = `${Date.now()}-${i}-${file.name}`;
-                    const { data: uploadData, error: uploadError } = await supabase.storage
-                        .from('audio-files')
-                        .upload(fileName, file);
-
-                    if (uploadError) throw uploadError;
-
-                    // Get public URL
-                    const { data: urlData } = supabase.storage
-                        .from('audio-files')
-                        .getPublicUrl(fileName);
-
-                    // Save metadata to database
-                    const { data: dbData, error: dbError } = await supabase
-                        .from('audio_files')
-                        .insert([{
-                            name: file.name,
-                            file_url: urlData.publicUrl,
-                            tags: allTags,
-                            bpm: extracted.bpm,
-                            key: extracted.key,
-                            length: length
-                        }])
-                        .select();
-
-                    if (dbError) throw dbError;
-                    successCount++;
-                }
-
-                // Reload data
-                await loadData();
-
-                // Clear inputs
-                fileInput.value = '';
-                tagsInput.value = '';
-
-                statusDiv.textContent = `✅ Successfully uploaded ${successCount} file(s)!`;
-                setTimeout(() => { statusDiv.textContent = ''; }, 3000);
-            } catch (error) {
-                console.error('Error uploading files:', error);
-                statusDiv.textContent = `❌ Error uploading files. Check console for details.`;
-                statusDiv.style.color = '#dc3545';
-            }
-        }
+        // Upload functions moved to fileProcessor.js
+        // - performUpload()
+        // - uploadAudio()
 
         // Get all unique tags with counts, sorted by count (highest first)
         // Tag management functions (moved to tagManager.js)
@@ -6010,7 +5736,16 @@ window.closeEditTagsModal = () => TagEditModal.close({
 });
 window.saveEditedTags = () => TagEditModal.save(
     {
-        performUpload,
+        performUpload: (files, tags) => FileProcessor.performUpload(files, tags, {
+            supabase,
+            loadData,
+            closeModal: TagEditModal.close,
+            setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+            setSearchQuery: (query) => { searchQuery = query; },
+            filters,
+            renderTags,
+            renderFiles
+        }),
         runSelectedProcessing,
         loadData,
         renderTags,

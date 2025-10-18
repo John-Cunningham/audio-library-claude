@@ -216,49 +216,19 @@
 
         // Load and sync all stems for a file
         async function loadStems(parentFileId, autoplay = true) {
-            console.log(`Loading stems for file ${parentFileId}...`);
+            const result = await StemPlayerManager.loadStems(parentFileId, {
+                allStemFiles,
+                stemWavesurfers
+            }, WaveSurfer, autoplay);
 
-            // Destroy any existing stems
-            destroyAllStems();
-
-            // Phase 4 Fix 1: Use preloaded stems instead of fetching
-            const stems = allStemFiles[parentFileId] || {};
-            stemFiles = stems;
-
-            // Check if we have all 4 stems
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-            const missingStems = stemTypes.filter(type => !stems[type]);
-
-            if (missingStems.length > 0) {
-                console.warn(`Missing stems: ${missingStems.join(', ')}`);
-                return false; // Don't load stems if any are missing
+            if (result.success) {
+                stemWavesurfers = result.stemWavesurfers;
+                stemFiles = result.stemFiles;
+                // Sync stems with main WaveSurfer events
+                syncStemsWithMain(autoplay);
             }
 
-            // Create WaveSurfer instance for each stem
-            stemTypes.forEach(stemType => {
-                stemWavesurfers[stemType] = createStemWaveSurfer(stemType);
-            });
-
-            // Load audio for each stem
-            const loadPromises = stemTypes.map(stemType => {
-                return new Promise((resolve) => {
-                    const stemWS = stemWavesurfers[stemType];
-                    stemWS.on('ready', () => {
-                        console.log(`${stemType} stem ready`);
-                        resolve();
-                    });
-                    stemWS.load(stems[stemType].file_url);
-                });
-            });
-
-            // Wait for all stems to be ready
-            await Promise.all(loadPromises);
-            console.log('All stems loaded and ready');
-
-            // Sync stems with main WaveSurfer events
-            syncStemsWithMain(autoplay);
-
-            return true;
+            return result.success;
         }
 
         // Sync all stem WaveSurfers with main WaveSurfer

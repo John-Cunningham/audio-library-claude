@@ -13,6 +13,7 @@
         import * as TagEditModal from '../components/tagEditModal.js';
         import * as FileProcessor from './fileProcessor.js';
         import * as FileListRenderer from '../views/fileListRenderer.js';
+        import * as BatchOperations from './batchOperations.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -836,102 +837,12 @@
         // saveEditedTags() moved to tagEditModal.js
         // Now uses TagEditModal.save() with callbacks and state
 
-        // Run selected processing tasks with progress indication
-        async function runSelectedProcessing(fileIds, options) {
-            const filesToProcess = fileIds.map(id => audioFiles.find(f => f.id === id)).filter(f => f);
-            const totalFiles = filesToProcess.length;
-
-            if (totalFiles === 0) return;
-
-            // Mark files as processing
-            filesToProcess.forEach(file => processingFiles.add(file.id));
-            FileListRenderer.render(); // Re-render to show spinners
-
-            // No polling needed - we refresh after each file completes
-
-            // Build task list description
-            let tasks = [];
-            if (options.bpmKey) tasks.push('BPM/Key');
-            if (options.instruments) tasks.push('Instruments');
-            if (options.chords) tasks.push('Chords');
-            if (options.beatmap) tasks.push('Beatmap');
-            if (options.stems) tasks.push('Stems');
-
-            const taskList = tasks.join(', ');
-
-            // Show progress bar
-            ProgressBar.show(`Processing: ${filesToProcess[0].name}`, 0, totalFiles);
-
-            for (let i = 0; i < filesToProcess.length; i++) {
-                const file = filesToProcess[i];
-
-                // Update progress
-                ProgressBar.update(i + 1, totalFiles, `Processing (${taskList}): ${file.name}`);
-
-                // Estimate time based on what's being processed
-                let estimatedTime = 0;
-                if (options.bpmKey) estimatedTime += 15;
-                if (options.instruments || options.chords || options.beatmap) estimatedTime += 15;
-                if (options.stems) estimatedTime += 120;
-
-                // Start animation
-                ProgressBar.startAnimation(estimatedTime);
-
-                try {
-                    // Call Railway webhook for on-demand processing
-                    const response = await fetch('https://web-production-bcf6c.up.railway.app/process-existing', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            file_id: file.id,
-                            file_url: file.file_url,
-                            file_name: file.name,
-                            options: {
-                                bpm_key: options.bpmKey,
-                                instruments: options.instruments,
-                                chords: options.chords,
-                                beatmap: options.beatmap,
-                                stems: options.stems,
-                                auto_tag: options.auto_tag,
-                                convert_to_mp3: options.convert_to_mp3
-                            }
-                        })
-                    });
-
-                    const result = await response.json();
-
-                    if (result.status === 'success') {
-                        console.log(`✓ Processing completed: ${file.name}`, result.result);
-
-                        // Remove from processing set
-                        processingFiles.delete(file.id);
-
-                        // Reload data for this file to get updated BPM/key/etc
-                        await loadData();
-                    } else {
-                        console.error(`✗ Processing error: ${file.name}`, result.error || result.message);
-                        // Still remove from processing on error
-                        processingFiles.delete(file.id);
-                    }
-
-                    ProgressBar.complete();
-                } catch (error) {
-                    console.error(`✗ Processing error: ${file.name}`, error);
-                    // Remove from processing on error
-                    processingFiles.delete(file.id);
-                    await loadData(); // Refresh to remove hourglass
-                    ProgressBar.complete();
-                }
-            }
-
-            // Final progress
-            ProgressBar.update(totalFiles, totalFiles, 'Complete!');
-            ProgressBar.complete();
-
-            setTimeout(() => {
-                ProgressBar.hide();
-            }, 1500);
-        }
+        // Batch operations moved to batchOperations.js
+        // - runSelectedProcessing()
+        // - deleteFile()
+        // - batchDelete()
+        // - batchDetect()
+        // - batchSeparateStems()
 
         // Upload functions moved to fileProcessor.js
         // - performUpload()
@@ -4819,232 +4730,7 @@
             loadAudio(filteredFiles[prevIndex].id, !userPaused); // Respect pause state
         }
 
-        // Delete file
-        async function deleteFile(fileId, event) {
-            event.stopPropagation();
-
-            if (!confirm('Are you sure you want to delete this file?')) return;
-
-            try {
-                const file = audioFiles.find(f => f.id === fileId);
-                if (!file) return;
-
-                // Extract filename from URL
-                const urlParts = file.file_url.split('/');
-                const fileName = urlParts[urlParts.length - 1];
-
-                // Delete from storage
-                const { error: storageError } = await supabase.storage
-                    .from('audio-files')
-                    .remove([fileName]);
-
-                if (storageError) throw storageError;
-
-                // Delete from database
-                const { error: dbError } = await supabase
-                    .from('audio_files')
-                    .delete()
-                    .eq('id', fileId);
-
-                if (dbError) throw dbError;
-
-                // Update UI
-                if (currentFileId === fileId) {
-                    currentFileId = null;
-                    if (wavesurfer) {
-                        wavesurfer.destroy();
-                        wavesurfer = null;
-                    }
-                    document.getElementById('playerFilename').textContent = 'No file selected';
-                    document.getElementById('playerTime').textContent = '0:00 / 0:00';
-                    document.getElementById('playPauseIcon').textContent = '▶';
-                }
-
-                // Clean up mini waveform
-                MiniWaveform.destroy(fileId);
-
-                // Reload data
-                await loadData();
-            } catch (error) {
-                console.error('Error deleting file:', error);
-                alert('Error deleting file. Check console for details.');
-            }
-        }
-
-        // Batch delete selected files
-        async function batchDelete() {
-            if (selectedFiles.size === 0) return;
-
-            if (!confirm(`Are you sure you want to delete ${selectedFiles.size} file(s)?`)) return;
-
-            try {
-                const filesToDelete = Array.from(selectedFiles);
-
-                for (let fileId of filesToDelete) {
-                    const file = audioFiles.find(f => f.id === fileId);
-                    if (!file) continue;
-
-                    // Extract filename from URL
-                    const urlParts = file.file_url.split('/');
-                    const fileName = urlParts[urlParts.length - 1];
-
-                    // Delete from storage
-                    await supabase.storage
-                        .from('audio-files')
-                        .remove([fileName]);
-
-                    // Delete from database
-                    await supabase
-                        .from('audio_files')
-                        .delete()
-                        .eq('id', fileId);
-                }
-
-                // Clear selection
-                selectedFiles.clear();
-
-                // Clear player if current file was deleted
-                if (filesToDelete.includes(currentFileId)) {
-                    currentFileId = null;
-                    if (wavesurfer) {
-                        wavesurfer.destroy();
-                        wavesurfer = null;
-                    }
-                    document.getElementById('playerFilename').textContent = 'No file selected';
-                    document.getElementById('playerTime').textContent = '0:00 / 0:00';
-                    document.getElementById('playPauseIcon').textContent = '▶';
-                }
-
-                // Clean up mini waveforms for deleted files
-                filesToDelete.forEach(fileId => {
-                    MiniWaveform.destroy(fileId);
-                });
-
-                // Reload data
-                await loadData();
-                alert(`Successfully deleted ${filesToDelete.length} file(s)`);
-            } catch (error) {
-                console.error('Error batch deleting files:', error);
-                alert('Error deleting files. Check console for details.');
-            }
-        }
-
-        // Modal state variables and open/close functions moved to tagEditModal.js
-
-        // Batch detect BPM/Key/Instruments using Music.ai
-        async function batchDetect() {
-            if (selectedFiles.size === 0) return;
-
-            const filesToProcess = Array.from(selectedFiles).map(id => audioFiles.find(f => f.id === id));
-            const totalFiles = filesToProcess.length;
-
-            if (!confirm(`Detect BPM, Key, and Instruments for ${totalFiles} file(s)?`)) return;
-
-            // Show progress bar
-            ProgressBar.show(`Detecting: ${filesToProcess[0].name}`, 0, totalFiles);
-
-            for (let i = 0; i < filesToProcess.length; i++) {
-                const file = filesToProcess[i];
-
-                // Update progress
-                ProgressBar.update(i + 1, totalFiles, `Detecting: ${file.name}`);
-
-                // Start animation (estimate 15 seconds per file)
-                ProgressBar.startAnimation(15);
-
-                try {
-                    // Call Python script
-                    const response = await fetch('http://localhost:8000/detect', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            audio_file_id: file.id,
-                            file_url: file.file_url,
-                            filename: file.name
-                        })
-                    });
-
-                    const result = await response.json();
-
-                    if (result.status === 'complete') {
-                        console.log(`✓ Completed: ${file.name}`, result.data);
-                        ProgressBar.complete();
-                    } else if (result.status === 'error') {
-                        console.error(`✗ Error: ${file.name}`, result.message);
-                        ProgressBar.complete();
-                    }
-                } catch (error) {
-                    console.error(`✗ Error: ${file.name}`, error);
-                    ProgressBar.complete();
-                }
-            }
-
-            // Final progress
-            ProgressBar.update(totalFiles, totalFiles, 'Complete!');
-            ProgressBar.complete();
-
-            setTimeout(async () => {
-                ProgressBar.hide();
-                await loadData(); // Reload to show updated data
-            }, 1500);
-        }
-
-        // Batch separate stems using Music.ai
-        async function batchSeparateStems() {
-            if (selectedFiles.size === 0) return;
-
-            const filesToProcess = Array.from(selectedFiles).map(id => audioFiles.find(f => f.id === id));
-            const totalFiles = filesToProcess.length;
-
-            if (!confirm(`Separate stems for ${totalFiles} file(s)? This may take several minutes per file.`)) return;
-
-            // Show progress bar
-            ProgressBar.show(`Separating: ${filesToProcess[0].name}`, 0, totalFiles);
-
-            for (let i = 0; i < filesToProcess.length; i++) {
-                const file = filesToProcess[i];
-
-                // Update progress
-                ProgressBar.update(i + 1, totalFiles, `Separating: ${file.name}`);
-
-                // Start animation (estimate 120 seconds per file for stems)
-                ProgressBar.startAnimation(120);
-
-                try {
-                    // Call Python script (process_stems.py)
-                    const response = await fetch('http://localhost:8000/stems', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            audio_file_id: file.id,
-                            file_url: file.file_url
-                        })
-                    });
-
-                    const result = await response.json();
-
-                    if (result.status === 'complete') {
-                        console.log(`✓ Completed: ${file.name}`, result.stems);
-                        ProgressBar.complete();
-                    } else if (result.status === 'error') {
-                        console.error(`✗ Error: ${file.name}`, result.message);
-                        ProgressBar.complete();
-                    }
-                } catch (error) {
-                    console.error(`✗ Error: ${file.name}`, error);
-                    ProgressBar.complete();
-                }
-            }
-
-            // Final progress
-            ProgressBar.update(totalFiles, totalFiles, 'Complete!');
-            ProgressBar.complete();
-
-            setTimeout(async () => {
-                ProgressBar.hide();
-                await loadData(); // Reload to show updated data
-            }, 1500);
-        }
+        // Delete and batch operation functions moved to batchOperations.js
 
         // Progress bar functions moved to utils/progressBar.js
 
@@ -5164,6 +4850,32 @@
             }
         );
 
+        // Initialize batch operations (moved to batchOperations.js)
+        BatchOperations.init(
+            // Callbacks
+            {
+                loadData,
+                clearPlayer: () => {
+                    currentFileId = null;
+                    if (wavesurfer) {
+                        wavesurfer.destroy();
+                        wavesurfer = null;
+                    }
+                    document.getElementById('playerFilename').textContent = 'No file selected';
+                    document.getElementById('playerTime').textContent = '0:00 / 0:00';
+                    document.getElementById('playPauseIcon').textContent = '▶';
+                }
+            },
+            // State getters
+            {
+                getSupabase: () => supabase,
+                getAudioFiles: () => audioFiles,
+                getSelectedFiles: () => selectedFiles,
+                getCurrentFileId: () => currentFileId,
+                getProcessingFiles: () => processingFiles
+            }
+        );
+
         // Initialize on load
         loadData();
 
@@ -5199,10 +4911,10 @@ window.deselectAllTags = deselectAllTags;
 window.openUploadFlow = openUploadFlow;
 window.selectAll = () => FileListRenderer.selectAll();
 window.deselectAll = () => FileListRenderer.deselectAll();
-window.batchDelete = batchDelete;
+window.batchDelete = () => BatchOperations.batchDelete();
 window.batchEditTags = () => TagEditModal.open(selectedFiles, audioFiles);
-window.batchDetect = batchDetect;
-window.batchSeparateStems = batchSeparateStems;
+window.batchDetect = () => BatchOperations.batchDetect();
+window.batchSeparateStems = () => BatchOperations.batchSeparateStems();
 window.closeEditTagsModal = () => TagEditModal.close({
     setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
     setSearchQuery: (query) => { searchQuery = query; },
@@ -5222,7 +4934,7 @@ window.saveEditedTags = () => TagEditModal.save(
             renderTags,
             renderFiles: FileListRenderer.render
         }),
-        runSelectedProcessing,
+        runSelectedProcessing: BatchOperations.runSelectedProcessing,
         loadData,
         renderTags,
         renderFiles: FileListRenderer.render

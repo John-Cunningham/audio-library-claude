@@ -107,6 +107,20 @@ export function getAudioDuration(file) {
     });
 }
 
+/**
+ * Sanitize filename for Supabase Storage
+ * Removes/replaces characters that aren't allowed in storage keys
+ *
+ * @param {string} filename - Original filename
+ * @returns {string} Sanitized filename safe for Supabase Storage
+ */
+function sanitizeFilename(filename) {
+    return filename
+        .replace(/\s+/g, '_')           // Replace spaces with underscores
+        .replace(/[[\](){}]/g, '')      // Remove brackets and parentheses
+        .replace(/[^a-zA-Z0-9._-]/g, '_'); // Replace other special chars with underscores
+}
+
 // ===================================================================
 // FILE UPLOAD
 // ===================================================================
@@ -201,8 +215,9 @@ export async function performUpload(files, sharedTags, callbacks) {
             // Update modal status - Uploading
             modalFileCount.textContent = `Uploading ${i + 1}/${files.length}: ${file.name}`;
 
-            // Upload file to Supabase Storage
-            const fileName = `${Date.now()}-${i}-${file.name}`;
+            // Upload file to Supabase Storage (sanitize filename for valid storage key)
+            const sanitizedName = sanitizeFilename(file.name);
+            const fileName = `${Date.now()}-${i}-${sanitizedName}`;
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('audio-files')
                 .upload(fileName, file);
@@ -312,8 +327,9 @@ export async function uploadAudio(callbacks) {
             // Get audio length
             const length = await getAudioDuration(file);
 
-            // Upload file to Supabase Storage
-            const fileName = `${Date.now()}-${i}-${file.name}`;
+            // Upload file to Supabase Storage (sanitize filename for valid storage key)
+            const sanitizedName = sanitizeFilename(file.name);
+            const fileName = `${Date.now()}-${i}-${sanitizedName}`;
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('audio-files')
                 .upload(fileName, file);

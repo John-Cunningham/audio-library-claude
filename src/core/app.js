@@ -9,6 +9,7 @@
         import { initKeyboardShortcuts } from './keyboardShortcuts.js';
         import * as ProgressBar from '../utils/progressBar.js';
         import * as MiniWaveform from '../components/miniWaveform.js';
+        import * as TagManager from './tagManager.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -94,29 +95,15 @@
         let sortOrder = 'desc'; // 'asc' or 'desc'
 
         // Set tag click mode (for mobile)
+        // Set tag mode (moved to tagManager.js)
         function setTagMode(mode) {
-            // If clicking the same mode, deselect it
-            if (currentTagMode === mode) {
-                currentTagMode = null;
-            } else {
-                currentTagMode = mode;
-            }
-
-            // Update button styles
-            document.getElementById('modeCanHave').style.background = currentTagMode === 'canHave' ? '#3b82f6' : 'transparent';
-            document.getElementById('modeCanHave').style.color = currentTagMode === 'canHave' ? 'white' : '#3b82f6';
-
-            document.getElementById('modeMustHave').style.background = currentTagMode === 'mustHave' ? '#10b981' : 'transparent';
-            document.getElementById('modeMustHave').style.color = currentTagMode === 'mustHave' ? 'white' : '#10b981';
-
-            document.getElementById('modeExclude').style.background = currentTagMode === 'exclude' ? '#ef4444' : 'transparent';
-            document.getElementById('modeExclude').style.color = currentTagMode === 'exclude' ? 'white' : '#ef4444';
+            TagManager.setMode(mode);
         }
 
         // Handle search input
         function handleSearch(query) {
             searchQuery = query;
-            renderTags(searchQuery);
+            TagManager.render(searchQuery);
             renderFiles();
         }
 
@@ -1311,218 +1298,27 @@
         }
 
         // Get all unique tags with counts, sorted by count (highest first)
-        function getAllTags() {
-            const tagCounts = {};
-            audioFiles.forEach(file => {
-                file.tags.forEach(tag => {
-                    tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-                });
-            });
-
-            // Sort by count (descending), then alphabetically
-            return Object.entries(tagCounts)
-                .sort((a, b) => {
-                    if (b[1] !== a[1]) return b[1] - a[1]; // Sort by count
-                    return a[0].localeCompare(b[0]); // Then alphabetically
-                })
-                .map(([tag, count]) => ({ tag, count }));
-        }
-
-        // Get count for a specific tag (used for filtered counts)
-        function getTagCount(tag, files) {
-            return files.filter(file => file.tags.includes(tag)).length;
-        }
-
-        // Handle tag click
+        // Tag management functions (moved to tagManager.js)
         function handleTagClick(tag, event) {
-            event.preventDefault();
-
-            // Clear search bar when clicking a tag
-            searchQuery = '';
-            document.getElementById('searchBar').value = '';
-
-            // Determine mode: modifier keys override currentTagMode for desktop
-            let mode = currentTagMode;
-            if (event.altKey) {
-                mode = 'exclude';
-            } else if (event.shiftKey) {
-                mode = 'mustHave';
-            } else if (currentTagMode === null) {
-                mode = 'canHave'; // Default to canHave if no mode selected
-            }
-
-            // Check if tag is already in this mode - if so, remove it
-            const element = event.currentTarget;
-            const isAlreadyInMode =
-                (mode === 'canHave' && filters.canHave.has(tag)) ||
-                (mode === 'mustHave' && filters.mustHave.has(tag)) ||
-                (mode === 'exclude' && filters.exclude.has(tag));
-
-            // Remove from all filters first
-            filters.canHave.delete(tag);
-            filters.mustHave.delete(tag);
-            filters.exclude.delete(tag);
-
-            // If not already in mode, add it
-            if (!isAlreadyInMode) {
-                if (mode === 'canHave') {
-                    filters.canHave.add(tag);
-                } else if (mode === 'mustHave') {
-                    filters.mustHave.add(tag);
-                } else if (mode === 'exclude') {
-                    filters.exclude.add(tag);
-                }
-            }
-
-            renderTags();
-            renderFiles();
+            TagManager.handleClick(tag, event);
         }
 
-        // Select all visible tags (respects search filter)
         function selectAllVisibleTags() {
-            const allTags = getAllTags();
-
-            // Filter tags by search query (same logic as renderTags)
-            const filteredTags = searchQuery
-                ? allTags.filter(({ tag }) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-                : allTags;
-
-            // Add all filtered tags to CAN HAVE
-            filteredTags.forEach(({ tag }) => {
-                filters.canHave.add(tag);
-            });
-
-            // Clear search bar after selecting tags
-            searchQuery = '';
-            document.getElementById('searchBar').value = '';
-
-            renderTags();
-            renderFiles();
+            TagManager.selectAllVisible();
         }
 
-        // Deselect all tags
         function deselectAllTags() {
-            filters.canHave.clear();
-            filters.mustHave.clear();
-            filters.exclude.clear();
-
-            renderTags();
-            renderFiles();
+            TagManager.deselectAll();
         }
 
-        // Render tags
+        // Render tags (moved to tagManager.js)
         function renderTags(searchQuery = '') {
-            const container = document.getElementById('tagsContainer');
-            const allTags = getAllTags();
-
-            if (allTags.length === 0) {
-                container.innerHTML = '<div class="empty-state" style="width: 100%; padding: 20px;">No tags yet. Upload audio files with tags to get started.</div>';
-                updateActiveFiltersDisplay();
-                return;
-            }
-
-            // Filter tags by search query
-            const filteredTags = searchQuery
-                ? allTags.filter(({ tag }) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-                : allTags;
-
-            if (filteredTags.length === 0) {
-                container.innerHTML = '<div class="empty-state" style="width: 100%; padding: 20px;">No tags match your search.</div>';
-                return;
-            }
-
-            // Determine if we should show filtered counts
-            // Only update counts if MUST HAVE or EXCLUDE filters are active (not CAN HAVE)
-            const shouldShowFilteredCounts = filters.mustHave.size > 0 || filters.exclude.size > 0;
-
-            let filesToCountFrom = audioFiles;
-            if (shouldShowFilteredCounts) {
-                // Get files that match MUST HAVE and EXCLUDE filters only
-                filesToCountFrom = audioFiles.filter(file => {
-                    const fileTags = new Set(file.tags);
-
-                    // Check EXCLUDE - if file has any excluded tag, filter it out
-                    for (let tag of filters.exclude) {
-                        if (fileTags.has(tag)) return false;
-                    }
-
-                    // Check MUST HAVE - file must have ALL must-have tags
-                    for (let tag of filters.mustHave) {
-                        if (!fileTags.has(tag)) return false;
-                    }
-
-                    return true;
-                });
-            }
-
-            // When searching, show all tags regardless of count
-            // When not searching, separate high-count and low-count tags
-            let html = '';
-
-            if (searchQuery) {
-                // Show all matching tags when searching
-                html = filteredTags.map(({ tag, count }) => {
-                    let className = 'tag-button';
-                    if (filters.canHave.has(tag)) className += ' can-have';
-                    if (filters.mustHave.has(tag)) className += ' must-have';
-                    if (filters.exclude.has(tag)) className += ' exclude';
-
-                    const displayCount = shouldShowFilteredCounts
-                        ? getTagCount(tag, filesToCountFrom)
-                        : count;
-
-                    return `<button class="${className}" onclick="handleTagClick('${tag}', event)">${tag} (${displayCount})</button>`;
-                }).join('');
-            } else {
-                // Not searching - separate by count
-                const highCountTags = filteredTags.filter(({ count }) => count > 1);
-                const lowCountTags = filteredTags.filter(({ count }) => count === 1);
-
-                // Show high-count tags
-                html = highCountTags.map(({ tag, count }) => {
-                    let className = 'tag-button';
-                    if (filters.canHave.has(tag)) className += ' can-have';
-                    if (filters.mustHave.has(tag)) className += ' must-have';
-                    if (filters.exclude.has(tag)) className += ' exclude';
-
-                    const displayCount = shouldShowFilteredCounts
-                        ? getTagCount(tag, filesToCountFrom)
-                        : count;
-
-                    return `<button class="${className}" onclick="handleTagClick('${tag}', event)">${tag} (${displayCount})</button>`;
-                }).join('');
-
-                // Add "more tags" pill if there are low-count tags
-                if (lowCountTags.length > 0) {
-                    const icon = showAllTags ? '−' : '+';
-                    html += `<button class="tag-button more-tags" onclick="toggleShowAllTags()" style="background: #2a2a2a; color: #fff; border: 2px solid #fff; font-weight: 600;">${lowCountTags.length} Tags (${icon})</button>`;
-                }
-
-                // Show low-count tags if showAllTags is true
-                if (showAllTags && lowCountTags.length > 0) {
-                    html += lowCountTags.map(({ tag, count }) => {
-                        let className = 'tag-button';
-                        if (filters.canHave.has(tag)) className += ' can-have';
-                        if (filters.mustHave.has(tag)) className += ' must-have';
-                        if (filters.exclude.has(tag)) className += ' exclude';
-
-                        const displayCount = shouldShowFilteredCounts
-                            ? getTagCount(tag, filesToCountFrom)
-                            : count;
-
-                        return `<button class="${className}" onclick="handleTagClick('${tag}', event)">${tag} (${displayCount})</button>`;
-                    }).join('');
-                }
-            }
-
-            container.innerHTML = html;
-            updateActiveFiltersDisplay();
+            TagManager.render(searchQuery);
         }
 
-        // Toggle showing all tags (including low-count ones)
+        // Toggle showing all tags (moved to tagManager.js)
         function toggleShowAllTags() {
-            showAllTags = !showAllTags;
-            renderTags(searchQuery);
+            TagManager.toggleShowAll();
         }
 
         // Get all unique BPMs with counts
@@ -1621,23 +1417,6 @@
             container.innerHTML = html;
         }
 
-        // Update active filters display
-        function updateActiveFiltersDisplay() {
-            const display = document.getElementById('activeFilters');
-            const parts = [];
-
-            if (filters.canHave.size > 0) {
-                parts.push(`CAN HAVE: ${Array.from(filters.canHave).join(', ')}`);
-            }
-            if (filters.mustHave.size > 0) {
-                parts.push(`MUST HAVE: ${Array.from(filters.mustHave).join(', ')}`);
-            }
-            if (filters.exclude.size > 0) {
-                parts.push(`EXCLUDE: ${Array.from(filters.exclude).join(', ')}`);
-            }
-
-            display.textContent = parts.length > 0 ? parts.join(' | ') : 'No active filters';
-        }
 
         // Filter files based on current tag filters and search query
         function filterFiles() {
@@ -6523,6 +6302,25 @@
             getWavesurfer: () => wavesurfer
         });
 
+        // Initialize tag manager (moved to tagManager.js)
+        TagManager.init(
+            // Callbacks
+            {
+                renderFiles
+            },
+            // State getters/setters
+            {
+                getAudioFiles: () => audioFiles,
+                getFilters: () => filters,
+                getShowAllTags: () => showAllTags,
+                setShowAllTags: (val) => { showAllTags = val; },
+                getCurrentTagMode: () => currentTagMode,
+                setCurrentTagMode: (val) => { currentTagMode = val; },
+                getSearchQuery: () => searchQuery,
+                setSearchQuery: (val) => { searchQuery = val; }
+            }
+        );
+
         // Initialize on load
         loadData();
 
@@ -6536,6 +6334,10 @@ window.toggleShowAllTags = toggleShowAllTags;
 window.handleBPMClick = handleBPMClick;
 window.handleKeyClick = handleKeyClick;
 window.handleSort = handleSort;
+
+// Expose TagManager functions to window (used by onclick handlers in rendered HTML)
+window.tagManagerHandleClick = (tag, event) => TagManager.handleClick(tag, event);
+window.tagManagerToggleShowAll = () => TagManager.toggleShowAll();
 window.toggleFileSelection = toggleFileSelection;
 window.openStemsViewer = openStemsViewer;
 window.generateStems = generateStems;

@@ -25,6 +25,7 @@
         import * as StemPlayerManager from '../components/stemPlayerManager.js';
         import * as StemLegacyPlayer from '../components/stemLegacyPlayer.js';
         import * as StemState from '../state/stemStateManager.js';
+        import * as LoopState from '../state/loopStateManager.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -67,27 +68,42 @@
         let markerFrequency = 'bar'; // 'bar8', 'bar4', 'bar2', 'bar', 'halfbar', 'beat'
         let currentMarkers = []; // Store current marker positions for click-to-snap
 
-        // Cycle mode state (combined edit + active loop)
-        let loopStart = null; // Start time in seconds (or null if not set)
-        let loopEnd = null; // End time in seconds (or null if not set)
-        let cycleMode = false; // When true: can edit loop AND loop is active
-        let nextClickSets = 'start'; // Track which point next click sets: 'start' or 'end'
-        let immediateJump = 'off'; // Jump mode: 'off', 'on' (immediate), or 'clock' (quantized to next beat)
-        let pendingJumpTarget = null; // Target time for clock-quantized jump
-        let seekOnClick = 'off'; // Seek mode: 'off', 'seek' (immediate), or 'clock' (jump to loop start after setting end)
-        let loopControlsExpanded = false; // Whether loop control buttons are expanded
-        let loopFadesEnabled = false; // Whether to apply fades at loop boundaries
-        let fadeTime = 0.015; // Fade duration in seconds (15ms default)
-        let isMuted = false; // Track mute state
-        let volumeBeforeMute = 100; // Store volume before muting
-        let userPaused = false; // Track if user manually paused (preserve pause state when scrolling files)
-        let preserveLoopOnFileChange = true; // Whether to keep loop points when switching files (default ON)
-        let preservedLoopStartBar = null; // Bar number for preserved loop start (e.g., bar 17)
-        let preservedLoopEndBar = null; // Bar number for preserved loop end (e.g., bar 25)
-        let preservedCycleMode = false; // Cycle mode state to preserve across file changes
-        let preservedPlaybackPositionInLoop = null; // Relative position within loop (0.0 to 1.0) for seamless swap
-        let bpmLockEnabled = false; // Whether to lock BPM across file changes
-        let lockedBPM = null; // The BPM to maintain when switching files
+        // ============================================
+        // LOOP STATE MANAGEMENT - HYBRID APPROACH
+        // ============================================
+        // All loop state (17 variables) extracted to src/state/loopStateManager.js
+        // This enables multi-view architecture where loop state persists across Library/Galaxy/Sphere views
+        //
+        // HYBRID APPROACH:
+        // - Local variables act as "caches" for performance
+        // - Changes are synced TO LoopState (single source of truth)
+        // - On load, initialize FROM LoopState
+        //
+        // This approach ensures compatibility while enabling multi-view persistence
+        // ============================================
+
+        // Initialize local cache variables from LoopState on startup
+        let loopStart = LoopState.getLoopStart();
+        let loopEnd = LoopState.getLoopEnd();
+        let cycleMode = LoopState.getCycleMode();
+        let nextClickSets = LoopState.getNextClickSets();
+        let immediateJump = LoopState.getImmediateJump();
+        let pendingJumpTarget = LoopState.getPendingJumpTarget();
+        let seekOnClick = LoopState.getSeekOnClick();
+        let loopControlsExpanded = LoopState.getLoopControlsExpanded();
+        let loopFadesEnabled = LoopState.getLoopFadesEnabled();
+        let fadeTime = LoopState.getFadeTime();
+        let preserveLoopOnFileChange = LoopState.getPreserveLoopOnFileChange();
+        let preservedLoopStartBar = LoopState.getPreservedLoopStartBar();
+        let preservedLoopEndBar = LoopState.getPreservedLoopEndBar();
+        let preservedCycleMode = LoopState.getPreservedCycleMode();
+        let preservedPlaybackPositionInLoop = LoopState.getPreservedPlaybackPositionInLoop();
+        let bpmLockEnabled = LoopState.getBpmLockEnabled();
+        let lockedBPM = LoopState.getLockedBPM();
+
+        let isMuted = false; // Track mute state (not part of loop state)
+        let volumeBeforeMute = 100; // Store volume before muting (not part of loop state)
+        let userPaused = false; // Track if user manually paused (not part of loop state)
 
         // Loop action recorder - MOVED TO actionRecorder.js (Phase 10a)
         // All action recording state now managed by ActionRecorder service
@@ -450,6 +466,96 @@
             StemState.setCurrentParentFileBPM(bpm);
         }
 
+        // ============================================
+        // LOOP STATE SYNC FUNCTIONS
+        // ============================================
+        // Helper functions to sync local cache to LoopState (single source of truth)
+
+        function syncLoopStartToState(value) {
+            loopStart = value;
+            LoopState.setLoopStart(value);
+        }
+
+        function syncLoopEndToState(value) {
+            loopEnd = value;
+            LoopState.setLoopEnd(value);
+        }
+
+        function syncCycleModeToState(value) {
+            cycleMode = value;
+            LoopState.setCycleMode(value);
+        }
+
+        function syncNextClickSetsToState(value) {
+            nextClickSets = value;
+            LoopState.setNextClickSets(value);
+        }
+
+        function syncImmediateJumpToState(value) {
+            immediateJump = value;
+            LoopState.setImmediateJump(value);
+        }
+
+        function syncPendingJumpTargetToState(value) {
+            pendingJumpTarget = value;
+            LoopState.setPendingJumpTarget(value);
+        }
+
+        function syncSeekOnClickToState(value) {
+            seekOnClick = value;
+            LoopState.setSeekOnClick(value);
+        }
+
+        function syncLoopControlsExpandedToState(value) {
+            loopControlsExpanded = value;
+            LoopState.setLoopControlsExpanded(value);
+        }
+
+        function syncLoopFadesEnabledToState(value) {
+            loopFadesEnabled = value;
+            LoopState.setLoopFadesEnabled(value);
+        }
+
+        function syncFadeTimeToState(value) {
+            fadeTime = value;
+            LoopState.setFadeTime(value);
+        }
+
+        function syncPreserveLoopOnFileChangeToState(value) {
+            preserveLoopOnFileChange = value;
+            LoopState.setPreserveLoopOnFileChange(value);
+        }
+
+        function syncPreservedLoopStartBarToState(value) {
+            preservedLoopStartBar = value;
+            LoopState.setPreservedLoopStartBar(value);
+        }
+
+        function syncPreservedLoopEndBarToState(value) {
+            preservedLoopEndBar = value;
+            LoopState.setPreservedLoopEndBar(value);
+        }
+
+        function syncPreservedCycleModeToState(value) {
+            preservedCycleMode = value;
+            LoopState.setPreservedCycleMode(value);
+        }
+
+        function syncPreservedPlaybackPositionInLoopToState(value) {
+            preservedPlaybackPositionInLoop = value;
+            LoopState.setPreservedPlaybackPositionInLoop(value);
+        }
+
+        function syncBpmLockEnabledToState(value) {
+            bpmLockEnabled = value;
+            LoopState.setBpmLockEnabled(value);
+        }
+
+        function syncLockedBPMToState(value) {
+            lockedBPM = value;
+            LoopState.setLockedBPM(value);
+        }
+
         // Phase 1: Pre-load stems silently in background when file loads
         async function preloadMultiStemWavesurfers(fileId) {
             const result = await StemPlayerManager.preloadMultiStemWavesurfers(
@@ -789,9 +895,9 @@
                 stemLoopStates: window.stemLoopStates
             });
 
-            // Apply results to app.js state
-            cycleMode = result.cycleMode;
-            nextClickSets = result.nextClickSets;
+            // Apply results to app.js state (sync to LoopState)
+            syncCycleModeToState(result.cycleMode);
+            syncNextClickSetsToState(result.nextClickSets);
 
             // Update UI
             updateLoopVisuals();
@@ -799,24 +905,24 @@
 
         function toggleSeekOnClick() {
             const result = LoopControls.toggleSeekOnClick({ seekOnClick });
-            seekOnClick = result.seekOnClick;
+            syncSeekOnClickToState(result.seekOnClick);
             updateLoopVisuals();
         }
 
         function resetLoop() {
             const result = LoopControls.resetLoop();
-            loopStart = result.loopStart;
-            loopEnd = result.loopEnd;
-            cycleMode = result.cycleMode;
-            nextClickSets = result.nextClickSets;
+            syncLoopStartToState(result.loopStart);
+            syncLoopEndToState(result.loopEnd);
+            syncCycleModeToState(result.cycleMode);
+            syncNextClickSetsToState(result.nextClickSets);
             updateLoopVisuals();
         }
 
         function clearLoopKeepCycle() {
             const result = LoopControls.clearLoopKeepCycle();
-            loopStart = result.loopStart;
-            loopEnd = result.loopEnd;
-            nextClickSets = result.nextClickSets;
+            syncLoopStartToState(result.loopStart);
+            syncLoopEndToState(result.loopEnd);
+            syncNextClickSetsToState(result.nextClickSets);
             // Keep cycleMode = true so user can immediately set new loop
             updateLoopVisuals();
         }
@@ -845,7 +951,7 @@
 
         function toggleLoopControlsExpanded() {
             const result = LoopControls.toggleLoopControlsExpanded({ loopControlsExpanded });
-            loopControlsExpanded = result.loopControlsExpanded;
+            syncLoopControlsExpandedToState(result.loopControlsExpanded);
             updateLoopVisuals();
         }
 
@@ -891,18 +997,19 @@
 
         function toggleImmediateJump() {
             const result = LoopControls.toggleImmediateJump({ immediateJump });
-            immediateJump = result.immediateJump;
+            syncImmediateJumpToState(result.immediateJump);
             updateLoopVisuals();
         }
 
         function toggleLoopFades() {
             const result = LoopControls.toggleLoopFades({ loopFadesEnabled });
-            loopFadesEnabled = result.loopFadesEnabled;
+            syncLoopFadesEnabledToState(result.loopFadesEnabled);
             updateLoopVisuals();
         }
 
         function setFadeTime(milliseconds) {
-            fadeTime = milliseconds / 1000; // Convert to seconds
+            const timeInSeconds = milliseconds / 1000; // Convert to seconds
+            syncFadeTimeToState(timeInSeconds);
             console.log(`Fade time: ${milliseconds}ms`);
 
             // Update display
@@ -914,7 +1021,7 @@
 
         function togglePreserveLoop() {
             const result = LoopControls.togglePreserveLoop({ preserveLoopOnFileChange });
-            preserveLoopOnFileChange = result.preserveLoopOnFileChange;
+            syncPreserveLoopOnFileChangeToState(result.preserveLoopOnFileChange);
             updateLoopVisuals();
         }
 
@@ -925,8 +1032,8 @@
                 currentFileId
             });
 
-            bpmLockEnabled = result.bpmLockEnabled;
-            lockedBPM = result.lockedBPM;
+            syncBpmLockEnabledToState(result.bpmLockEnabled);
+            syncLockedBPMToState(result.lockedBPM);
             updateLoopVisuals();
         }
 
@@ -1001,8 +1108,8 @@
             }, wavesurfer);
 
             if (result) {
-                loopStart = result.loopStart;
-                loopEnd = result.loopEnd;
+                syncLoopStartToState(result.loopStart);
+                syncLoopEndToState(result.loopEnd);
                 updateLoopVisuals();
             }
         }
@@ -1013,8 +1120,8 @@
             }, wavesurfer);
 
             if (result) {
-                loopStart = result.loopStart;
-                loopEnd = result.loopEnd;
+                syncLoopStartToState(result.loopStart);
+                syncLoopEndToState(result.loopEnd);
                 updateLoopVisuals();
             }
         }
@@ -1025,7 +1132,7 @@
             }, wavesurfer);
 
             if (result) {
-                loopEnd = result.loopEnd;
+                syncLoopEndToState(result.loopEnd);
                 updateLoopVisuals();
             }
         }
@@ -1036,7 +1143,7 @@
             }, wavesurfer);
 
             if (result) {
-                loopEnd = result.loopEnd;
+                syncLoopEndToState(result.loopEnd);
                 updateLoopVisuals();
             }
         }
@@ -1048,7 +1155,7 @@
             }, wavesurfer);
 
             if (result) {
-                loopStart = result.loopStart;
+                syncLoopStartToState(result.loopStart);
                 updateLoopVisuals();
             }
         }
@@ -1059,7 +1166,7 @@
             }, wavesurfer);
 
             if (result) {
-                loopEnd = result.loopEnd;
+                syncLoopEndToState(result.loopEnd);
                 updateLoopVisuals();
             }
         }
@@ -1070,7 +1177,7 @@
             }, wavesurfer);
 
             if (result) {
-                loopStart = result.loopStart;
+                syncLoopStartToState(result.loopStart);
                 updateLoopVisuals();
             }
         }
@@ -1081,7 +1188,7 @@
             }, wavesurfer);
 
             if (result) {
-                loopEnd = result.loopEnd;
+                syncLoopEndToState(result.loopEnd);
                 updateLoopVisuals();
             }
         }
@@ -1688,7 +1795,7 @@
             recordAction,
             getAudioFiles: () => audioFiles,
             getCurrentFileId: () => currentFileId,
-            setPendingJumpTarget: (target) => { pendingJumpTarget = target; }
+            setPendingJumpTarget: (target) => { syncPendingJumpTargetToState(target); }
         });
 
         // Initialize on load
@@ -1705,13 +1812,13 @@
             getParentWaveform: () => parentWaveform,
             getParentPlayerComponent: () => parentPlayerComponent,
 
-            // Loop state
+            // Loop state (sync to LoopState on all writes)
             getLoopState: () => ({ start: loopStart, end: loopEnd, cycleMode, nextClickSets }),
             setLoopState: (state) => {
-                if (state.start !== undefined) loopStart = state.start;
-                if (state.end !== undefined) loopEnd = state.end;
-                if (state.cycleMode !== undefined) cycleMode = state.cycleMode;
-                if (state.nextClickSets !== undefined) nextClickSets = state.nextClickSets;
+                if (state.start !== undefined) syncLoopStartToState(state.start);
+                if (state.end !== undefined) syncLoopEndToState(state.end);
+                if (state.cycleMode !== undefined) syncCycleModeToState(state.cycleMode);
+                if (state.nextClickSets !== undefined) syncNextClickSetsToState(state.nextClickSets);
             },
             getPreserveLoopOnFileChange: () => preserveLoopOnFileChange,
             getPreservedLoopBars: () => ({
@@ -1721,10 +1828,10 @@
                 playbackPositionInLoop: preservedPlaybackPositionInLoop
             }),
             setPreservedLoopBars: (bars) => {
-                if (bars.startBar !== undefined) preservedLoopStartBar = bars.startBar;
-                if (bars.endBar !== undefined) preservedLoopEndBar = bars.endBar;
-                if (bars.cycleMode !== undefined) preservedCycleMode = bars.cycleMode;
-                if (bars.playbackPositionInLoop !== undefined) preservedPlaybackPositionInLoop = bars.playbackPositionInLoop;
+                if (bars.startBar !== undefined) syncPreservedLoopStartBarToState(bars.startBar);
+                if (bars.endBar !== undefined) syncPreservedLoopEndBarToState(bars.endBar);
+                if (bars.cycleMode !== undefined) syncPreservedCycleModeToState(bars.cycleMode);
+                if (bars.playbackPositionInLoop !== undefined) syncPreservedPlaybackPositionInLoopToState(bars.playbackPositionInLoop);
             },
 
             // Helpers
@@ -1736,8 +1843,12 @@
             preloadMultiStemWavesurfers,
             updateStemsButton,
 
-            // BPM lock
+            // BPM lock (sync to LoopState on writes)
             getBpmLockState: () => ({ enabled: bpmLockEnabled, lockedBPM }),
+            setBpmLockState: (state) => {
+                if (state.enabled !== undefined) syncBpmLockEnabledToState(state.enabled);
+                if (state.lockedBPM !== undefined) syncLockedBPMToState(state.lockedBPM);
+            },
             setPlaybackRate,
 
             // UI
@@ -1758,25 +1869,25 @@
                 doubleLoopLength,
                 setLoopStart: (data) => {
                     if (cycleMode) {
-                        loopStart = data.loopStart;
-                        loopEnd = null;
-                        nextClickSets = 'end';
+                        syncLoopStartToState(data.loopStart);
+                        syncLoopEndToState(null);
+                        syncNextClickSetsToState('end');
                         updateLoopVisuals();
                     }
                 },
                 setLoopEnd: (data) => {
                     if (cycleMode && loopStart !== null) {
-                        loopEnd = data.loopEnd;
-                        cycleMode = true;
+                        syncLoopEndToState(data.loopEnd);
+                        syncCycleModeToState(true);
                         updateLoopVisuals();
                     }
                 },
                 restoreLoop: (start, end) => {
-                    loopStart = start;
-                    loopEnd = end;
+                    syncLoopStartToState(start);
+                    syncLoopEndToState(end);
                 },
                 setCycleMode: (mode) => {
-                    cycleMode = mode;
+                    syncCycleModeToState(mode);
                 }
             },
             setPlaybackRate

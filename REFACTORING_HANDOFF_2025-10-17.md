@@ -3,8 +3,8 @@
 ## ✅ REFACTORING IN PROGRESS - CONTINUE HERE
 
 **Branch:** `refactor-v28-player-component-architecture`
-**Last Commit:** `63c45c5` - Mini waveforms extraction
-**Status:** 3 extractions complete, ready for next steps
+**Last Commit:** `8d1df9a` - Tag management extraction
+**Status:** 4 extractions complete, ready for next steps
 
 ---
 
@@ -32,10 +32,17 @@ Successfully started systematic refactoring of monolithic `app.js` into modular 
 - Status: Tested and working perfectly
 - Commit: `63c45c5`
 
+**Extraction 4: Tag Management** ✅
+- Removed: 198 lines from app.js
+- Created: `src/core/tagManager.js` (374 lines)
+- Status: Tested and working perfectly
+- Commit: `8d1df9a`
+
 **Cumulative Results:**
-- **app.js**: 7,037 → 6,705 lines (-332 lines, -4.7%)
-- **Files created**: 3 new modules
+- **app.js**: 7,037 → 6,507 lines (-530 lines, -7.5%)
+- **Files created**: 4 new modules
 - **All features**: Tested and working ✅
+- **Documentation**: Created ES6-MODULES-EXPLAINED.md
 
 ---
 
@@ -43,42 +50,34 @@ Successfully started systematic refactoring of monolithic `app.js` into modular 
 
 Based on our strategic analysis, here's the recommended order:
 
-### **Next Up: Tag Management** (~100 lines)
-**Priority:** HIGH
-**Complexity:** ⭐⭐ Medium
-**File:** `src/core/tagManager.js`
-
-**Functions to extract:**
-- `getAllTags()` - Get all unique tags with counts
-- `renderTags()` - Render tag cloud
-- `handleTagClick()` - Handle tag filtering
-- `getTagCount()` - Count files per tag
-- `selectAllVisibleTags()` / `deselectAllTags()`
-- `toggleShowAllTags()`
-
-**Why this order:**
-- Prepares for modal extraction (modal uses these)
-- Self-contained module
-- Makes tag logic reusable
-
----
-
-### **Then: Tag Edit Modal** (~250 lines)
+### **Next Up: Tag Edit Modal** (~450 lines)
 **Priority:** MEDIUM
 **Complexity:** ⭐⭐⭐ Medium-High
 **File:** `src/components/tagEditModal.js`
 
 **Functions to extract:**
-- `batchEditTags()` - Open modal
-- `renderModalTags()` - Render tag pills
-- `selectModalTag()` / `removeSelectedModalTag()`
-- `closeEditTagsModal()` - Close modal
-- `addModalTag()` - Add new tag
-- Modal keyboard shortcuts (lines 6517-6561)
+- `batchEditTags()` - Open modal (line ~5850)
+- `saveEditedTags()` - Save tags/BPM/Key (line ~910)
+- `renderModalTags()` - Render tag pills (line ~6031)
+- `closeEditTagsModal()` - Close modal (line ~6098)
+- `addModalTag()` - Add new tag (line ~6217)
+- `selectModalTag()` / `removeSelectedModalTag()` - Tag selection
+- Modal keyboard shortcuts (lines ~6300-6340)
+- Modal state management
+
+**Why this is complex:**
+- Large function (450+ lines)
+- Multiple state variables (modalTags, modalTagsToAdd, modalTagsToRemove, selectedModalTag)
+- Keyboard shortcuts specific to modal
+- BPM/Key editing integrated
+- Processing options UI
+- Tag suggestions system
 
 **Dependencies:**
-- Tag management functions (extract first!)
-- Modal state variables
+- ✅ Tag management functions (already extracted!)
+- Modal state variables (will use getters/setters)
+- selectedFiles Set
+- audioFiles array
 
 ---
 
@@ -105,12 +104,12 @@ Based on our strategic analysis, here's the recommended order:
 src/
 ├── core/                   # Core business logic
 │   ├── keyboardShortcuts.js  ✅ DONE
-│   ├── tagManager.js          ← NEXT
+│   ├── tagManager.js          ✅ DONE
 │   ├── fileProcessor.js       ← FUTURE
 │   └── app.js                 ← Coordinator (target: <2000 lines)
 ├── components/              # Reusable UI components
 │   ├── miniWaveform.js        ✅ DONE
-│   ├── tagEditModal.js        ← AFTER tag manager
+│   ├── tagEditModal.js        ← NEXT (complex, ~450 lines)
 │   ├── playerBar.js           ← FUTURE (big refactor)
 │   └── processingModal.js     (already exists)
 ├── utils/                   # Utility functions
@@ -214,11 +213,12 @@ export class TagManager {
 **Before refactoring started:**
 - app.js: 7,037 lines
 
-**After 3 extractions:**
-- app.js: 6,705 lines
+**After 4 extractions:**
+- app.js: 6,507 lines
 - keyboardShortcuts.js: 329 lines
 - progressBar.js: 136 lines
 - miniWaveform.js: 143 lines
+- tagManager.js: 374 lines
 
 **Target (when complete):**
 - app.js: ~2,000 lines (coordinator only)
@@ -239,8 +239,9 @@ export class TagManager {
 
 - User will track bugs separately (no need to create bug log)
 - Fix critical bugs immediately, log non-critical for later
-- Trust architectural recommendations (proven with 3 successful extractions)
+- Trust architectural recommendations (proven with 4 successful extractions)
 - Provide numbered test instructions for clear feedback
+- Watch token usage - save complex extractions for fresh sessions
 
 ### **Known Issues (Non-Critical - User Tracking):**
 
@@ -280,18 +281,26 @@ Continue refactoring from where we left off. Read REFACTORING_HANDOFF_2025-10-17
 for full context.
 
 Current branch: refactor-v28-player-component-architecture
-Last commit: 63c45c5
+Last commit: 8d1df9a
 
 Status:
 ✅ Keyboard shortcuts extracted (203 lines removed)
 ✅ Progress bar extracted (67 lines removed)
 ✅ Mini waveforms extracted (62 lines removed)
-📋 Next up: Tag management (~100 lines)
+✅ Tag management extracted (198 lines removed)
+📋 Next up: Tag Edit Modal (~450 lines - COMPLEX)
 
-app.js reduced from 7,037 → 6,705 lines so far (-332 lines, -4.7%).
+app.js reduced from 7,037 → 6,507 lines so far (-530 lines, -7.5%).
 
-Please extract tag management next following the proven pattern from previous
-extractions. Test thoroughly before committing.
+Please extract tag edit modal next. This is a complex extraction with:
+- Modal state management (modalTags, modalTagsToAdd, modalTagsToRemove, selectedModalTag)
+- Multiple functions (batchEditTags, saveEditedTags, renderModalTags, closeEditTagsModal, addModalTag)
+- Modal-specific keyboard shortcuts
+- BPM/Key editing integration
+- Processing options UI
+- Tag suggestions system
+
+Follow the proven pattern from previous extractions. Test thoroughly before committing.
 ```
 
 ---

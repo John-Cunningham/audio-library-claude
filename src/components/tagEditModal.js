@@ -91,10 +91,8 @@ export function open(selectedFiles, audioFiles) {
     document.getElementById('processAutoTag').checked = false;
     document.getElementById('processConvertMp3').checked = false;
 
-    // Render tag pills (using function from app.js for now - will be moved in Step 2)
-    if (typeof window.renderModalTags === 'function') {
-        window.renderModalTags();
-    }
+    // Render tag pills
+    render();
 
     // Show modal
     const modal = document.getElementById('editTagsModal');
@@ -169,4 +167,125 @@ export function close(callbacks) {
     // Re-render to show cleared state
     if (callbacks.renderTags) callbacks.renderTags();
     if (callbacks.renderFiles) callbacks.renderFiles();
+}
+
+// ===================================================================
+// MODAL RENDERING & TAG MANIPULATION
+// ===================================================================
+
+/**
+ * Render tag pills in the modal
+ * Shows existing tags, tags to add (green), and handles tag selection
+ */
+export function render() {
+    const container = document.getElementById('tagInputContainer');
+    const input = document.getElementById('tagInputField');
+
+    if (!container || !input) {
+        console.error('[TagEditModal] Tag input container or field not found');
+        return;
+    }
+
+    // Clear container except input
+    container.innerHTML = '';
+
+    // Add existing tags as pills
+    Array.from(modalTags.entries())
+        .filter(([tag]) => !modalTagsToRemove.has(tag))
+        .sort((a, b) => b[1] - a[1]) // Sort by count descending
+        .forEach(([tag, count]) => {
+            const pill = document.createElement('div');
+            pill.className = 'tag-pill-editable';
+            if (selectedModalTag === tag) {
+                pill.classList.add('selected');
+            }
+            pill.innerHTML = `
+                ${tag} <span class="count">${count}</span>
+            `;
+            pill.onclick = () => selectTag(tag);
+            container.appendChild(pill);
+        });
+
+    // Add tags to add (green pills)
+    modalTagsToAdd.forEach(tag => {
+        const pill = document.createElement('div');
+        pill.className = 'tag-pill-editable';
+        if (selectedModalTag === tag) {
+            pill.classList.add('selected');
+        } else {
+            pill.style.borderColor = '#10b981';
+            pill.style.background = 'rgba(16, 185, 129, 0.2)';
+        }
+        pill.innerHTML = `${tag} <span class="count">+</span>`;
+        pill.onclick = () => selectTag(tag);
+        container.appendChild(pill);
+    });
+
+    // Re-add input field
+    container.appendChild(input);
+}
+
+/**
+ * Select or deselect a tag pill
+ * @param {string} tag - Tag name to select/deselect
+ */
+export function selectTag(tag) {
+    if (selectedModalTag === tag) {
+        selectedModalTag = null; // Deselect if clicking same tag
+    } else {
+        selectedModalTag = tag;
+    }
+    render();
+}
+
+/**
+ * Remove the currently selected tag
+ * Marks existing tags for removal or deletes new tags
+ */
+export function removeSelectedTag() {
+    if (selectedModalTag) {
+        if (modalTags.has(selectedModalTag)) {
+            // Existing tag - mark for removal
+            modalTagsToRemove.add(selectedModalTag);
+        } else if (modalTagsToAdd.has(selectedModalTag)) {
+            // New tag - just delete it
+            modalTagsToAdd.delete(selectedModalTag);
+        }
+        selectedModalTag = null;
+        render();
+    }
+}
+
+/**
+ * Add a tag to the modal
+ * @param {string} tag - Tag name to add
+ */
+export function addTag(tag) {
+    if (!tag) return;
+
+    // Check if tag already exists (case-insensitive)
+    const tagLower = tag.toLowerCase();
+    const existingInModal = Array.from(modalTags.keys()).find(t => t.toLowerCase() === tagLower);
+    const existingInToAdd = Array.from(modalTagsToAdd).find(t => t.toLowerCase() === tagLower);
+    const existingInToRemove = Array.from(modalTagsToRemove).find(t => t.toLowerCase() === tagLower);
+
+    // If it's in the remove set, take it out (user is re-adding it)
+    if (existingInToRemove) {
+        modalTagsToRemove.delete(existingInToRemove);
+        render();
+        document.getElementById('tagInputField').value = '';
+        document.getElementById('tagSuggestions').style.display = 'none';
+        return;
+    }
+
+    // Don't add if it already exists and isn't being removed
+    if (existingInModal || existingInToAdd) {
+        return;
+    }
+
+    // Add the new tag
+    modalTagsToAdd.add(tag);
+    render();
+    document.getElementById('tagInputField').value = '';
+    document.getElementById('tagSuggestions').style.display = 'none';
 }

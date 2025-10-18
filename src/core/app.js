@@ -5972,85 +5972,7 @@
 
         // Progress bar functions moved to utils/progressBar.js
 
-        // Render tag pills in modal
-        function renderModalTags() {
-            const container = document.getElementById('tagInputContainer');
-            const input = document.getElementById('tagInputField');
-
-            // Clear container except input
-            container.innerHTML = '';
-
-            // Add existing tags as pills (using getters from TagEditModal)
-            const modalTags = TagEditModal.getModalTags();
-            const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
-            const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
-            const selectedModalTag = TagEditModal.getSelectedModalTag();
-
-            Array.from(modalTags.entries())
-                .filter(([tag]) => !modalTagsToRemove.has(tag))
-                .sort((a, b) => b[1] - a[1]) // Sort by count descending
-                .forEach(([tag, count]) => {
-                    const pill = document.createElement('div');
-                    pill.className = 'tag-pill-editable';
-                    if (selectedModalTag === tag) {
-                        pill.classList.add('selected');
-                    }
-                    pill.innerHTML = `
-                        ${tag} <span class="count">${count}</span>
-                    `;
-                    pill.onclick = () => selectModalTag(tag);
-                    container.appendChild(pill);
-                });
-
-            // Add tags to add
-            modalTagsToAdd.forEach(tag => {
-                const pill = document.createElement('div');
-                pill.className = 'tag-pill-editable';
-                if (selectedModalTag === tag) {
-                    pill.classList.add('selected');
-                } else {
-                    pill.style.borderColor = '#10b981';
-                    pill.style.background = 'rgba(16, 185, 129, 0.2)';
-                }
-                pill.innerHTML = `${tag} <span class="count">+</span>`;
-                pill.onclick = () => selectModalTag(tag);
-                container.appendChild(pill);
-            });
-
-            // Re-add input field
-            container.appendChild(input);
-        }
-
-        // Select tag pill
-        function selectModalTag(tag) {
-            const selectedModalTag = TagEditModal.getSelectedModalTag();
-            if (selectedModalTag === tag) {
-                TagEditModal.setSelectedModalTag(null); // Deselect if clicking same tag
-            } else {
-                TagEditModal.setSelectedModalTag(tag);
-            }
-            renderModalTags();
-        }
-
-        // Remove selected tag
-        function removeSelectedModalTag() {
-            const selectedModalTag = TagEditModal.getSelectedModalTag();
-            if (selectedModalTag) {
-                const modalTags = TagEditModal.getModalTags();
-                const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
-                const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
-
-                if (modalTags.has(selectedModalTag)) {
-                    modalTagsToRemove.add(selectedModalTag);
-                } else if (modalTagsToAdd.has(selectedModalTag)) {
-                    modalTagsToAdd.delete(selectedModalTag);
-                }
-                TagEditModal.setSelectedModalTag(null);
-                renderModalTags();
-            }
-        }
-
-        // closeEditTagsModal() moved to tagEditModal.js
+        // Modal rendering and tag manipulation functions moved to tagEditModal.js
 
         // Handle tag input
         document.addEventListener('DOMContentLoaded', () => {
@@ -6067,7 +5989,7 @@
                 }
 
                 // Get all available tags
-                const allTags = getAllTags();
+                const allTags = TagManager.getAllTags();
                 const modalTags = TagEditModal.getModalTags();
                 const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
                 const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
@@ -6083,7 +6005,7 @@
 
                 if (suggestions.length > 0) {
                     suggestionsContainer.innerHTML = suggestions
-                        .map(tag => `<div class="tag-suggestion-item" onclick="addModalTag('${tag}')">${tag}</div>`)
+                        .map(tag => `<div class="tag-suggestion-item" onclick="window.addModalTag('${tag}')">${tag}</div>`)
                         .join('');
                     suggestionsContainer.style.display = 'block';
                 } else {
@@ -6094,13 +6016,13 @@
             tagInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && tagInput.value.trim()) {
                     e.preventDefault();
-                    addModalTag(tagInput.value.trim());
+                    TagEditModal.addTag(tagInput.value.trim());
                 } else if ((e.key === 'Backspace' || e.key === 'Delete') && tagInput.value === '') {
                     e.preventDefault();
                     const selectedModalTag = TagEditModal.getSelectedModalTag();
                     if (selectedModalTag) {
                         // Delete selected tag
-                        removeSelectedModalTag();
+                        TagEditModal.removeSelectedTag();
                     } else if (e.key === 'Backspace') {
                         // Backspace with no selection - select last tag
                         const modalTags = TagEditModal.getModalTags();
@@ -6111,7 +6033,7 @@
                         const lastTag = newTags.length > 0 ? newTags[newTags.length - 1] : allTags[allTags.length - 1];
                         if (lastTag) {
                             TagEditModal.setSelectedModalTag(lastTag);
-                            renderModalTags();
+                            TagEditModal.render();
                         }
                     }
                 }
@@ -6126,7 +6048,7 @@
                     e.preventDefault();
                     const selectedModalTag = TagEditModal.getSelectedModalTag();
                     if (selectedModalTag) {
-                        removeSelectedModalTag();
+                        TagEditModal.removeSelectedTag();
                     } else if (e.key === 'Backspace') {
                         // Select last tag
                         const modalTags = TagEditModal.getModalTags();
@@ -6137,7 +6059,7 @@
                         const lastTag = newTags.length > 0 ? newTags[newTags.length - 1] : allTags[allTags.length - 1];
                         if (lastTag) {
                             TagEditModal.setSelectedModalTag(lastTag);
-                            renderModalTags();
+                            TagEditModal.render();
                         }
                     }
                 } else if (e.key === 'Escape') {
@@ -6159,41 +6081,7 @@
             });
         });
 
-        // Add tag to modal
-        function addModalTag(tag) {
-            if (!tag) return;
-
-            // Get modal state using getters
-            const modalTags = TagEditModal.getModalTags();
-            const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
-            const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
-
-            // Check if tag already exists (case-insensitive)
-            const tagLower = tag.toLowerCase();
-            const existingInModal = Array.from(modalTags.keys()).find(t => t.toLowerCase() === tagLower);
-            const existingInToAdd = Array.from(modalTagsToAdd).find(t => t.toLowerCase() === tagLower);
-            const existingInToRemove = Array.from(modalTagsToRemove).find(t => t.toLowerCase() === tagLower);
-
-            // If it's in the remove set, take it out (user is re-adding it)
-            if (existingInToRemove) {
-                modalTagsToRemove.delete(existingInToRemove);
-                renderModalTags();
-                document.getElementById('tagInputField').value = '';
-                document.getElementById('tagSuggestions').style.display = 'none';
-                return;
-            }
-
-            // Don't add if it already exists and isn't being removed
-            if (existingInModal || existingInToAdd) {
-                return;
-            }
-
-            // Add the new tag
-            modalTagsToAdd.add(tag);
-            renderModalTags();
-            document.getElementById('tagInputField').value = '';
-            document.getElementById('tagSuggestions').style.display = 'none';
-        }
+        // addModalTag() moved to tagEditModal.js
 
         // Initialize keyboard shortcuts (moved to keyboardShortcuts.js)
         initKeyboardShortcuts(
@@ -6293,10 +6181,10 @@ window.toggleFileSelection = toggleFileSelection;
 window.openStemsViewer = openStemsViewer;
 window.generateStems = generateStems;
 window.quickEditFile = quickEditFile;
-window.addModalTag = addModalTag;
-window.renderModalTags = renderModalTags;
-window.selectModalTag = selectModalTag;
-window.removeSelectedModalTag = removeSelectedModalTag;
+window.addModalTag = (tag) => TagEditModal.addTag(tag);
+window.renderModalTags = () => TagEditModal.render();
+window.selectModalTag = (tag) => TagEditModal.selectTag(tag);
+window.removeSelectedModalTag = () => TagEditModal.removeSelectedTag();
 window.setTagMode = setTagMode;
 window.handleSearch = handleSearch;
 window.handleSearchKeydown = handleSearchKeydown;

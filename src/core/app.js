@@ -10,6 +10,7 @@
         import * as ProgressBar from '../utils/progressBar.js';
         import * as MiniWaveform from '../components/miniWaveform.js';
         import * as TagManager from './tagManager.js';
+        import * as TagEditModal from '../components/tagEditModal.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -893,11 +894,11 @@
             // Load saved preferences from localStorage
             loadProcessingPreferences();
 
-            // Clear tag state
-            modalTags = new Map();
-            modalTagsToAdd = new Set();
-            modalTagsToRemove = new Set();
-            selectedModalTag = null;
+            // Clear tag state (using setters from tagEditModal.js)
+            TagEditModal.setModalTags(new Map());
+            TagEditModal.setModalTagsToAdd(new Set());
+            TagEditModal.setModalTagsToRemove(new Set());
+            TagEditModal.setSelectedModalTag(null);
 
             // Render empty tags (user will add what they want)
             renderModalTags();
@@ -913,7 +914,7 @@
             // Check if we're in upload mode
             if (pendingUploadFiles.length > 0) {
                 // Upload mode - collect tags and upload files
-                const tagsToApply = Array.from(modalTagsToAdd);
+                const tagsToApply = Array.from(TagEditModal.getModalTagsToAdd());
                 modal.classList.remove('active');
 
                 await performUpload(pendingUploadFiles, tagsToApply);
@@ -947,10 +948,10 @@
                     let newTags = [...file.tags];
 
                     // Remove tags marked for removal
-                    newTags = newTags.filter(tag => !modalTagsToRemove.has(tag));
+                    newTags = newTags.filter(tag => !TagEditModal.getModalTagsToRemove().has(tag));
 
                     // Add new tags
-                    newTags = [...new Set([...newTags, ...modalTagsToAdd])];
+                    newTags = [...new Set([...newTags, ...TagEditModal.getModalTagsToAdd()])];
 
                     // Prepare update object
                     const updateData = { tags: newTags };
@@ -974,7 +975,13 @@
                 }
 
                 // Close modal
-                closeEditTagsModal();
+                TagEditModal.close({
+                    setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+                    setSearchQuery: (query) => { searchQuery = query; },
+                    filters,
+                    renderTags,
+                    renderFiles
+                });
 
                 // Clear selection
                 selectedFiles.clear();
@@ -1203,7 +1210,13 @@
                 setTimeout(() => {
                     progressBar.style.display = 'none';
                     progressBar.style.width = '0%';
-                    closeEditTagsModal();
+                    TagEditModal.close({
+                        setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+                        setSearchQuery: (query) => { searchQuery = query; },
+                        filters,
+                        renderTags,
+                        renderFiles
+                    });
                 }, 1500);
 
             } catch (error) {
@@ -1917,7 +1930,7 @@
             updateSelectionUI();
 
             // Open edit modal
-            batchEditTags();
+            TagEditModal.open(selectedFiles, audioFiles);
         }
 
         // Open stems viewer in new window
@@ -5840,75 +5853,7 @@
             }
         }
 
-        // Modal state
-        let modalTags = new Map(); // Map of tag -> count
-        let modalTagsToAdd = new Set();
-        let modalTagsToRemove = new Set();
-        let selectedModalTag = null; // Currently selected tag pill
-
-        // Open edit tags modal
-        function batchEditTags() {
-            if (selectedFiles.size === 0) return;
-
-            // Reset modal state
-            modalTags.clear();
-            modalTagsToAdd.clear();
-            modalTagsToRemove.clear();
-            selectedModalTag = null;
-
-            // Count tags across selected files
-            const filesToEdit = Array.from(selectedFiles).map(id => audioFiles.find(f => f.id === id));
-            filesToEdit.forEach(file => {
-                if (!file) return;
-                file.tags.forEach(tag => {
-                    modalTags.set(tag, (modalTags.get(tag) || 0) + 1);
-                });
-            });
-
-            // Populate BPM and Key fields if editing single file
-            if (selectedFiles.size === 1) {
-                const file = filesToEdit[0];
-                document.getElementById('modalBpmInput').value = file.bpm || '';
-                document.getElementById('modalKeyInput').value = file.key || '';
-            } else {
-                // Clear fields for multiple file edit
-                document.getElementById('modalBpmInput').value = '';
-                document.getElementById('modalKeyInput').value = '';
-                document.getElementById('modalBpmInput').placeholder = 'Leave blank to keep existing';
-            }
-
-            // Update modal title
-            document.getElementById('modalFileCount').textContent = `(${selectedFiles.size} file${selectedFiles.size > 1 ? 's' : ''})`;
-
-            // Reset button text to "Save Changes"
-            document.querySelector('.modal-btn-save').textContent = 'Save Changes';
-
-            // Show processing options (edit mode) - reset all to unchecked
-            const processingOptions = document.getElementById('processingOptions');
-            processingOptions.style.display = 'block';
-
-            // Change title and note for edit mode
-            document.getElementById('processingOptionsTitle').textContent = 'Run Processing:';
-            document.getElementById('processingNote').innerHTML = '<p style="margin: 0; font-size: 11px; color: #888; line-height: 1.4;"><strong>Note:</strong> Check boxes to run processing on selected file(s). Unchecked items will not be processed.</p>';
-
-            // Reset all checkboxes to unchecked (edit mode defaults)
-            document.getElementById('processStems').checked = false;
-            document.getElementById('processBpmKey').checked = false;
-            document.getElementById('processInstruments').checked = false;
-            document.getElementById('processChords').checked = false;
-            document.getElementById('processBeatmap').checked = false;
-            document.getElementById('processAutoTag').checked = false;
-            document.getElementById('processConvertMp3').checked = false;
-
-            // Render tag pills
-            renderModalTags();
-
-            // Show modal
-            document.getElementById('editTagsModal').classList.add('active');
-
-            // Focus input
-            setTimeout(() => document.getElementById('tagInputField').focus(), 100);
-        }
+        // Modal state variables and open/close functions moved to tagEditModal.js
 
         // Batch detect BPM/Key/Instruments using Music.ai
         async function batchDetect() {
@@ -6035,7 +5980,12 @@
             // Clear container except input
             container.innerHTML = '';
 
-            // Add existing tags as pills
+            // Add existing tags as pills (using getters from TagEditModal)
+            const modalTags = TagEditModal.getModalTags();
+            const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
+            const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
+            const selectedModalTag = TagEditModal.getSelectedModalTag();
+
             Array.from(modalTags.entries())
                 .filter(([tag]) => !modalTagsToRemove.has(tag))
                 .sort((a, b) => b[1] - a[1]) // Sort by count descending
@@ -6073,55 +6023,34 @@
 
         // Select tag pill
         function selectModalTag(tag) {
+            const selectedModalTag = TagEditModal.getSelectedModalTag();
             if (selectedModalTag === tag) {
-                selectedModalTag = null; // Deselect if clicking same tag
+                TagEditModal.setSelectedModalTag(null); // Deselect if clicking same tag
             } else {
-                selectedModalTag = tag;
+                TagEditModal.setSelectedModalTag(tag);
             }
             renderModalTags();
         }
 
         // Remove selected tag
         function removeSelectedModalTag() {
+            const selectedModalTag = TagEditModal.getSelectedModalTag();
             if (selectedModalTag) {
+                const modalTags = TagEditModal.getModalTags();
+                const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
+                const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
+
                 if (modalTags.has(selectedModalTag)) {
                     modalTagsToRemove.add(selectedModalTag);
                 } else if (modalTagsToAdd.has(selectedModalTag)) {
                     modalTagsToAdd.delete(selectedModalTag);
                 }
-                selectedModalTag = null;
+                TagEditModal.setSelectedModalTag(null);
                 renderModalTags();
             }
         }
 
-        // Close modal
-        function closeEditTagsModal() {
-            document.getElementById('editTagsModal').classList.remove('active');
-            document.getElementById('tagInputField').value = '';
-            document.getElementById('tagSuggestions').style.display = 'none';
-
-            // Clear BPM and Key inputs
-            document.getElementById('modalBpmInput').value = '';
-            document.getElementById('modalKeyInput').value = '';
-            document.getElementById('modalBpmInput').placeholder = 'e.g., 120 or 97.833';
-
-            // Clear pending upload files if user cancels
-            pendingUploadFiles = [];
-
-            // Reset button text
-            document.querySelector('.modal-btn-save').textContent = 'Save Changes';
-
-            // Clear main search bar and filters
-            searchQuery = '';
-            document.getElementById('searchBar').value = '';
-            filters.canHave.clear();
-            filters.mustHave.clear();
-            filters.exclude.clear();
-
-            // Re-render to show cleared state
-            renderTags();
-            renderFiles();
-        }
+        // closeEditTagsModal() moved to tagEditModal.js
 
         // Handle tag input
         document.addEventListener('DOMContentLoaded', () => {
@@ -6139,6 +6068,9 @@
 
                 // Get all available tags
                 const allTags = getAllTags();
+                const modalTags = TagEditModal.getModalTags();
+                const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
+                const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
                 const suggestions = allTags
                     .map(({ tag }) => tag)
                     .filter(tag => {
@@ -6165,16 +6097,20 @@
                     addModalTag(tagInput.value.trim());
                 } else if ((e.key === 'Backspace' || e.key === 'Delete') && tagInput.value === '') {
                     e.preventDefault();
+                    const selectedModalTag = TagEditModal.getSelectedModalTag();
                     if (selectedModalTag) {
                         // Delete selected tag
                         removeSelectedModalTag();
                     } else if (e.key === 'Backspace') {
                         // Backspace with no selection - select last tag
+                        const modalTags = TagEditModal.getModalTags();
+                        const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
+                        const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
                         const allTags = Array.from(modalTags.keys()).filter(tag => !modalTagsToRemove.has(tag));
                         const newTags = Array.from(modalTagsToAdd);
                         const lastTag = newTags.length > 0 ? newTags[newTags.length - 1] : allTags[allTags.length - 1];
                         if (lastTag) {
-                            selectedModalTag = lastTag;
+                            TagEditModal.setSelectedModalTag(lastTag);
                             renderModalTags();
                         }
                     }
@@ -6188,20 +6124,30 @@
 
                 if (e.key === 'Backspace' || e.key === 'Delete') {
                     e.preventDefault();
+                    const selectedModalTag = TagEditModal.getSelectedModalTag();
                     if (selectedModalTag) {
                         removeSelectedModalTag();
                     } else if (e.key === 'Backspace') {
                         // Select last tag
+                        const modalTags = TagEditModal.getModalTags();
+                        const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
+                        const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
                         const allTags = Array.from(modalTags.keys()).filter(tag => !modalTagsToRemove.has(tag));
                         const newTags = Array.from(modalTagsToAdd);
                         const lastTag = newTags.length > 0 ? newTags[newTags.length - 1] : allTags[allTags.length - 1];
                         if (lastTag) {
-                            selectedModalTag = lastTag;
+                            TagEditModal.setSelectedModalTag(lastTag);
                             renderModalTags();
                         }
                     }
                 } else if (e.key === 'Escape') {
-                    closeEditTagsModal();
+                    TagEditModal.close({
+                        setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+                        setSearchQuery: (query) => { searchQuery = query; },
+                        filters,
+                        renderTags,
+                        renderFiles
+                    });
                 }
             });
 
@@ -6216,6 +6162,11 @@
         // Add tag to modal
         function addModalTag(tag) {
             if (!tag) return;
+
+            // Get modal state using getters
+            const modalTags = TagEditModal.getModalTags();
+            const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
+            const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
 
             // Check if tag already exists (case-insensitive)
             const tagLower = tag.toLowerCase();
@@ -6260,7 +6211,7 @@
                 previousTrack,
                 nextTrack,
                 loadAudio,
-                batchEditTags,
+                batchEditTags: () => TagEditModal.open(selectedFiles, audioFiles),
                 shiftLoopLeft,
                 shiftLoopRight,
                 halfLoopLength,
@@ -6343,6 +6294,9 @@ window.openStemsViewer = openStemsViewer;
 window.generateStems = generateStems;
 window.quickEditFile = quickEditFile;
 window.addModalTag = addModalTag;
+window.renderModalTags = renderModalTags;
+window.selectModalTag = selectModalTag;
+window.removeSelectedModalTag = removeSelectedModalTag;
 window.setTagMode = setTagMode;
 window.handleSearch = handleSearch;
 window.handleSearchKeydown = handleSearchKeydown;
@@ -6352,10 +6306,16 @@ window.openUploadFlow = openUploadFlow;
 window.selectAll = selectAll;
 window.deselectAll = deselectAll;
 window.batchDelete = batchDelete;
-window.batchEditTags = batchEditTags;
+window.batchEditTags = () => TagEditModal.open(selectedFiles, audioFiles);
 window.batchDetect = batchDetect;
 window.batchSeparateStems = batchSeparateStems;
-window.closeEditTagsModal = closeEditTagsModal;
+window.closeEditTagsModal = () => TagEditModal.close({
+    setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+    setSearchQuery: (query) => { searchQuery = query; },
+    filters,
+    renderTags,
+    renderFiles
+});
 window.saveEditedTags = saveEditedTags;
 window.previousTrack = previousTrack;
 window.playPause = playPause;

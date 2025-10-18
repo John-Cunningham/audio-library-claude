@@ -3144,15 +3144,8 @@
         }
 
         function toggleSeekOnClick() {
-            // Cycle through: off → seek → clock → off
-            if (seekOnClick === 'off') {
-                seekOnClick = 'seek';
-            } else if (seekOnClick === 'seek') {
-                seekOnClick = 'clock';
-            } else {
-                seekOnClick = 'off';
-            }
-            console.log(`Seek mode: ${seekOnClick.toUpperCase()}`);
+            const result = LoopControls.toggleSeekOnClick({ seekOnClick });
+            seekOnClick = result.seekOnClick;
             updateLoopVisuals();
         }
 
@@ -3224,8 +3217,8 @@
         }
 
         function toggleLoopControlsExpanded() {
-            loopControlsExpanded = !loopControlsExpanded;
-            console.log(`Loop controls ${loopControlsExpanded ? 'expanded' : 'collapsed'}`);
+            const result = LoopControls.toggleLoopControlsExpanded({ loopControlsExpanded });
+            loopControlsExpanded = result.loopControlsExpanded;
             updateLoopVisuals();
         }
 
@@ -3270,21 +3263,14 @@
         }
 
         function toggleImmediateJump() {
-            // Cycle through: off → on → clock → off
-            if (immediateJump === 'off') {
-                immediateJump = 'on';
-            } else if (immediateJump === 'on') {
-                immediateJump = 'clock';
-            } else {
-                immediateJump = 'off';
-            }
-            console.log(`Jump mode: ${immediateJump.toUpperCase()}`);
+            const result = LoopControls.toggleImmediateJump({ immediateJump });
+            immediateJump = result.immediateJump;
             updateLoopVisuals();
         }
 
         function toggleLoopFades() {
-            loopFadesEnabled = !loopFadesEnabled;
-            console.log(`Loop fades: ${loopFadesEnabled ? 'ON' : 'OFF'}`);
+            const result = LoopControls.toggleLoopFades({ loopFadesEnabled });
+            loopFadesEnabled = result.loopFadesEnabled;
             updateLoopVisuals();
         }
 
@@ -3300,29 +3286,20 @@
         }
 
         function togglePreserveLoop() {
-            preserveLoopOnFileChange = !preserveLoopOnFileChange;
-            console.log(`Preserve loop on file change: ${preserveLoopOnFileChange ? 'ON' : 'OFF'}`);
+            const result = LoopControls.togglePreserveLoop({ preserveLoopOnFileChange });
+            preserveLoopOnFileChange = result.preserveLoopOnFileChange;
             updateLoopVisuals();
         }
 
         function toggleBPMLock() {
-            bpmLockEnabled = !bpmLockEnabled;
+            const result = LoopControls.toggleBPMLock({
+                bpmLockEnabled,
+                audioFiles,
+                currentFileId
+            });
 
-            if (bpmLockEnabled) {
-                // When enabling, lock to current file's BPM
-                const currentFile = audioFiles.find(f => f.id === currentFileId);
-                if (currentFile && currentFile.bpm) {
-                    lockedBPM = currentFile.bpm;
-                    console.log(`[BPM LOCK] Enabled - locked to ${lockedBPM} BPM`);
-                } else {
-                    console.log('[BPM LOCK] Enabled but no BPM data for current file');
-                    lockedBPM = null;
-                }
-            } else {
-                console.log('[BPM LOCK] Disabled');
-                lockedBPM = null;
-            }
-
+            bpmLockEnabled = result.bpmLockEnabled;
+            lockedBPM = result.lockedBPM;
             updateLoopVisuals();
         }
 
@@ -3588,193 +3565,47 @@
 
         // Shift+Left Arrow: Move loop START marker to the LEFT (expand loop from left)
         function moveStartLeft() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop');
-                return;
+            const result = LoopControls.moveStartLeft({
+                cycleMode, loopStart, loopEnd, currentMarkers, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                loopStart = result.loopStart;
+                updateLoopVisuals();
             }
-
-            let newLoopStart;
-
-            // If no markers, nudge by 0.01 seconds
-            if (currentMarkers.length === 0) {
-                newLoopStart = Math.max(0, loopStart - 0.01); // Don't go below 0
-                console.log(`Start marker nudged left to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(2)}s)`);
-            } else {
-                // Find the previous marker before current start (search backwards)
-                let prevMarker = null;
-                for (let i = currentMarkers.length - 1; i >= 0; i--) {
-                    const markerTime = currentMarkers[i];
-                    if (markerTime < loopStart) {
-                        prevMarker = markerTime;
-                        break; // Take first marker before start (searching backwards)
-                    }
-                }
-
-                if (prevMarker === null) {
-                    console.log('No marker found before loop start');
-                    return;
-                }
-
-                newLoopStart = prevMarker;
-                console.log(`Start marker moved left to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(1)}s)`);
-            }
-
-            loopStart = newLoopStart;
-            recordAction('moveStartLeft', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
-
-            // Handle jump based on mode
-            if (immediateJump === 'on' && wavesurfer) {
-                wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
-                console.log(`Jumped to new loop start: ${loopStart.toFixed(2)}s`);
-            } else if (immediateJump === 'clock' && wavesurfer) {
-                pendingJumpTarget = loopStart;
-                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-            }
-
-            updateLoopVisuals();
         }
 
-        // Shift+Up Arrow: Move loop END marker to the RIGHT (expand loop)
         function moveEndRight() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop');
-                return;
+            const result = LoopControls.moveEndRight({
+                cycleMode, loopStart, loopEnd, currentMarkers, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                loopEnd = result.loopEnd;
+                updateLoopVisuals();
             }
-
-            let newLoopEnd;
-
-            // If no markers, nudge by 0.01 seconds
-            if (currentMarkers.length === 0) {
-                const duration = wavesurfer ? wavesurfer.getDuration() : Infinity;
-                newLoopEnd = Math.min(duration, loopEnd + 0.01); // Don't go past file duration
-                console.log(`End marker nudged right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(2)}s)`);
-            } else {
-                // Find the next marker after current end
-                let nextMarker = null;
-                for (const markerTime of currentMarkers) {
-                    if (markerTime > loopEnd) {
-                        nextMarker = markerTime;
-                        break; // Take first marker after end
-                    }
-                }
-
-                if (nextMarker === null) {
-                    console.log('No marker found after loop end');
-                    return;
-                }
-
-                newLoopEnd = nextMarker;
-                console.log(`End marker moved right to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(1)}s)`);
-            }
-
-            loopEnd = newLoopEnd;
-            recordAction('moveEndRight', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
-
-            // Handle jump based on mode
-            if (immediateJump === 'on' && wavesurfer) {
-                wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
-                console.log(`Jumped to new loop start: ${loopStart.toFixed(2)}s`);
-            } else if (immediateJump === 'clock' && wavesurfer) {
-                pendingJumpTarget = loopStart;
-                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-            }
-
-            updateLoopVisuals();
         }
 
-        // Move start marker right to next marker (shrink loop from left)
         function moveStartRight() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop');
-                return;
+            const result = LoopControls.moveStartRight({
+                cycleMode, loopStart, loopEnd, currentMarkers, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                loopStart = result.loopStart;
+                updateLoopVisuals();
             }
-
-            let newLoopStart;
-
-            // If no markers, nudge by 0.01 seconds
-            if (currentMarkers.length === 0) {
-                newLoopStart = Math.min(loopEnd - 0.01, loopStart + 0.01); // Don't go past loop end
-                console.log(`Start marker nudged right to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(2)}s)`);
-            } else {
-                // Find the next marker after current start
-                let nextMarker = null;
-                for (const markerTime of currentMarkers) {
-                    if (markerTime > loopStart && markerTime < loopEnd) {
-                        nextMarker = markerTime;
-                        break; // Take first marker after start
-                    }
-                }
-
-                if (nextMarker === null) {
-                    console.log('No marker found between start and end');
-                    return;
-                }
-
-                newLoopStart = nextMarker;
-                console.log(`Start marker moved right to ${newLoopStart.toFixed(2)}s (loop now ${(loopEnd - newLoopStart).toFixed(1)}s)`);
-            }
-
-            loopStart = newLoopStart;
-            recordAction('moveStartRight', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
-
-            // Handle jump based on mode
-            if (immediateJump === 'on' && wavesurfer) {
-                wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
-                console.log(`Jumped to new loop start: ${loopStart.toFixed(2)}s`);
-            } else if (immediateJump === 'clock' && wavesurfer) {
-                pendingJumpTarget = loopStart;
-                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-            }
-
-            updateLoopVisuals();
         }
 
-        // Move end marker left to previous marker (shrink loop from right)
         function moveEndLeft() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop');
-                return;
+            const result = LoopControls.moveEndLeft({
+                cycleMode, loopStart, loopEnd, currentMarkers, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                loopEnd = result.loopEnd;
+                updateLoopVisuals();
             }
-
-            let newLoopEnd;
-
-            // If no markers, nudge by 0.01 seconds
-            if (currentMarkers.length === 0) {
-                newLoopEnd = Math.max(loopStart + 0.01, loopEnd - 0.01); // Don't go before loop start
-                console.log(`End marker nudged left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(2)}s)`);
-            } else {
-                // Find the previous marker before current end (search backwards)
-                let prevMarker = null;
-                for (let i = currentMarkers.length - 1; i >= 0; i--) {
-                    const markerTime = currentMarkers[i];
-                    if (markerTime < loopEnd && markerTime > loopStart) {
-                        prevMarker = markerTime;
-                        break; // Take first marker before end
-                    }
-                }
-
-                if (prevMarker === null) {
-                    console.log('No marker found between start and end');
-                    return;
-                }
-
-                newLoopEnd = prevMarker;
-                console.log(`End marker moved left to ${newLoopEnd.toFixed(2)}s (loop now ${(newLoopEnd - loopStart).toFixed(1)}s)`);
-            }
-
-            loopEnd = newLoopEnd;
-            recordAction('moveEndLeft', { loopStart, loopEnd, loopDuration: loopEnd - loopStart });
-
-            // Handle jump based on mode
-            if (immediateJump === 'on' && wavesurfer) {
-                wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
-                console.log(`Jumped to new loop start: ${loopStart.toFixed(2)}s`);
-            } else if (immediateJump === 'clock' && wavesurfer) {
-                pendingJumpTarget = loopStart;
-                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-            }
-
-            updateLoopVisuals();
         }
 
         // Metronome functions - EXTRACTED TO metronome.js (ROUND 2)

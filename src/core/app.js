@@ -16,6 +16,7 @@
         import * as BatchOperations from './batchOperations.js';
         import * as UploadManager from './uploadManager.js';
         import * as LoopControls from '../components/loopControls.js';
+        import * as MarkerSystem from '../components/markerSystem.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -2321,189 +2322,19 @@
         // Load audio file
         // Add bar markers from beatmap data
         function addBarMarkers(file) {
+            // Use MarkerSystem module to render markers
+            currentMarkers = MarkerSystem.addBarMarkers(
+                file,
+                wavesurfer,
+                'waveform',
+                { markersEnabled, markerFrequency, barStartOffset }
+            );
+
+            // Marker rendering now handled by MarkerSystem module
+            // currentMarkers array is updated by MarkerSystem.addBarMarkers() above
+
             const waveformContainer = document.getElementById('waveform');
             if (!waveformContainer) return;
-
-            // Don't add markers if disabled or no data
-            if (!markersEnabled || !file.beatmap || !wavesurfer) {
-                // Clear any existing markers if disabled
-                const existingContainer = waveformContainer.querySelector('.marker-container');
-                if (existingContainer) existingContainer.remove();
-                currentMarkers = [];
-                return;
-            }
-
-            // Get the duration to calculate marker positions
-            const duration = wavesurfer.getDuration();
-            if (!duration) return;
-
-            // Get or create marker container
-            let markerContainer = waveformContainer.querySelector('.marker-container');
-            if (!markerContainer) {
-                markerContainer = document.createElement('div');
-                markerContainer.className = 'marker-container';
-                waveformContainer.appendChild(markerContainer);
-            }
-
-            // Clear existing markers
-            const existingMarkers = markerContainer.querySelectorAll('.bar-marker, .beat-marker');
-            existingMarkers.forEach(marker => marker.remove());
-            currentMarkers = [];
-
-            // Marker container fills the full width
-            markerContainer.style.width = '100%';
-
-            // STEP 0: Force the first beat to always be bar 1, beat 1
-            // This fixes issues where Music.ai thinks the first onset is beat 3
-            // (because it detected the bar started earlier in silence)
-            const normalizedBeatmap = file.beatmap.map((beat, index) => {
-                if (index === 0) {
-                    // First beat is ALWAYS bar 1, beat 1
-                    return { ...beat, beatNum: 1, originalIndex: index };
-                }
-                return { ...beat, originalIndex: index };
-            });
-
-            // Split barStartOffset into integer bars and fractional beats
-            const barOffset = Math.floor(barStartOffset); // Integer bars
-            const fractionalBeats = Math.round((barStartOffset - barOffset) * 4); // Fractional beats (0-3)
-
-            // STEP 1: Calculate original bar numbers first
-            let barNumber = 0;
-            const beatmapWithOriginalBars = normalizedBeatmap.map(beat => {
-                if (beat.beatNum === 1) barNumber++;
-                return { ...beat, originalBarNumber: barNumber };
-            });
-
-            // STEP 2: Rotate beatNum values for fractional beat shifts
-            const beatmapWithRotatedBeats = beatmapWithOriginalBars.map(beat => {
-                if (fractionalBeats === 0) {
-                    // No beat rotation needed
-                    return { ...beat };
-                } else {
-                    // Rotate beatNum
-                    let newBeatNum = beat.beatNum - fractionalBeats;
-                    while (newBeatNum < 1) newBeatNum += 4;
-                    while (newBeatNum > 4) newBeatNum -= 4;
-                    return { ...beat, beatNum: newBeatNum };
-                }
-            });
-
-            // STEP 3: Recalculate bar numbers after beat rotation
-            barNumber = 0;
-            const beatmapWithNewBars = beatmapWithRotatedBeats.map(beat => {
-                if (beat.beatNum === 1) barNumber++;
-                return { ...beat, barNumber };
-            });
-
-            // STEP 4: Shift bar numbers by integer bar offset
-            const beatmapWithBars = beatmapWithNewBars.map(beat => {
-                return { ...beat, barNumber: beat.barNumber - barOffset };
-            });
-
-            // Filter based on frequency
-            let filteredBeats = [];
-            switch (markerFrequency) {
-                case 'bar8':
-                    // Bars 1, 9, 17, 25... (every 8 bars starting from 1)
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 8 === 1);
-                    break;
-                case 'bar4':
-                    // Bars 1, 5, 9, 13... (every 4 bars starting from 1)
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 4 === 1);
-                    break;
-                case 'bar2':
-                    // Bars 1, 3, 5, 7... (every 2 bars starting from 1)
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 2 === 1);
-                    break;
-                case 'bar':
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1);
-                    break;
-                case 'halfbar':
-                    // Bars + halfway through bar (beat 3 in 4/4 time)
-                    filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 || b.beatNum === 3);
-                    break;
-                case 'beat':
-                    filteredBeats = beatmapWithBars;
-                    break;
-            }
-
-            // Don't automatically add a marker at time 0
-            // The beatmap from Music.ai should already have markers at the correct audio onsets
-            // If there's silence at the beginning, the first marker should be at the first onset, not time 0
-
-            // Debug: Log first few beats of original beatmap
-            console.log(`[BEATMAP DEBUG] First 5 beats from original beatmap:`, file.beatmap.slice(0, 5));
-
-            // Debug: Log first few filtered beats
-            console.log(`[BEATMAP DEBUG] First 5 filtered beats after processing:`, filteredBeats.slice(0, 5));
-
-            console.log(`Adding ${filteredBeats.length} markers (frequency: ${markerFrequency}, barOffset: ${barOffset}, beatOffset: ${fractionalBeats}) for ${file.name}`);
-
-            // Add a marker div for each filtered beat
-            filteredBeats.forEach((beat) => {
-                const marker = document.createElement('div');
-                const isBar = beat.beatNum === 1;
-                const isEmphasisBar = isBar && (beat.barNumber % 4 === 1); // Bars 1, 5, 9, 13...
-
-                // Different styles for emphasis bars, regular bars, and beats
-                if (isEmphasisBar) {
-                    // Every 4th bar: bright red
-                    marker.className = 'bar-marker';
-                    marker.title = `Bar ${beat.barNumber} - Beatmap[${beat.originalIndex}] - Click to snap`;
-                } else if (isBar) {
-                    // Regular bars (2, 3, 4, 6, 7, 8...): orange like beats
-                    marker.className = 'beat-marker';
-                    marker.title = `Bar ${beat.barNumber} - Beatmap[${beat.originalIndex}] - Click to snap`;
-                } else {
-                    // Actual beats: orange
-                    marker.className = 'beat-marker';
-                    marker.title = `Beat ${beat.beatNum} - Beatmap[${beat.originalIndex}]`;
-                }
-
-                // Calculate position as percentage of duration
-                const position = (beat.time / duration) * 100;
-                marker.style.left = `${position}%`;
-
-                // Add bar number label at bottom for bars (beatNum === 1)
-                if (isBar) {
-                    const barLabel = document.createElement('span');
-                    barLabel.textContent = beat.barNumber;
-                    barLabel.style.cssText = `
-                        position: absolute;
-                        left: 2px;
-                        bottom: 0;
-                        font-size: 9px;
-                        color: ${isEmphasisBar ? '#ff4444' : '#ff9944'};
-                        font-weight: bold;
-                        pointer-events: none;
-                        user-select: none;
-                        text-shadow: 0 0 2px rgba(0,0,0,0.8);
-                    `;
-                    marker.appendChild(barLabel);
-                }
-
-                // Add beatmap index label at top for all markers
-                const indexLabel = document.createElement('span');
-                indexLabel.textContent = beat.originalIndex;
-                indexLabel.style.cssText = `
-                    position: absolute;
-                    left: 2px;
-                    top: 0;
-                    font-size: 8px;
-                    color: #666;
-                    font-weight: normal;
-                    pointer-events: none;
-                    user-select: none;
-                    text-shadow: 0 0 2px rgba(0,0,0,0.8);
-                `;
-                marker.appendChild(indexLabel);
-
-                // Store marker time for click-to-snap
-                currentMarkers.push(beat.time);
-
-                markerContainer.appendChild(marker);
-            });
 
             // Add click-to-snap functionality to waveform
             waveformContainer.style.cursor = 'pointer';
@@ -2528,7 +2359,7 @@
                 const clickTime = relativeX * duration;
 
                 // Find nearest marker to the left
-                const snapTime = findNearestMarkerToLeft(clickTime);
+                const snapTime = MarkerSystem.findNearestMarkerToLeft(clickTime, currentMarkers);
 
                 // AUTO-SET LOOP POINTS (only if in edit loop mode)
                 if (cycleMode) {
@@ -2632,7 +2463,7 @@
                 const mouseTime = relativeX * duration;
 
                 // Find nearest marker to the left
-                const hoverSnapTime = findNearestMarkerToLeft(mouseTime);
+                const hoverSnapTime = MarkerSystem.findNearestMarkerToLeft(mouseTime, currentMarkers);
 
                 // Only show preview if hover position is after loop start
                 if (hoverSnapTime <= loopStart) {
@@ -2679,8 +2510,13 @@
 
         // Toggle bar markers on/off
         function toggleMarkers() {
-            markersEnabled = !markersEnabled;
-            console.log(`Bar markers: ${markersEnabled ? 'ON' : 'OFF'}`);
+            const result = MarkerSystem.toggleMarkers({
+                markersEnabled,
+                audioFiles,
+                currentFileId
+            });
+
+            markersEnabled = result.markersEnabled;
 
             // Update button state
             const btn = document.getElementById('markersBtn');
@@ -2692,7 +2528,7 @@
                 }
             }
 
-            // Re-render markers (or clear them)
+            // Re-render markers with new state
             const file = audioFiles.find(f => f.id === currentFileId);
             if (file) {
                 addBarMarkers(file);
@@ -2701,124 +2537,46 @@
 
         // Change marker frequency
         function setMarkerFrequency(freq) {
-            markerFrequency = freq;
-            console.log(`Marker frequency: ${freq}`);
+            const result = MarkerSystem.setMarkerFrequency({
+                markerFrequency,
+                audioFiles,
+                currentFileId,
+                multiStemPlayerExpanded
+            }, freq, addBarMarkers, stemPlayerComponents);
 
-            // Re-render current file
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addBarMarkers(file);
-            }
-
-            // Also update all stem marker frequencies if stems are expanded
-            console.log(`[setMarkerFrequency] freq: ${freq}, multiStemPlayerExpanded: ${multiStemPlayerExpanded}, stemPlayerComponents:`, Object.keys(stemPlayerComponents));
-            if (multiStemPlayerExpanded) {
-                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                stemTypes.forEach(stemType => {
-                    console.log(`  Checking stem ${stemType}, component exists: ${!!stemPlayerComponents[stemType]}`);
-                    if (stemPlayerComponents[stemType]) {
-                        console.log(`  → Setting ${stemType} marker frequency to ${freq}`);
-                        stemPlayerComponents[stemType].setMarkerFrequency(freq);
-                    }
-                });
-            }
-        }
-
-        // Get shift increment based on marker frequency
-        function getShiftIncrement() {
-            switch (markerFrequency) {
-                case 'bar8': return 8;      // Shift by 8 bars
-                case 'bar4': return 4;      // Shift by 4 bars
-                case 'bar2': return 2;      // Shift by 2 bars
-                case 'bar': return 1;       // Shift by 1 bar
-                case 'halfbar': return 0.5; // Shift by half bar (2 beats in 4/4)
-                case 'beat': return 0.25;   // Shift by 1 beat (quarter bar in 4/4)
-                default: return 1;
-            }
+            markerFrequency = result.markerFrequency;
         }
 
         // Shift bar start left (make an earlier marker be bar 1)
         function shiftBarStartLeft() {
-            const increment = getShiftIncrement();
-            barStartOffset -= increment;
-            console.log(`Bar start offset: ${barStartOffset} (shifted by -${increment})`);
+            const result = MarkerSystem.shiftBarStartLeft({
+                barStartOffset,
+                markerFrequency,
+                audioFiles,
+                currentFileId,
+                multiStemPlayerExpanded
+            }, addBarMarkers, stemPlayerComponents);
 
-            // Update display
-            const display = document.getElementById('barStartOffsetDisplay');
-            if (display) {
-                display.textContent = barStartOffset.toFixed(2).replace(/\.?0+$/, ''); // Remove trailing zeros
-            }
-
-            // Re-render markers
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addBarMarkers(file);
-            }
-
-            // Also shift all stem markers if stems are expanded
-            console.log(`[shiftBarStartLeft] multiStemPlayerExpanded: ${multiStemPlayerExpanded}, stemPlayerComponents:`, Object.keys(stemPlayerComponents));
-            if (multiStemPlayerExpanded) {
-                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                stemTypes.forEach(stemType => {
-                    console.log(`  Checking stem ${stemType}, component exists: ${!!stemPlayerComponents[stemType]}`);
-                    if (stemPlayerComponents[stemType]) {
-                        console.log(`  → Shifting ${stemType} markers left`);
-                        stemPlayerComponents[stemType].shiftBarStartLeft();
-                    }
-                });
-            }
+            barStartOffset = result.barStartOffset;
         }
 
         // Shift bar start right (make a later marker be bar 1)
         function shiftBarStartRight() {
-            const increment = getShiftIncrement();
-            barStartOffset += increment;
-            console.log(`Bar start offset: ${barStartOffset} (shifted by +${increment})`);
+            const result = MarkerSystem.shiftBarStartRight({
+                barStartOffset,
+                markerFrequency,
+                audioFiles,
+                currentFileId,
+                multiStemPlayerExpanded
+            }, addBarMarkers, stemPlayerComponents);
 
-            // Update display
-            const display = document.getElementById('barStartOffsetDisplay');
-            if (display) {
-                display.textContent = barStartOffset.toFixed(2).replace(/\.?0+$/, ''); // Remove trailing zeros
-            }
-
-            // Re-render markers
-            const file = audioFiles.find(f => f.id === currentFileId);
-            if (file) {
-                addBarMarkers(file);
-            }
-
-            // Also shift all stem markers if stems are expanded
-            console.log(`[shiftBarStartRight] multiStemPlayerExpanded: ${multiStemPlayerExpanded}, stemPlayerComponents:`, Object.keys(stemPlayerComponents));
-            if (multiStemPlayerExpanded) {
-                const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-                stemTypes.forEach(stemType => {
-                    console.log(`  Checking stem ${stemType}, component exists: ${!!stemPlayerComponents[stemType]}`);
-                    if (stemPlayerComponents[stemType]) {
-                        console.log(`  → Shifting ${stemType} markers right`);
-                        stemPlayerComponents[stemType].shiftBarStartRight();
-                    }
-                });
-            }
-        }
-
-        // Find nearest marker to the left of a given time
-        function findNearestMarkerToLeft(clickTime) {
-            if (currentMarkers.length === 0) return clickTime;
-
-            // Find the largest marker time that is <= clickTime
-            let nearestMarker = 0;
-            for (let markerTime of currentMarkers) {
-                if (markerTime <= clickTime && markerTime > nearestMarker) {
-                    nearestMarker = markerTime;
-                }
-            }
-
-            return nearestMarker;
+            barStartOffset = result.barStartOffset;
         }
 
         // ============================================
         // VERSION 27D: PER-STEM MARKER FUNCTIONS
         // ============================================
+        // Note: findNearestMarkerToLeft() moved to MarkerSystem module
 
         // === STEM MARKER WRAPPERS (delegate to PlayerBarComponent) ===
 

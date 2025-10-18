@@ -782,19 +782,6 @@
             });
         }
 
-        // Pause all stems
-        function pauseAllStems() {
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-            stemTypes.forEach(stemType => {
-                const ws = stemPlayerWavesurfers[stemType];
-                if (ws) {
-                    ws.pause();
-                    // Update play button icon
-                    const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                    if (icon) icon.textContent = '▶';
-                }
-            });
-        }
 
         // Store parent-stem sync event handlers so we can clean them up
         let parentStemSyncHandlers = {
@@ -817,43 +804,6 @@
             );
         }
 
-        function destroyMultiStemPlayerWavesurfers() {
-            console.log('Destroying multi-stem player wavesurfers');
-
-            // Clean up event listeners before destroying
-            if (wavesurfer) {
-                if (parentStemSyncHandlers.play) {
-                    wavesurfer.un('play', parentStemSyncHandlers.play);
-                    parentStemSyncHandlers.play = null;
-                }
-                if (parentStemSyncHandlers.pause) {
-                    wavesurfer.un('pause', parentStemSyncHandlers.pause);
-                    parentStemSyncHandlers.pause = null;
-                }
-                if (parentStemSyncHandlers.seeking) {
-                    wavesurfer.un('seeking', parentStemSyncHandlers.seeking);
-                    parentStemSyncHandlers.seeking = null;
-                }
-            }
-
-            // Destroy all stem wavesurfers
-            Object.values(stemPlayerWavesurfers).forEach(ws => {
-                if (ws) {
-                    ws.destroy();
-                }
-            });
-            stemPlayerWavesurfers = {};
-            stemPlayerComponents = {}; // Clear component instances too
-            multiStemReadyCount = 0;
-
-            // Restore parent player volume if it was muted
-            if (wavesurfer && wavesurfer.getVolume() === 0) {
-                const volumeSlider = document.getElementById('volumeSlider');
-                const volume = volumeSlider ? volumeSlider.value / 100 : 1;
-                wavesurfer.setVolume(volume);
-                console.log('Restored parent player volume to:', volume);
-            }
-        }
 
         // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleMultiStemPlay(stemType) {

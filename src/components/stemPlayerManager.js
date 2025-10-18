@@ -813,18 +813,17 @@ export function setupParentStemSync(state, dependencies) {
 
     const stemTypes = ['vocals', 'drums', 'bass', 'other'];
 
-    // When parent plays, resume stems that follow parent
+    // When parent plays, resume ALL active stems (regardless of loop state)
     wavesurfer.on('play', () => {
         if (multiStemPlayerExpanded) {
-            console.log('Parent play event - resuming stems that follow parent');
+            console.log('Parent play event - resuming all active stems');
             stemTypes.forEach(stemType => {
                 const ws = stemPlayerWavesurfers[stemType];
-                const loopState = stemLoopStates[stemType];
-                const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
+                const isActive = stemPlaybackIndependent[stemType];
 
-                console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
+                console.log(`  ${stemType}: active=${isActive}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
 
-                if (ws && followsParent && !ws.isPlaying()) {
+                if (ws && isActive && !ws.isPlaying()) {
                     console.log(`  → Playing ${stemType}`);
                     ws.play();
                     const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
@@ -834,18 +833,17 @@ export function setupParentStemSync(state, dependencies) {
         }
     });
 
-    // When parent pauses, pause stems that follow parent
+    // When parent pauses, pause ALL active stems (regardless of loop state)
     wavesurfer.on('pause', () => {
         if (multiStemPlayerExpanded) {
-            console.log('Parent pause event - pausing stems that follow parent');
+            console.log('Parent pause event - pausing all active stems');
             stemTypes.forEach(stemType => {
                 const ws = stemPlayerWavesurfers[stemType];
-                const loopState = stemLoopStates[stemType];
-                const followsParent = stemPlaybackIndependent[stemType] && !loopState.enabled;
+                const isActive = stemPlaybackIndependent[stemType];
 
-                console.log(`  ${stemType}: active=${stemPlaybackIndependent[stemType]}, loopEnabled=${loopState.enabled}, followsParent=${followsParent}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
+                console.log(`  ${stemType}: active=${isActive}, isPlaying=${ws ? ws.isPlaying() : 'no ws'}`);
 
-                if (ws && followsParent) {
+                if (ws && isActive) {
                     if (ws.isPlaying()) {
                         console.log(`  → Pausing ${stemType}`);
                         ws.pause();

@@ -252,22 +252,9 @@
             // Calculate master volume as 0-1 range, ensuring complete silence at 0
             const masterVolume = sliderValue === 0 ? 0 : sliderValue / sliderMax;
 
-            // Update NEW multi-stem player volumes (when expanded)
+            // Update NEW multi-stem player volumes (when expanded) - delegated to StemPlayerManager
             if (multiStemPlayerExpanded) {
-                console.log(`[UPDATE STEM AUDIO] Master volume: ${(masterVolume * 100).toFixed(0)}%`);
-                Object.keys(stemPlayerWavesurfers).forEach(stemType => {
-                    const stemWS = stemPlayerWavesurfers[stemType];
-                    if (!stemWS) return;
-
-                    // Get the stem's individual volume slider value
-                    const stemVolumeSlider = document.getElementById(`stem-volume-${stemType}`);
-                    const stemVolume = stemVolumeSlider ? stemVolumeSlider.value / 100 : 1.0;
-
-                    // Multiply master volume by stem's individual volume
-                    const finalVolume = masterVolume * stemVolume;
-                    stemWS.setVolume(finalVolume);
-                    console.log(`[UPDATE STEM AUDIO] ${stemType}: master ${(masterVolume * 100).toFixed(0)}% × stem ${(stemVolume * 100).toFixed(0)}% = ${(finalVolume * 100).toFixed(0)}%`);
-                });
+                StemPlayerManager.updateMultiStemVolumes(stemPlayerWavesurfers, masterVolume);
             }
 
             // Update OLD stem player volumes (delegated to legacy module)
@@ -677,18 +664,9 @@
             stemPlaybackIndependent = result.stemPlaybackIndependent;
         }
 
-        // Play all stems in sync
+        // THIN WRAPPER: Delegates to StemPlayerManager
         function playAllStems() {
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-            stemTypes.forEach(stemType => {
-                const ws = stemPlayerWavesurfers[stemType];
-                if (ws) {
-                    ws.play();
-                    // Update play button icon
-                    const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
-                    if (icon) icon.textContent = '||';
-                }
-            });
+            StemPlayerManager.playAllStems(stemPlayerWavesurfers);
         }
 
 
@@ -740,208 +718,14 @@
         }
 
         // Phase 4: Toggle Cycle Mode for individual stem
+        // Delegates to PlayerBarComponent (all stems have components)
         function toggleStemCycleMode(stemType) {
-            // Delegate to PlayerBarComponent if it exists
             const stemComponent = stemPlayerComponents[stemType];
             if (stemComponent) {
                 stemComponent.toggleCycleMode();
-                return;
-            }
-
-            // Fallback to old implementation (shouldn't happen if components are set up properly)
-            console.warn(`[toggleStemCycleMode] No component found for ${stemType}, using fallback`);
-            const ws = stemPlayerWavesurfers[stemType];
-            if (!ws) return;
-
-            const loopState = stemLoopStates[stemType];
-
-            // Toggle cycle mode
-            stemCycleModes[stemType] = !stemCycleModes[stemType];
-
-            if (stemCycleModes[stemType]) {
-                // Entering cycle mode - enable loop editing
-                stemNextClickSets[stemType] = 'start';
-                console.log(`[${stemType}] CYCLE MODE ON - click waveform to set loop start/end`);
             } else {
-                // Exiting cycle mode - disable loop editing
-                // Also disable loop if it was playing
-                loopState.enabled = false;
-                loopState.start = null;
-                loopState.end = null;
-                console.log(`[${stemType}] CYCLE MODE OFF - loop disabled`);
+                console.error(`[toggleStemCycleMode] No PlayerBarComponent found for ${stemType} - this should not happen!`);
             }
-
-            // Update visual indicators
-            updateStemLoopVisuals(stemType);
-        }
-
-        // Phase 4: Setup click handler for stem waveform cycle mode
-        function setupStemCycleModeClickHandler(stemType, waveformContainer, ws) {
-            // Remove old click listeners if they exist
-            if (waveformContainer._clickHandler) {
-                waveformContainer.removeEventListener('click', waveformContainer._clickHandler, true);
-            }
-
-            // Create new click handler with capture phase to intercept BEFORE WaveSurfer
-            const clickHandler = (e) => {
-                const loopState = stemLoopStates[stemType];
-                const cycleMode = stemCycleModes[stemType];
-
-                // If cycle mode is off, let WaveSurfer handle click normally (seeking)
-                if (!cycleMode || !ws) return;
-
-                // Prevent WaveSurfer from seeking when in cycle mode
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-
-                // Get click position relative to waveform container
-                const rect = waveformContainer.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const relativeX = clickX / rect.width;
-
-                // Calculate time at click position
-                const duration = ws.getDuration();
-                const clickTime = relativeX * duration;
-
-                console.log(`[${stemType}] Click at ${clickTime.toFixed(2)}s`);
-
-                // Check if clicking left of loop start (reset start) or right of loop end (reset end)
-                if (loopState.start !== null && loopState.end !== null) {
-                    if (clickTime < loopState.start) {
-                        // Clicking left of loop start: move loop start
-                        loopState.start = clickTime;
-                        console.log(`[${stemType}] Loop start moved to ${clickTime.toFixed(2)}s`);
-                        updateStemLoopVisuals(stemType);
-                        return false;
-                    } else if (clickTime > loopState.end) {
-                        // Clicking right of loop end: move loop end
-                        loopState.end = clickTime;
-                        console.log(`[${stemType}] Loop end moved to ${clickTime.toFixed(2)}s`);
-                        updateStemLoopVisuals(stemType);
-                        return false;
-                    }
-                }
-
-                // Normal loop setting flow
-                if (stemNextClickSets[stemType] === 'start') {
-                    // Set loop start
-                    loopState.start = clickTime;
-                    loopState.end = null;
-                    loopState.enabled = false; // Don't enable loop yet (need end point)
-                    stemNextClickSets[stemType] = 'end';
-                    console.log(`[${stemType}] Loop start set to ${clickTime.toFixed(2)}s - click again for end`);
-                    updateStemLoopVisuals(stemType);
-                } else if (stemNextClickSets[stemType] === 'end') {
-                    // Set loop end
-                    if (clickTime <= loopState.start) {
-                        console.log(`[${stemType}] Loop end must be after loop start - ignoring click`);
-                        return false;
-                    }
-                    loopState.end = clickTime;
-                    loopState.enabled = true; // Enable loop now that we have both points
-                    stemNextClickSets[stemType] = 'start'; // Reset for next loop
-                    console.log(`[${stemType}] Loop end set to ${clickTime.toFixed(2)}s - Loop active! Starting playback...`);
-
-                    // Auto-play the stem when loop is set
-                    if (!ws.isPlaying()) {
-                        // Seek to loop start
-                        ws.seekTo(loopState.start / duration);
-                        // Start playing
-                        ws.play();
-                        // Mark stem as active (so parent play/pause respects it)
-                        stemPlaybackIndependent[stemType] = true;
-                        // Update play button icon
-                        const playBtn = document.getElementById(`stem-play-pause-${stemType}`);
-                        if (playBtn) {
-                            const icon = playBtn.querySelector('span');
-                            if (icon) icon.textContent = '||';
-                        }
-                        console.log(`[${stemType}] Auto-started playback from loop start`);
-                    }
-
-                    // Update visuals to show loop region
-                    updateStemLoopVisuals(stemType);
-                }
-
-                return false;
-            };
-
-            // Add listener in CAPTURE phase to intercept before WaveSurfer's handler
-            waveformContainer.addEventListener('click', clickHandler, true);
-            waveformContainer._clickHandler = clickHandler; // Store reference for cleanup
-
-            console.log(`[${stemType}] Cycle mode click handler installed`);
-        }
-
-        // Update stem loop visuals (button states, status text, loop region)
-        function updateStemLoopVisuals(stemType) {
-            const cycleBtn = document.getElementById(`stem-cycle-btn-${stemType}`);
-            const loopStatus = document.getElementById(`stem-loop-status-${stemType}`);
-            const loopState = stemLoopStates[stemType];
-            const cycleMode = stemCycleModes[stemType];
-
-            // Update cycle button state
-            if (cycleBtn) {
-                if (cycleMode) {
-                    cycleBtn.classList.add('active');
-                } else {
-                    cycleBtn.classList.remove('active');
-                }
-            }
-
-            // Update status text
-            if (loopStatus) {
-                const hasLoop = loopState.start !== null && loopState.end !== null;
-                if (!cycleMode && !hasLoop) {
-                    loopStatus.textContent = 'Off';
-                    loopStatus.style.color = '#666';
-                } else if (cycleMode && loopState.start === null) {
-                    loopStatus.textContent = 'Click start';
-                    loopStatus.style.color = '#f59e0b';
-                } else if (cycleMode && loopState.end === null) {
-                    loopStatus.textContent = 'Click end →';
-                    loopStatus.style.color = '#f59e0b';
-                } else if (hasLoop) {
-                    const duration = loopState.end - loopState.start;
-                    loopStatus.textContent = `${duration.toFixed(1)}s`;
-                    loopStatus.style.color = '#10b981';
-                }
-            }
-
-            // Update loop region visualization
-            updateStemLoopRegion(stemType);
-        }
-
-        // Update stem loop region overlay on waveform
-        function updateStemLoopRegion(stemType) {
-            const waveformContainer = document.getElementById(`multi-stem-waveform-${stemType}`);
-            if (!waveformContainer) return;
-
-            const ws = stemPlayerWavesurfers[stemType];
-            const loopState = stemLoopStates[stemType];
-            const cycleMode = stemCycleModes[stemType];
-
-            // Remove existing loop region
-            const existingRegion = waveformContainer.querySelector('.loop-region');
-            if (existingRegion) existingRegion.remove();
-
-            // Don't draw if cycle mode is off or loop not fully set
-            if (!cycleMode || loopState.start === null || loopState.end === null || !ws) return;
-
-            const duration = ws.getDuration();
-            if (duration === 0) return;
-
-            const startPercent = (loopState.start / duration) * 100;
-            const endPercent = (loopState.end / duration) * 100;
-            const widthPercent = endPercent - startPercent;
-
-            const loopRegion = document.createElement('div');
-            loopRegion.className = 'loop-region';
-            loopRegion.style.left = `${startPercent}%`;
-            loopRegion.style.width = `${widthPercent}%`;
-
-            waveformContainer.appendChild(loopRegion);
         }
 
         // THIN WRAPPER: Delegates to PlayerBarComponent
@@ -965,19 +749,6 @@
         // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleStemRateLock(stemType) {
             stemPlayerComponents[stemType]?.toggleRateLock();
-        }
-
-        // Phase 4 Step 2B: Render visual waveforms in expansion containers
-        function renderStemWaveforms(fileId) {
-            StemLegacyPlayer.renderStemWaveforms(fileId, stemFiles, WaveSurfer);
-        }
-
-        function restoreStemControlStates(fileId) {
-            StemLegacyPlayer.restoreStemControlStates(fileId, stemFiles, {
-                stemVolumes,
-                stemMuted,
-                stemSoloed
-            });
         }
 
         // Generate stems for a file
@@ -1965,8 +1736,6 @@
                 loadFile: loadAudio,
                 renderMiniWaveforms: (files) => MiniWaveform.renderAll(files),
                 openTagEditModal: (selectedFiles, audioFiles) => TagEditModal.open(selectedFiles, audioFiles),
-                renderStemWaveforms,
-                restoreStemControlStates,
                 updateStemsButton
             },
             // State getters

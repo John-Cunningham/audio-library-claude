@@ -882,3 +882,46 @@ export function setupParentStemSync(state, dependencies) {
         }
     });
 }
+
+/**
+ * Play all stems in sync
+ * Updates UI play button icons for each stem
+ * @param {Object} stemPlayerWavesurfers - Stem WaveSurfer instances
+ */
+export function playAllStems(stemPlayerWavesurfers) {
+    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+    stemTypes.forEach(stemType => {
+        const ws = stemPlayerWavesurfers[stemType];
+        if (ws) {
+            ws.play();
+            // Update play button icon
+            const icon = document.getElementById(`stem-play-pause-icon-${stemType}`);
+            if (icon) icon.textContent = '||';
+        }
+    });
+}
+
+/**
+ * Update NEW multi-stem player volumes
+ * Applies master volume to each stem's individual volume
+ * @param {Object} stemPlayerWavesurfers - Stem WaveSurfer instances
+ * @param {number} masterVolume - Master volume (0-1)
+ */
+export function updateMultiStemVolumes(stemPlayerWavesurfers, masterVolume) {
+    console.log(`[UPDATE STEM AUDIO] Master volume: ${(masterVolume * 100).toFixed(0)}%`);
+
+    const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+    stemTypes.forEach(stemType => {
+        const stemWS = stemPlayerWavesurfers[stemType];
+        if (!stemWS) return;
+
+        // Get the stem's individual volume slider value
+        const stemVolumeSlider = document.getElementById(`stem-volume-${stemType}`);
+        const stemVolume = stemVolumeSlider ? stemVolumeSlider.value / 100 : 1.0;
+
+        // Multiply master volume by stem's individual volume
+        const finalVolume = masterVolume * stemVolume;
+        stemWS.setVolume(finalVolume);
+        console.log(`[UPDATE STEM AUDIO] ${stemType}: master ${(masterVolume * 100).toFixed(0)}% × stem ${(stemVolume * 100).toFixed(0)}% = ${(finalVolume * 100).toFixed(0)}%`);
+    });
+}

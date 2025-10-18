@@ -12,6 +12,8 @@
  *   FileListRenderer.filterFiles();
  */
 
+import * as StemLegacyPlayer from '../components/stemLegacyPlayer.js';
+
 // Module state for sorting
 let sortBy = 'date';
 let sortOrder = 'desc';
@@ -28,8 +30,6 @@ let state = {};
  * @param {Function} cbs.loadFile - Load and play a file
  * @param {Function} cbs.renderMiniWaveforms - Render mini waveforms
  * @param {Function} cbs.openTagEditModal - Open tag edit modal
- * @param {Function} cbs.renderStemWaveforms - Render stem waveforms
- * @param {Function} cbs.restoreStemControlStates - Restore stem control states
  * @param {Function} cbs.updateStemsButton - Update stems button appearance
  * @param {Object} st - State getters
  * @param {Function} st.getAudioFiles - Get audio files array
@@ -385,8 +385,17 @@ export function openStemsViewer(fileId, event) {
     // Render waveforms in expansion containers if stems are loaded
     if (expandedStems.has(fileId) && Object.keys(stemWavesurfers).length > 0 && currentFileId === fileId) {
         setTimeout(() => {
-            callbacks.renderStemWaveforms(fileId);
-            callbacks.restoreStemControlStates(fileId);
+            const stemFiles = {}; // TODO: Get stemFiles from state
+            StemLegacyPlayer.renderStemWaveforms(fileId, stemFiles, WaveSurfer);
+
+            const stemVolumes = {}; // TODO: Get from state
+            const stemMuted = {}; // TODO: Get from state
+            const stemSoloed = {}; // TODO: Get from state
+            StemLegacyPlayer.restoreStemControlStates(fileId, stemFiles, {
+                stemVolumes,
+                stemMuted,
+                stemSoloed
+            });
         }, 100); // Small delay to ensure DOM is ready
     }
 }
@@ -414,8 +423,17 @@ export function toggleStemsViewer() {
     // Render waveforms in expansion containers if stems are loaded
     if (expandedStems.has(currentFileId) && Object.keys(stemWavesurfers).length > 0) {
         setTimeout(() => {
-            callbacks.renderStemWaveforms(currentFileId);
-            callbacks.restoreStemControlStates(currentFileId);
+            const stemFiles = {}; // TODO: Get stemFiles from state
+            StemLegacyPlayer.renderStemWaveforms(currentFileId, stemFiles, WaveSurfer);
+
+            const stemVolumes = {}; // TODO: Get from state
+            const stemMuted = {}; // TODO: Get from state
+            const stemSoloed = {}; // TODO: Get from state
+            StemLegacyPlayer.restoreStemControlStates(currentFileId, stemFiles, {
+                stemVolumes,
+                stemMuted,
+                stemSoloed
+            });
         }, 100); // Small delay to ensure DOM is ready
     }
 

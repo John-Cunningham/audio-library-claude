@@ -610,15 +610,15 @@ function generateStemsHTML(fileId) {
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                     <span style="color: #999; font-size: 11px;">Vol</span>
                                     <input type="range" id="stem-volume-${stem}-${fileId}" min="0" max="100" value="100"
-                                           style="width: 80px;" oninput="window.handleStemVolumeChange('${stem}', this.value)">
+                                           style="width: 80px;" oninput="window.stemLegacyHandleVolumeChange('${stem}', this.value)">
                                     <span id="stem-volume-value-${stem}-${fileId}" style="color: #999; font-size: 11px; min-width: 30px;">100%</span>
                                 </div>
                                 <!-- Mute Button -->
-                                <button id="stem-mute-${stem}-${fileId}" onclick="window.handleStemMute('${stem}')"
+                                <button id="stem-mute-${stem}-${fileId}" onclick="window.stemLegacyHandleMute('${stem}')"
                                         style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 16px;"
                                         title="Mute ${labels[stem]}">🔊</button>
                                 <!-- Solo Button -->
-                                <button id="stem-solo-${stem}-${fileId}" onclick="window.handleStemSolo('${stem}')"
+                                <button id="stem-solo-${stem}-${fileId}" onclick="window.stemLegacyHandleSolo('${stem}')"
                                         style="background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; padding: 6px 10px; color: #fff; cursor: pointer; font-size: 12px; font-weight: 600;"
                                         title="Solo ${labels[stem]}">S</button>
                             </div>

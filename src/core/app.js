@@ -1,4 +1,11 @@
-        // Import modules (ROUND 1 - Foundation Modules)
+        /**
+         * AUDIO LIBRARY CLAUDE - MAIN APPLICATION
+         *
+         * Coordinates all modules and manages state synchronization.
+         * Uses hybrid state pattern: local cache for performance + centralized state managers for multi-view persistence.
+         */
+
+
         import { supabase, PREF_KEYS } from './config.js';
         import * as Utils from './utils.js';
         import { generateStemPlayerBar } from './playerTemplate.js';
@@ -7,7 +14,6 @@
         import { FileLoader } from '../services/fileLoader.js';
         import { ActionRecorder } from '../services/actionRecorder.js';
 
-        // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
         import { initKeyboardShortcuts } from './keyboardShortcuts.js';
         import * as ProgressBar from '../utils/progressBar.js';
@@ -25,60 +31,50 @@
         import * as StemPlayerManager from '../components/stemPlayerManager.js';
         import * as StemLegacyPlayer from '../components/stemLegacyPlayer.js';
         import * as AdvancedRateMode from '../components/advancedRateMode.js';
+
         import * as StemState from '../state/stemStateManager.js';
         import * as LoopState from '../state/loopStateManager.js';
         import * as PlayerState from '../state/playerStateManager.js';
 
-        // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
         import * as LibraryView from '../views/libraryView.js';
         import * as GalaxyView from '../views/galaxyView.js';
         import * as SphereView from '../views/sphereView.js';
 
-        // Note: Modules provide:
-        // - config.js: supabase client, PREF_KEYS constants
-        // - utils.js: extractTagsFromFilename(), getAudioDuration(), etc.
-        // - metronome.js: Metronome.toggleMetronome(wavesurfer), Metronome.scheduleMetronome(audioFiles, currentFileId, wavesurfer, barStartOffset, currentRate), etc.
 
         let audioFiles = [];
         let wavesurfer = null;
-        let parentWaveform = null; // WaveformComponent instance for parent player
-        let parentPlayerComponent = null; // PlayerBarComponent instance for parent player
-        let fileLoader = null; // FileLoader service instance
-        let actionRecorder = null; // ActionRecorder service instance
-        let stemPlayerComponents = {}; // PlayerBarComponent instances for stem players {vocals: component, drums: component, ...}
-        let selectedFiles = new Set();
-        let processingFiles = new Set(); // Track files currently being processed
-        let expandedStems = new Set(); // Track files with expanded stems view (Phase 4 Step 1)
+        let parentWaveform = null;
+        let parentPlayerComponent = null;
+        let fileLoader = null;
+        let actionRecorder = null;
+        let stemPlayerComponents = {};
 
-        // Stem playback state (Phase 4 Step 2A)
-        let stemWavesurfers = {}; // { vocals: WaveSurfer, drums: WaveSurfer, bass: WaveSurfer, other: WaveSurfer }
-        let stemFiles = {}; // Cached stem file data from audio_files_stems table for CURRENT file
-        let allStemFiles = {}; // Preloaded ALL stem files, keyed by parent audio_file_id (Phase 4 Fix 1)
-        // Phase 4 Fix 2: State keyed by stem file ID instead of stem type
-        let stemMuted = {}; // { stemFileId: true/false }
-        let stemSoloed = {}; // { stemFileId: true/false }
-        let stemVolumes = {}; // { stemFileId: 0.0-1.0 }
+        let selectedFiles = new Set();
+        let processingFiles = new Set();
+        let expandedStems = new Set();
+
+        let stemWavesurfers = {};
+        let stemFiles = {};
+        let allStemFiles = {};
+        let stemMuted = {};
+        let stemSoloed = {};
+        let stemVolumes = {};
 
         let searchQuery = '';
-        let currentTagMode = null; // Default mode for tag clicks (null = no mode, normal click behavior)
-        let showAllTags = false; // Toggle for showing low-count tags
+        let currentTagMode = null;
+        let showAllTags = false;
+
+        let pendingUploadFiles = [];
 
         // ============================================
-        // LOOP STATE MANAGEMENT - HYBRID APPROACH
+        // LOOP STATE - HYBRID PATTERN
         // ============================================
-        // All loop state (17 variables) extracted to src/state/loopStateManager.js
-        // This enables multi-view architecture where loop state persists across Library/Galaxy/Sphere views
-        //
-        // HYBRID APPROACH:
-        // - Local variables act as "caches" for performance
-        // - Changes are synced TO LoopState (single source of truth)
-        // - On load, initialize FROM LoopState
-        //
-        // This approach ensures compatibility while enabling multi-view persistence
-        // ============================================
+        /**
+         * 17 variables synced to LoopStateManager.
+         * Local cache for performance, centralized state for multi-view persistence.
+         */
 
-        // Initialize local cache variables from LoopState on startup
         let loopStart = LoopState.getLoopStart();
         let loopEnd = LoopState.getLoopEnd();
         let cycleMode = LoopState.getCycleMode();
@@ -98,20 +94,13 @@
         let lockedBPM = LoopState.getLockedBPM();
 
         // ============================================
-        // PLAYER STATE MANAGEMENT - HYBRID APPROACH
+        // PLAYER STATE - HYBRID PATTERN
         // ============================================
-        // All player state (11 variables) extracted to src/state/playerStateManager.js
-        // This enables multi-view architecture where player state persists across Library/Galaxy/Sphere views
-        //
-        // HYBRID APPROACH:
-        // - Local variables act as "caches" for performance
-        // - Changes are synced TO PlayerState (single source of truth)
-        // - On load, initialize FROM PlayerState
-        //
-        // This approach ensures compatibility while enabling multi-view persistence
-        // ============================================
+        /**
+         * 11 variables synced to PlayerStateManager.
+         * Local cache for performance, centralized state for multi-view persistence.
+         */
 
-        // Initialize local cache variables from PlayerState on startup
         let currentFileId = PlayerState.getCurrentFileId();
         let currentRate = PlayerState.getCurrentRate();
         let isShuffling = PlayerState.getIsShuffling();
@@ -128,16 +117,14 @@
             mustHave: new Set(),
             exclude: new Set()
         };
-        let sortBy = 'date'; // 'name', 'date', 'bpm', 'key', 'length'
-        let sortOrder = 'desc'; // 'asc' or 'desc'
+        let sortBy = 'date';
+        let sortOrder = 'desc';
 
-        // Set tag click mode (for mobile)
-        // Set tag mode (moved to tagManager.js)
+
         function setTagMode(mode) {
             TagManager.setMode(mode);
         }
 
-        // Handle search input
         function handleSearch(query) {
             searchQuery = query;
             TagManager.render(searchQuery);
@@ -146,16 +133,13 @@
 
         function handleSearchKeydown(e) {
             if (e.key === 'Enter') {
-                // Exit search field
                 e.target.blur();
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                // Move to first tag
                 const firstTag = document.querySelector('.tag-pill');
                 if (firstTag) {
                     firstTag.focus();
                 } else {
-                    // If no tags, move to first file
                     const firstFile = document.querySelector('.file-item');
                     if (firstFile) {
                         firstFile.click();
@@ -164,7 +148,7 @@
             }
         }
 
-        // Load data from Supabase on startup
+
         async function loadData() {
             try {
                 const { data, error } = await supabase
@@ -179,20 +163,16 @@
                 // Phase 4 Fix 1: Preload ALL stem files for instant access
                 await preloadAllStems();
 
-                // Initialize view manager on first load
                 if (!ViewManager.getCurrentViewName()) {
-                    // Register all views
                     ViewManager.registerView('library', LibraryView);
                     ViewManager.registerView('galaxy', GalaxyView);
                     ViewManager.registerView('sphere', SphereView);
 
-                    // Switch to library view with render functions
                     await ViewManager.switchView('library', {
                         renderFunction: FileListRenderer.render,
                         renderTagsFunction: renderTags
                     });
                 } else {
-                    // Just render if view already initialized
                     renderTags();
                     FileListRenderer.render();
                 }
@@ -207,18 +187,14 @@
             allStemFiles = await StemPlayerManager.preloadAllStems(supabase);
         }
 
-        // Polling removed - data refreshes immediately after processing completes
 
-        // ========================================
-        // STEM PLAYBACK FUNCTIONS (Phase 4 Step 2A)
-        // ========================================
-
-        // Fetch stem files for a parent audio file from audio_files_stems table
+        // ============================================
+        // STEM PLAYBACK FUNCTIONS (Legacy OLD System)
+        // ============================================
         async function fetchStemFiles(parentFileId) {
             return await StemPlayerManager.fetchStemFiles(supabase, parentFileId);
         }
 
-        // Destroy all stem WaveSurfer instances
         function destroyAllStems() {
             const result = StemPlayerManager.destroyAllStems({
                 stemWavesurfers,
@@ -227,7 +203,6 @@
                 wavesurfer
             });
 
-            // Apply new state (sync to StemState)
             stemWavesurfers = result.stemWavesurfers;
             syncWavesurfersToState(result.stemPlayerWavesurfers);
             syncComponentsToState(result.stemPlayerComponents);
@@ -237,12 +212,10 @@
             syncExpandedToState(result.multiStemPlayerExpanded);
         }
 
-        // Create WaveSurfer instance for a single stem (hidden, no container)
         function createStemWaveSurfer(stemType) {
             return StemPlayerManager.createStemWaveSurfer(stemType, WaveSurfer);
         }
 
-        // Load and sync all stems for a file
         async function loadStems(parentFileId, autoplay = true) {
             const result = await StemPlayerManager.loadStems(parentFileId, {
                 allStemFiles,
@@ -252,14 +225,12 @@
             if (result.success) {
                 stemWavesurfers = result.stemWavesurfers;
                 stemFiles = result.stemFiles;
-                // Sync stems with main WaveSurfer events
                 syncStemsWithMain(autoplay);
             }
 
             return result.success;
         }
 
-        // Sync all stem WaveSurfers with main WaveSurfer
         function syncStemsWithMain(autoplay = true) {
             StemPlayerManager.syncStemsWithMain({
                 wavesurfer,
@@ -267,22 +238,17 @@
             }, autoplay);
         }
 
-        // Apply solo/mute logic to stems
         function updateStemAudioState() {
-            // Phase 4 Step 2B: Get master volume from slider
             const volumeSlider = document.getElementById('volumeSlider');
             const sliderValue = volumeSlider ? parseFloat(volumeSlider.value) : 100;
             const sliderMax = volumeSlider ? parseFloat(volumeSlider.max) : 398;
 
-            // Calculate master volume as 0-1 range, ensuring complete silence at 0
             const masterVolume = sliderValue === 0 ? 0 : sliderValue / sliderMax;
 
-            // Update NEW multi-stem player volumes (when expanded) - delegated to StemPlayerManager
             if (multiStemPlayerExpanded) {
                 StemPlayerManager.updateMultiStemVolumes(stemPlayerWavesurfers, masterVolume);
             }
 
-            // Update OLD stem player volumes (delegated to legacy module)
             StemLegacyPlayer.updateLegacyStemVolumes({
                 masterVolume,
                 stemWavesurfers,
@@ -293,14 +259,10 @@
             });
         }
 
-        // ========================================
-        // END STEM PLAYBACK FUNCTIONS
-        // ========================================
-
-        // Initialize WaveSurfer
-        // THIN WRAPPER: Delegates to WaveformComponent
+        // ============================================
+        // STEM PLAYBACK FUNCTIONS (Legacy OLD System)
+        // ============================================
         function initWaveSurfer() {
-            // Create parent waveform component if doesn't exist
             if (!parentWaveform) {
                 parentWaveform = new WaveformComponent({
                     playerType: 'parent',
@@ -311,10 +273,8 @@
                 });
             }
 
-            // Create wavesurfer instance via component
             wavesurfer = parentWaveform.create(WaveSurfer);
 
-            // Create and initialize parent player bar component (only once)
             if (!parentPlayerComponent) {
                 parentPlayerComponent = new PlayerBarComponent({
                     playerType: 'parent',
@@ -323,45 +283,12 @@
                 parentPlayerComponent.init();
                 console.log('Parent PlayerBarComponent initialized');
             } else {
-                // Update waveform reference for existing component
                 parentPlayerComponent.waveform = wavesurfer;
                 console.log('Parent PlayerBarComponent waveform reference updated');
             }
         }
 
-        // Auto-tag from filename
-        // Helper functions moved to fileProcessor.js
-        // - extractTagsFromFilename()
-        // - getAudioDuration()
 
-        // Calculate BPM from onset positions with musical quantization
-        // (Kept for future use when we integrate proper BPM detection)
-
-        // Upload audio files (multi-file support)
-        // Store pending upload files
-        let pendingUploadFiles = [];
-
-        // Upload workflow moved to uploadManager.js
-        // - loadProcessingPreferences()
-        // - saveProcessingPreferences()
-        // - openUploadFlow()
-        // - openUploadTagModal()
-        // - File input event listener
-        // - Checkbox change event listeners
-
-        // Batch operations moved to batchOperations.js
-        // - runSelectedProcessing()
-        // - deleteFile()
-        // - batchDelete()
-        // - batchDetect()
-        // - batchSeparateStems()
-
-        // Upload functions moved to fileProcessor.js
-        // - performUpload()
-        // - uploadAudio()
-
-        // Get all unique tags with counts, sorted by count (highest first)
-        // Tag management functions (moved to tagManager.js)
         function handleTagClick(tag, event) {
             TagManager.handleClick(tag, event);
         }
@@ -374,22 +301,17 @@
             TagManager.deselectAll();
         }
 
-        // Render tags (moved to tagManager.js)
         function renderTags(searchQuery = '') {
             TagManager.render(searchQuery);
         }
 
-        // Toggle showing all tags (moved to tagManager.js)
         function toggleShowAllTags() {
             TagManager.toggleShowAll();
         }
 
-        // BPM/Key filtering functions removed - were unused (no UI containers exist)
 
 
-        // File list rendering moved to src/views/fileListRenderer.js
 
-        // Update STEMS button visibility and active state (Player Bar UI - NOT file list)
         function updateStemsButton() {
             StemPlayerManager.updateStemsButton({
                 allStemFiles,
@@ -397,7 +319,6 @@
                 multiStemPlayerExpanded
             });
 
-            // Update text based on expanded state
             const stemsBtn = document.getElementById('stemsBtn');
             if (stemsBtn && stemsBtn.style.display !== 'none') {
                 if (multiStemPlayerExpanded) {
@@ -406,7 +327,6 @@
                     stemsBtn.innerHTML = '<span>▲ STEMS</span>';
                 }
             } else if (stemsBtn) {
-                // Close multi-stem player if it's open and file has no stems
                 if (multiStemPlayerExpanded) {
                     toggleMultiStemPlayer();
                 }
@@ -414,30 +334,21 @@
         }
 
         // ============================================
-        // STEM STATE MANAGEMENT - HYBRID APPROACH
+        // STEM STATE - HYBRID PATTERN
         // ============================================
-        // All stem state (162 lines) extracted to src/state/stemStateManager.js
-        // This enables multi-view architecture where stems persist across Library/Galaxy/Sphere views
-        //
-        // HYBRID APPROACH:
-        // - Local variables act as "caches" for performance
-        // - Changes are synced TO StemState (single source of truth)
-        // - On load, initialize FROM StemState
-        //
-        // This approach ensures compatibility while enabling multi-view persistence
-        // ============================================
+        /**
+         * Variables synced to StemStateManager.
+         * Local cache for performance, centralized state for multi-view persistence.
+         */
 
-        // Initialize local cache variables from StemState on startup
         let multiStemPlayerExpanded = StemState.isExpanded();
         let stemPlayerWavesurfers = StemState.getPlayerWavesurfers();
-        // Note: stemPlayerComponents already declared at line 46
         stemPlayerComponents = StemState.getPlayerComponents();
         let multiStemReadyCount = StemState.getReadyCount();
         let multiStemAutoPlayOnReady = StemState.getAutoPlayOnReady();
         let stemsPreloaded = StemState.isPreloaded();
         let currentParentFileBPM = StemState.getCurrentParentFileBPM();
 
-        // Helper functions to sync local cache to StemState (single source of truth)
         function syncExpandedToState(value) {
             multiStemPlayerExpanded = value;
             StemState.setExpanded(value);
@@ -475,9 +386,6 @@
         }
 
         // ============================================
-        // LOOP STATE SYNC FUNCTIONS
-        // ============================================
-        // Helper functions to sync local cache to LoopState (single source of truth)
 
         function syncLoopStartToState(value) {
             loopStart = value;
@@ -565,9 +473,6 @@
         }
 
         // ============================================
-        // PLAYER STATE SYNC FUNCTIONS
-        // ============================================
-        // Helper functions to sync local cache to PlayerState (single source of truth)
 
         function syncCurrentFileIdToState(value) {
             currentFileId = value;
@@ -624,7 +529,11 @@
             PlayerState.setIsLooping(value);
         }
 
-        // Phase 1: Pre-load stems silently in background when file loads
+        // ============================================
+        // NEW MULTI-STEM PLAYER
+        // ============================================
+        // Each stem has its own PlayerBarComponent with independent controls
+
         async function preloadMultiStemWavesurfers(fileId) {
             const result = await StemPlayerManager.preloadMultiStemWavesurfers(
                 fileId,
@@ -643,7 +552,6 @@
                     stemPlayerComponents,
                     currentParentFileBPM,
                     wavesurfer
-                    // Note: Per-stem state (stemLoopStates, stemMarkersEnabled, etc.) accessed via window objects from StemState
                 },
                 {
                     addStemBarMarkers,
@@ -651,16 +559,13 @@
                 }
             );
 
-            // Update app.js state with results (sync to StemState)
             stemFiles = result.stemFiles;
             syncWavesurfersToState(result.stemPlayerWavesurfers);
             syncComponentsToState(result.stemPlayerComponents);
-            // Note: stemIndependentRates, stemRateLocked managed by PlayerBarComponent internally
             syncParentBPMToState(result.currentParentFileBPM);
             syncPreloadedToState(result.stemsPreloaded);
         }
 
-        // Phase 1: Simplified toggle - just mute/unmute, no loading/destroying
         function toggleMultiStemPlayer() {
             const result = StemPlayerManager.toggleMultiStemPlayer(
                 {
@@ -670,28 +575,20 @@
                     stemPlayerWavesurfers
                 },
                 {
-                    // No dependencies needed - function accesses DOM directly
                 }
             );
 
-            // Update app.js state (sync to StemState)
             syncExpandedToState(result.multiStemPlayerExpanded);
 
-            // CRITICAL: Set up parent-stem sync when expanding
             if (multiStemPlayerExpanded && wavesurfer && Object.keys(stemPlayerWavesurfers).length > 0) {
                 setupParentStemSync();
                 console.log('✓ Parent-stem sync established after expanding stems');
             }
         }
 
-        // Phase 1: UI generation only - stems already loaded by preloadMultiStemWavesurfers()
-        // This function just makes the pre-existing waveform containers visible
         function generateMultiStemPlayerUI() {
             console.log('=== generateMultiStemPlayerUI (Phase 1 - Show Pre-loaded UI) ===');
 
-            // The UI containers already exist (created in preloadMultiStemWavesurfers)
-            // This function is now essentially a no-op since UI is pre-built
-            // Just ensure visibility is correct
 
             const multiStemPlayer = document.getElementById('multiStemPlayer');
             if (multiStemPlayer) {
@@ -727,25 +624,20 @@
                 setupParentStemSync
             );
 
-            // Update app.js state (sync to StemState)
             syncWavesurfersToState(result.stemPlayerWavesurfers);
-            // Note: stemPlaybackIndependent managed via window object from StemState
         }
 
-        // THIN WRAPPER: Delegates to StemPlayerManager
         function playAllStems() {
             StemPlayerManager.playAllStems(stemPlayerWavesurfers);
         }
 
 
-        // Store parent-stem sync event handlers so we can clean them up
         let parentStemSyncHandlers = {
             play: null,
             pause: null,
             seeking: null
         };
 
-        // Wrapper function to call module version with current state
         function setupParentStemSync() {
             StemPlayerManager.setupParentStemSync(
                 {},  // state not used by module version
@@ -760,33 +652,26 @@
         }
 
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleMultiStemPlay(stemType) {
             stemPlayerComponents[stemType]?.playPause();
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleMultiStemMute(stemType) {
             stemPlayerComponents[stemType]?.toggleMute();
         }
 
         function toggleMultiStemLoop(stemType) {
-            // Phase 4: Instead of toggling basic loop, toggle cycle mode
             toggleStemCycleMode(stemType);
         }
 
-        // Helper function to set stem loop region
         function setStemLoopRegion(stemType, startTime, endTime) {
             const loopState = stemLoopStates[stemType];
             loopState.start = startTime;
             loopState.end = endTime;
             console.log(`${stemType} loop region set: ${startTime}s - ${endTime}s`);
 
-            // TODO: Render loop region visual overlay on waveform
         }
 
-        // Phase 4: Toggle Cycle Mode for individual stem
-        // Delegates to PlayerBarComponent (all stems have components)
         function toggleStemCycleMode(stemType) {
             const stemComponent = stemPlayerComponents[stemType];
             if (stemComponent) {
@@ -796,30 +681,23 @@
             }
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function handleMultiStemVolumeChange(stemType, value) {
             stemPlayerComponents[stemType]?.setVolume(value);
         }
 
-        // Phase 2A: Individual Rate Control Functions
-        // THIN WRAPPERS: All delegate to PlayerBarComponent methods
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function handleStemRateChange(stemType, sliderValue) {
             stemPlayerComponents[stemType]?.setRate(sliderValue);
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function setStemRatePreset(stemType, presetRate) {
             stemPlayerComponents[stemType]?.setRatePreset(presetRate);
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleStemRateLock(stemType) {
             stemPlayerComponents[stemType]?.toggleRateLock();
         }
 
-        // Generate stems for a file
         function generateStems(fileId, event) {
             console.log('🎵 generateStems called with fileId:', fileId);
             event.preventDefault();
@@ -832,8 +710,6 @@
                 return;
             }
 
-            // Open the processing modal with stems icon context
-            // This will pre-check the "Split Stems" checkbox and allow user to add other processing options
             console.log('🔍 Checking for window.openEditTagsModal:', typeof window.openEditTagsModal);
             if (window.openEditTagsModal) {
                 console.log('✅ Opening modal with stems context');
@@ -843,82 +719,63 @@
             }
         }
 
-        // Load audio file
-        // Add bar markers from beatmap data
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function addBarMarkers(file) {
             if (parentPlayerComponent) {
                 parentPlayerComponent.addBarMarkers(file);
             }
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleMarkers() {
             if (parentPlayerComponent) {
                 parentPlayerComponent.toggleMarkers();
             }
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function setMarkerFrequency(freq) {
             if (parentPlayerComponent) {
                 parentPlayerComponent.setMarkerFrequency(freq);
             }
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function shiftBarStartLeft() {
             if (parentPlayerComponent) {
                 parentPlayerComponent.shiftBarStartLeft();
             }
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function shiftBarStartRight() {
             if (parentPlayerComponent) {
                 parentPlayerComponent.shiftBarStartRight();
             }
         }
 
-        // ============================================
-        // VERSION 27D: PER-STEM MARKER FUNCTIONS
-        // ============================================
-        // Note: findNearestMarkerToLeft() moved to MarkerSystem module
 
-        // === STEM MARKER WRAPPERS (delegate to PlayerBarComponent) ===
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function toggleStemMarkers(stemType) {
             if (stemPlayerComponents[stemType]) {
                 stemPlayerComponents[stemType].toggleMarkers();
             }
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function setStemMarkerFrequency(stemType, freq) {
             if (stemPlayerComponents[stemType]) {
                 stemPlayerComponents[stemType].setMarkerFrequency(freq);
             }
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function shiftStemBarStartLeft(stemType) {
             if (stemPlayerComponents[stemType]) {
                 stemPlayerComponents[stemType].shiftBarStartLeft();
             }
         }
 
-        // THIN WRAPPER: Delegates to PlayerBarComponent
         function shiftStemBarStartRight(stemType) {
             if (stemPlayerComponents[stemType]) {
                 stemPlayerComponents[stemType].shiftBarStartRight();
             }
         }
 
-        // Add bar markers to stem waveform
         function addStemBarMarkers(stemType, file) {
-            // Call pure function from StemMarkerSystem module
-            // Per-stem state is accessed via window objects from StemStateManager
             const markerTimes = StemMarkerSystem.addStemBarMarkers(
                 stemType,
                 file,
@@ -931,14 +788,11 @@
                 }
             );
 
-            // Update window object with new marker times (per-stem state lives in StemStateManager)
             if (!window.stemCurrentMarkers) window.stemCurrentMarkers = {};
             window.stemCurrentMarkers[stemType] = markerTimes;
         }
 
-        // Find nearest marker to the left for stem
         function findStemNearestMarkerToLeft(stemType, clickTime) {
-            // Per-stem state is accessed via window objects from StemStateManager
             const stemMarkers = window.stemCurrentMarkers?.[stemType] || [];
             return StemMarkerSystem.findStemNearestMarkerToLeft(
                 clickTime,
@@ -946,14 +800,8 @@
             );
         }
 
-        // ============================================
-        // END PER-STEM MARKER FUNCTIONS
-        // ============================================
 
-        // Toggle Cycle Mode (combined edit + active loop)
         function toggleCycleMode() {
-            // Call pure function from LoopControls module
-            // Note: stemCycleModes, stemNextClickSets, stemLoopStates accessed via window objects from StemState
             const result = LoopControls.toggleCycleMode({
                 cycleMode,
                 nextClickSets,
@@ -963,11 +811,9 @@
                 stemLoopStates: window.stemLoopStates
             });
 
-            // Apply results to app.js state (sync to LoopState)
             syncCycleModeToState(result.cycleMode);
             syncNextClickSetsToState(result.nextClickSets);
 
-            // Update UI
             updateLoopVisuals();
         }
 
@@ -991,12 +837,10 @@
             syncLoopStartToState(result.loopStart);
             syncLoopEndToState(result.loopEnd);
             syncNextClickSetsToState(result.nextClickSets);
-            // Keep cycleMode = true so user can immediately set new loop
             updateLoopVisuals();
         }
 
         function updateLoopVisuals() {
-            // Call pure function from LoopControls module (handles loop-specific UI)
             LoopControls.updateLoopVisuals({
                 cycleMode,
                 loopStart,
@@ -1011,7 +855,6 @@
                 wavesurfer
             });
 
-            // Update record/playback actions button states (delegated to ActionRecorder)
             if (actionRecorder) {
                 actionRecorder.updateButtonStates();
             }
@@ -1027,7 +870,6 @@
             const waveformContainer = document.getElementById('waveform');
             if (!waveformContainer) return;
 
-            // Remove existing loop region and progress mask
             const existingRegion = waveformContainer.querySelector('.loop-region');
             if (existingRegion) {
                 existingRegion.remove();
@@ -1037,7 +879,6 @@
                 existingMask.remove();
             }
 
-            // Don't draw if cycle mode is off or loop not fully set
             if (!cycleMode || loopStart === null || loopEnd === null || !wavesurfer) return;
 
             const duration = wavesurfer.getDuration();
@@ -1054,7 +895,6 @@
 
             waveformContainer.appendChild(loopRegion);
 
-            // Add progress mask to hide blue progress before loop start (when loop is active)
             if (cycleMode && startPercent > 0) {
                 const progressMask = document.createElement('div');
                 progressMask.className = 'loop-progress-mask';
@@ -1076,11 +916,10 @@
         }
 
         function setFadeTime(milliseconds) {
-            const timeInSeconds = milliseconds / 1000; // Convert to seconds
+            const timeInSeconds = milliseconds / 1000;
             syncFadeTimeToState(timeInSeconds);
             console.log(`Fade time: ${milliseconds}ms`);
 
-            // Update display
             const display = document.getElementById('fadeTimeValue');
             if (display) {
                 display.textContent = `${milliseconds}ms`;
@@ -1105,7 +944,6 @@
             updateLoopVisuals();
         }
 
-        // THIN WRAPPER: Delegates to ActionRecorder service
         function toggleRecordActions() {
             if (!actionRecorder) {
                 console.error('[app.js] ActionRecorder not initialized');
@@ -1114,19 +952,16 @@
             return actionRecorder.toggleRecording();
         }
 
-        // THIN WRAPPER: Delegates to ActionRecorder service
         function recordAction(actionName, data = {}) {
             if (!actionRecorder) return;
             return actionRecorder.recordAction(actionName, data);
         }
 
-        // THIN WRAPPER: Delegates to ActionRecorder service
         function stopPlayback() {
             if (!actionRecorder) return;
             return actionRecorder.stopPlayback();
         }
 
-        // THIN WRAPPER: Delegates to ActionRecorder service
         function playRecordedActions() {
             if (!actionRecorder) {
                 console.error('[app.js] ActionRecorder not initialized');
@@ -1135,15 +970,12 @@
             return actionRecorder.playRecordedActions();
         }
 
-        // Helper function to find which bar marker index a time corresponds to
         function getBarIndexAtTime(time, file) {
             if (!file || !file.beatmap) return null;
 
-            // Get all bar markers (beatNum = 1)
             const barMarkers = file.beatmap.filter(m => m.beatNum === 1);
             if (barMarkers.length === 0) return null;
 
-            // Find the closest bar marker to this time
             let closestBarIndex = 0;
             let closestDistance = Math.abs(barMarkers[0].time - time);
 
@@ -1158,18 +990,15 @@
             return closestBarIndex;
         }
 
-        // Helper function to get time for a given bar marker index
         function getTimeForBarIndex(barIndex, file) {
             if (!file || !file.beatmap) return null;
 
-            // Get all bar markers (beatNum = 1)
             const barMarkers = file.beatmap.filter(m => m.beatNum === 1);
             if (barMarkers.length === 0 || barIndex < 0 || barIndex >= barMarkers.length) return null;
 
             return barMarkers[barIndex].time;
         }
 
-        // Loop manipulation functions
         function shiftLoopLeft() {
             const result = LoopControls.shiftLoopLeft({
                 cycleMode, loopStart, loopEnd, immediateJump
@@ -1216,7 +1045,6 @@
             }
         }
 
-        // Shift+Left Arrow: Move loop START marker to the LEFT (expand loop from left)
         function moveStartLeft() {
             const result = LoopControls.moveStartLeft({
                 cycleMode, loopStart, loopEnd, currentMarkers, immediateJump
@@ -1261,9 +1089,6 @@
             }
         }
 
-        // Metronome functions - EXTRACTED TO metronome.js (ROUND 2)
-        // All metronome functionality now handled by Metronome module
-        // Wrapper functions below for window object exposure
 
         function toggleMetronome() {
             return Metronome.toggleMetronome(wavesurfer);
@@ -1273,29 +1098,23 @@
             return Metronome.setMetronomeSound(sound);
         }
 
-        // THIN WRAPPER: Delegates to FileLoader service
+        // ============================================
+        // CORE PLAYER CONTROLS
+        // ============================================
         async function loadAudio(fileId, autoplay = true) {
             if (!fileLoader) {
                 console.error('[app.js] FileLoader not initialized');
                 return;
             }
 
-            // Reset bar start offset (managed by app.js, sync to PlayerState)
             syncBarStartOffsetToState(0);
 
-            // Delegate to FileLoader service
             const result = await fileLoader.loadFile(fileId, autoplay);
             if (!result || result.alreadyLoaded) return;
 
-            // FileLoader manages all other state through callbacks
-            // wavesurfer is set via setWavesurfer callback
-            // currentFileId is set via setCurrentFileId callback
-            // Loop state is managed via get/set callbacks
         }
 
-        // Play/Pause audio
         function playPause() {
-            // If no file loaded, load the top file in the list
             if (!wavesurfer || !currentFileId) {
                 const filteredFiles = FileListRenderer.filterFiles();
                 const sortedFiles = FileListRenderer.sortFiles(filteredFiles);
@@ -1305,20 +1124,15 @@
                 return;
             }
 
-            // ALWAYS control the parent wavesurfer
-            // Even when stems are expanded, parent plays (muted) and stems sync via events
             wavesurfer.playPause();
             const icon = document.getElementById('playPauseIcon');
             icon.textContent = wavesurfer.isPlaying() ? '⏸' : '▶';
 
-            // Track user pause state (if pausing, set to true; if playing, set to false)
             syncUserPausedToState(!wavesurfer.isPlaying());
 
-            // Record action
             recordAction(wavesurfer.isPlaying() ? 'play' : 'pause', {});
         }
 
-        // Update player time display
         function updatePlayerTime() {
             if (!wavesurfer) return;
 
@@ -1335,15 +1149,12 @@
                 `${formatTime(current)} / ${formatTime(duration)}`;
         }
 
-        // Toggle loop
         function toggleLoop() {
             const result = LoopControls.toggleLoop({ isLooping });
             syncIsLoopingToState(result.isLooping);
         }
 
-        // Toggle shuffle
         function toggleShuffle() {
-            // Prevent toggling shuffle when loop is active
             if (isLooping) return;
 
             syncIsShufflingToState(!isShuffling);
@@ -1351,17 +1162,14 @@
             btn.classList.toggle('active', isShuffling);
         }
 
-        // Set volume
         function setVolume(value) {
             const volume = value / 100;
             if (wavesurfer) {
                 wavesurfer.setVolume(volume);
             }
 
-            // Phase 4 Step 2B: Update all stem volumes
             updateStemAudioState();
 
-            // Calculate decibels (relative to 100% = 0dB)
             let db;
             if (value === 0) {
                 db = '-∞';
@@ -1373,7 +1181,6 @@
             document.getElementById('volumePercent').textContent = `${value}% (${db} dB)`;
         }
 
-        // Reset volume to 100%
         function resetVolume() {
             document.getElementById('volumeSlider').value = 100;
             setVolume(100);
@@ -1384,13 +1191,11 @@
             const muteBtn = document.getElementById('muteBtn');
 
             if (isMuted) {
-                // Unmute: restore previous volume
                 volumeSlider.value = volumeBeforeMute;
                 setVolume(volumeBeforeMute);
                 syncIsMutedToState(false);
                 muteBtn.textContent = '🔊';
             } else {
-                // Mute: save current volume and set to 0
                 syncVolumeBeforeMuteToState(parseInt(volumeSlider.value));
                 volumeSlider.value = 0;
                 setVolume(0);
@@ -1399,19 +1204,15 @@
             }
         }
 
-        // Set playback rate (natural analog - speed and pitch together)
         function setPlaybackRate(rate) {
             syncCurrentRateToState(rate);
             window.currentRate = rate; // Expose to window for PlayerBarComponent access
 
-            // Check for OLD stem system (disabled but code still exists)
             const hasStemWavesurfers = Object.keys(stemWavesurfers).length > 0;
 
-            // Phase 1: Check for NEW multi-stem player system
             const hasMultiStemWavesurfers = Object.keys(stemPlayerWavesurfers).length > 0;
             const wasPlaying = wavesurfer && wavesurfer.isPlaying();
 
-            // Pause old stems if present (shouldn't happen but just in case)
             if (hasStemWavesurfers && wasPlaying) {
                 Object.keys(stemWavesurfers).forEach(stemType => {
                     const stemWS = stemWavesurfers[stemType];
@@ -1421,7 +1222,6 @@
                 });
             }
 
-            // Phase 1: Pause new multi-stem player stems if playing
             if (hasMultiStemWavesurfers && wasPlaying) {
                 Object.keys(stemPlayerWavesurfers).forEach(stemType => {
                     const stemWS = stemPlayerWavesurfers[stemType];
@@ -1431,12 +1231,10 @@
                 });
             }
 
-            // Set rate on parent WaveSurfer
             if (wavesurfer) {
                 wavesurfer.setPlaybackRate(rate, false); // false = natural analog (speed+pitch)
             }
 
-            // Set rate on OLD stem WaveSurfers (if any exist)
             Object.keys(stemWavesurfers).forEach(stemType => {
                 const stemWS = stemWavesurfers[stemType];
                 if (stemWS) {
@@ -1444,9 +1242,6 @@
                 }
             });
 
-            // Phase 2A: Recalculate and set rate on NEW multi-stem player WaveSurfers
-            // Each stem's final rate = independentRate × parentRate (multiplicative)
-            // Delegate to PlayerBarComponent to calculate and update
             Object.keys(stemPlayerWavesurfers).forEach(stemType => {
                 const stemComponent = stemPlayerComponents[stemType];
                 if (stemComponent) {
@@ -1457,7 +1252,6 @@
                 }
             });
 
-            // Re-sync and resume OLD stems (if any)
             if (hasStemWavesurfers && wasPlaying) {
                 const currentProgress = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
                 Object.keys(stemWavesurfers).forEach(stemType => {
@@ -1477,7 +1271,6 @@
                 }, 50);
             }
 
-            // Phase 1: Re-sync and resume NEW multi-stem player stems
             if (hasMultiStemWavesurfers && wasPlaying) {
                 const currentProgress = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
                 Object.keys(stemPlayerWavesurfers).forEach(stemType => {
@@ -1498,40 +1291,32 @@
                 }, 50);
             }
 
-            // Clear any scheduled metronome notes when rate changes
-            // This prevents "copies" of metronome sounds at different rates
             Metronome.stopAllMetronomeSounds();
             Metronome.setLastMetronomeScheduleTime(0); // Force rescheduling
 
-            // Immediately reschedule metronome if it's enabled and playing
             if (Metronome.isMetronomeEnabled() && wavesurfer && wavesurfer.isPlaying()) {
                 Metronome.scheduleMetronome(audioFiles, currentFileId, wavesurfer, barStartOffset, currentRate);
                 Metronome.setLastMetronomeScheduleTime(Date.now());
             }
 
-            // Update slider and display
             document.getElementById('rateSlider').value = rate;
             document.getElementById('rateValue').textContent = rate.toFixed(1) + 'x';
 
-            // Update button states (check within small tolerance for floating point)
             document.getElementById('halfRateBtn').classList.toggle('active', Math.abs(rate - 0.5) < 0.05);
             document.getElementById('normalRateBtn').classList.toggle('active', Math.abs(rate - 1) < 0.05);
             document.getElementById('doubleRateBtn').classList.toggle('active', Math.abs(rate - 2) < 0.05);
 
-            // Record action
             recordAction('setRate', { rate });
         }
 
-        // Reset rate to 1.0x
         function resetRate() {
             setPlaybackRate(1.0);
         }
 
         // ============================================
-        // ADVANCED RATE MODE - THIN WRAPPERS
+        // ADVANCED RATE MODE (Placeholder)
         // ============================================
-        // Advanced rate mode functions delegated to AdvancedRateMode module
-        // These thin wrappers exist for window object exposure (HTML onclick handlers)
+        // Waiting for Signalsmith integration. Speed works (chipmunk effect), pitch not functional yet.
 
         function toggleRateMode() {
             return AdvancedRateMode.toggleRateMode();
@@ -1557,64 +1342,38 @@
             return AdvancedRateMode.toggleSpeedPitchLock();
         }
 
-        // Phase 4 Step 2B: Stem volume control
-        function handleStemVolumeChange(stemType, value) {
-            // Phase 4 Fix 2: Use stem file ID instead of stem type
-            const stemFileId = stemFiles[stemType]?.id;
-            if (!stemFileId) return;
 
-            const volume = value / 100;
-            stemVolumes[stemFileId] = volume;
+        // ============================================
+        // LEGACY STEM CONTROLS (OLD System - Inline File List)
+        // ============================================
+        // Thin wrappers calling StemLegacyPlayer module functions
 
-            // Update the volume value display
-            const valueDisplay = document.getElementById(`stem-volume-value-${stemType}-${currentFileId}`);
-            if (valueDisplay) {
-                valueDisplay.textContent = `${value}%`;
-            }
-
-            // Update actual audio volume
-            updateStemAudioState();
+        function stemLegacyHandleVolumeChange(stemType, value) {
+            return StemLegacyPlayer.handleStemVolumeChange(
+                stemType,
+                value,
+                { stemFiles, stemVolumes, currentFileId },
+                updateStemAudioState
+            );
         }
 
-        // Phase 4 Step 2B: Stem mute toggle
-        function handleStemMute(stemType) {
-            // Phase 4 Fix 2: Use stem file ID instead of stem type
-            const stemFileId = stemFiles[stemType]?.id;
-            if (!stemFileId) return;
-
-            stemMuted[stemFileId] = !stemMuted[stemFileId];
-
-            // Update button appearance
-            const muteBtn = document.getElementById(`stem-mute-${stemType}-${currentFileId}`);
-            if (muteBtn) {
-                muteBtn.textContent = stemMuted[stemFileId] ? '🔇' : '🔊';
-                muteBtn.style.background = stemMuted[stemFileId] ? '#8b0000' : '#2a2a2a';
-            }
-
-            // Update actual audio volume
-            updateStemAudioState();
+        function stemLegacyHandleMute(stemType) {
+            return StemLegacyPlayer.handleStemMute(
+                stemType,
+                { stemFiles, stemMuted, currentFileId },
+                updateStemAudioState
+            );
         }
 
-        // Phase 4 Step 2B: Stem solo toggle
-        function handleStemSolo(stemType) {
-            // Phase 4 Fix 2: Use stem file ID instead of stem type
-            const stemFileId = stemFiles[stemType]?.id;
-            if (!stemFileId) return;
-
-            stemSoloed[stemFileId] = !stemSoloed[stemFileId];
-
-            // Update button appearance
-            const soloBtn = document.getElementById(`stem-solo-${stemType}-${currentFileId}`);
-            if (soloBtn) {
-                soloBtn.style.background = stemSoloed[stemFileId] ? '#00aa00' : '#2a2a2a';
-                soloBtn.style.borderColor = stemSoloed[stemFileId] ? '#00ff00' : '#3a3a3a';
-            }
-
-            // Update actual audio volume
-            updateStemAudioState();
+        function stemLegacyHandleSolo(stemType) {
+            return StemLegacyPlayer.handleStemSolo(
+                stemType,
+                { stemFiles, stemSoloed, currentFileId },
+                updateStemAudioState
+            );
         }
 
-        // Next track
+
         function nextTrack() {
             const filteredFiles = FileListRenderer.filterFiles();
             if (filteredFiles.length === 0) return;
@@ -1630,12 +1389,10 @@
             loadAudio(filteredFiles[nextIndex].id, !userPaused); // Respect pause state
         }
 
-        // Previous track
         function previousTrack() {
             const filteredFiles = FileListRenderer.filterFiles();
             if (filteredFiles.length === 0) return;
 
-            // If in cycle mode with loop set, jump to loop start
             if (cycleMode && loopStart !== null && loopEnd !== null) {
                 if (wavesurfer) {
                     wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
@@ -1646,25 +1403,23 @@
                 return;
             }
 
-            // If currently playing and more than 1 second into the file, restart from beginning
             if (currentFileId && wavesurfer && wavesurfer.getCurrentTime() > 1.0) {
                 wavesurfer.seekTo(0);
                 return;
             }
 
-            // Otherwise, go to previous file
             const currentIndex = filteredFiles.findIndex(f => f.id === currentFileId);
             const prevIndex = (currentIndex - 1 + filteredFiles.length) % filteredFiles.length;
 
             loadAudio(filteredFiles[prevIndex].id, !userPaused); // Respect pause state
         }
 
-        // Delete and batch operation functions moved to batchOperations.js
 
-        // Progress bar functions moved to utils/progressBar.js
 
-        // Modal event handlers moved to tagEditModal.js
-        // Initialize tag edit modal keyboard shortcuts and event handlers
+        // ============================================
+        // MODULE INITIALIZATION
+        // ============================================
+
         document.addEventListener('DOMContentLoaded', () => {
             TagEditModal.initEventHandlers({
                 setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
@@ -1676,11 +1431,8 @@
             });
         });
 
-        // addModalTag() moved to tagEditModal.js
 
-        // Initialize keyboard shortcuts (moved to keyboardShortcuts.js)
         initKeyboardShortcuts(
-            // Callbacks object
             {
                 playPause,
                 toggleMarkers,
@@ -1705,7 +1457,6 @@
                 moveEndRight,
                 filterFiles: FileListRenderer.filterFiles
             },
-            // State getters object
             {
                 getCurrentFileId: () => currentFileId,
                 getSelectedFiles: () => selectedFiles,
@@ -1730,19 +1481,15 @@
             }
         );
 
-        // Initialize mini waveforms (moved to miniWaveform.js)
         MiniWaveform.init({
             loadAudio,
             getWavesurfer: () => wavesurfer
         });
 
-        // Initialize tag manager (moved to tagManager.js)
         TagManager.init(
-            // Callbacks
             {
                 renderFiles: () => FileListRenderer.render()
             },
-            // State getters/setters
             {
                 getAudioFiles: () => audioFiles,
                 getFilters: () => filters,
@@ -1755,16 +1502,13 @@
             }
         );
 
-        // Initialize file list renderer (moved to fileListRenderer.js)
         FileListRenderer.init(
-            // Callbacks
             {
                 loadFile: loadAudio,
                 renderMiniWaveforms: (files) => MiniWaveform.renderAll(files),
                 openTagEditModal: (selectedFiles, audioFiles) => TagEditModal.open(selectedFiles, audioFiles),
                 updateStemsButton
             },
-            // State getters
             {
                 getAudioFiles: () => audioFiles,
                 getSearchQuery: () => searchQuery,
@@ -1777,9 +1521,7 @@
             }
         );
 
-        // Initialize batch operations (moved to batchOperations.js)
         BatchOperations.init(
-            // Callbacks
             {
                 loadData,
                 clearPlayer: () => {
@@ -1793,7 +1535,6 @@
                     document.getElementById('playPauseIcon').textContent = '▶';
                 }
             },
-            // State getters
             {
                 getSupabase: () => supabase,
                 getAudioFiles: () => audioFiles,
@@ -1803,14 +1544,12 @@
             }
         );
 
-        // Initialize upload manager (moved to uploadManager.js)
         UploadManager.init({
             getPendingUploadFiles: () => pendingUploadFiles,
             setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
             renderModalTags: () => TagEditModal.render()
         });
 
-        // Initialize loop controls (pure function approach - state passed to each function call)
         LoopControls.init({
             recordAction,
             getAudioFiles: () => audioFiles,
@@ -1818,17 +1557,13 @@
             setPendingJumpTarget: (target) => { syncPendingJumpTargetToState(target); }
         });
 
-        // Initialize advanced rate mode (placeholder for Signalsmith time/pitch stretching)
         AdvancedRateMode.init({
             setPlaybackRate
         });
 
-        // Initialize on load
         loadData();
 
-        // Initialize FileLoader service
         fileLoader = new FileLoader({
-            // State getters/setters
             audioFiles: () => audioFiles,
             getCurrentFileId: () => currentFileId,
             setCurrentFileId: (id) => { syncCurrentFileIdToState(id); },
@@ -1837,7 +1572,6 @@
             getParentWaveform: () => parentWaveform,
             getParentPlayerComponent: () => parentPlayerComponent,
 
-            // Loop state (sync to LoopState on all writes)
             getLoopState: () => ({ start: loopStart, end: loopEnd, cycleMode, nextClickSets }),
             setLoopState: (state) => {
                 if (state.start !== undefined) syncLoopStartToState(state.start);
@@ -1859,7 +1593,6 @@
                 if (bars.playbackPositionInLoop !== undefined) syncPreservedPlaybackPositionInLoopToState(bars.playbackPositionInLoop);
             },
 
-            // Helpers
             resetLoop,
             updateLoopVisuals,
             getBarIndexAtTime,
@@ -1868,7 +1601,6 @@
             preloadMultiStemWavesurfers,
             updateStemsButton,
 
-            // BPM lock (sync to LoopState on writes)
             getBpmLockState: () => ({ enabled: bpmLockEnabled, lockedBPM }),
             setBpmLockState: (state) => {
                 if (state.enabled !== undefined) syncBpmLockEnabledToState(state.enabled);
@@ -1876,12 +1608,10 @@
             },
             setPlaybackRate,
 
-            // UI
             getCurrentRate: () => currentRate,
             initWaveSurfer
         });
 
-        // Initialize ActionRecorder service
         actionRecorder = new ActionRecorder({
             getWavesurfer: () => wavesurfer,
             updateLoopVisuals,
@@ -1920,19 +1650,20 @@
 
         console.log('[app.js] ActionRecorder service initialized');
 
-        // Initialize view tab click handlers
         ViewManager.initViewTabs();
 
-// Expose functions to global scope for HTML onclick handlers
+        // ============================================
+        // WINDOW OBJECT EXPOSURE
+        // ============================================
+        // Functions exposed to window for HTML onclick handlers
+
 window.handleTagClick = handleTagClick;
 window.toggleShowAllTags = toggleShowAllTags;
 window.generateStems = generateStems;
 
-// Expose TagManager functions to window (used by onclick handlers in rendered HTML)
 window.tagManagerHandleClick = (tag, event) => TagManager.handleClick(tag, event);
 window.tagManagerToggleShowAll = () => TagManager.toggleShowAll();
 
-// Expose FileListRenderer functions to window (used by onclick handlers in rendered HTML)
 window.fileListHandleFileClick = (fileId, event) => FileListRenderer.handleFileClick(fileId, event);
 window.fileListHandleSort = (column) => FileListRenderer.handleSort(column);
 window.fileListToggleSelection = (fileId, event) => FileListRenderer.toggleFileSelection(fileId, event);
@@ -2003,15 +1734,11 @@ window.resetSpeed = resetSpeed;
 window.setPitch = setPitch;
 window.resetPitch = resetPitch;
 window.toggleSpeedPitchLock = toggleSpeedPitchLock;
-// Store references to old functions before overwriting
         const _oldToggleMarkers = toggleMarkers;
         const _oldSetMarkerFrequency = setMarkerFrequency;
         const _oldShiftBarStartLeft = shiftBarStartLeft;
         const _oldShiftBarStartRight = shiftBarStartRight;
 
-// CRITICAL: Expose setters to sync component state to global variables
-        // This allows waveform click handler (cycle mode) to access marker data
-        // TODO: Remove once waveform click handling is moved into component
         window.updateCurrentMarkers = (markers) => {
             syncCurrentMarkersToState(markers);
             console.log(`[Global] currentMarkers updated, length: ${markers.length}`);
@@ -2021,8 +1748,6 @@ window.toggleSpeedPitchLock = toggleSpeedPitchLock;
             console.log(`[Global] markersEnabled updated: ${enabled}`);
         };
 
-        // Expose loop/cycle state variables for component click handler
-        // Using getters/setters so component can read AND write the module-scoped variables
         Object.defineProperty(window, 'cycleMode', {
             get: () => cycleMode,
             set: (value) => { cycleMode = value; },
@@ -2049,15 +1774,12 @@ window.toggleSpeedPitchLock = toggleSpeedPitchLock;
             configurable: true
         });
 
-        // Expose helper functions for component
         window.updateLoopVisuals = updateLoopVisuals;
         window.recordAction = recordAction;
 
-        // Expose functions needed by WaveformComponent
         window.updatePlayerTime = updatePlayerTime;
         window.setupParentStemSync = setupParentStemSync;
 
-        // Expose state variables needed by WaveformComponent event handlers
         Object.defineProperty(window, 'isLooping', {
             get: () => isLooping,
             set: (value) => { syncIsLoopingToState(value); },
@@ -2103,7 +1825,6 @@ window.toggleSpeedPitchLock = toggleSpeedPitchLock;
             set: (value) => { syncWavesurfersToState(value); },
             configurable: true
         });
-// Wrapper functions that delegate to PlayerBarComponent
         window.toggleMarkers = () => {
             if (parentPlayerComponent) {
                 parentPlayerComponent.toggleMarkers();
@@ -2151,38 +1872,25 @@ window.togglePreserveLoop = togglePreserveLoop;
 window.toggleBPMLock = toggleBPMLock;
 window.toggleRecordActions = toggleRecordActions;
 window.playRecordedActions = playRecordedActions;
-window.handleStemVolumeChange = handleStemVolumeChange;
-window.handleStemMute = handleStemMute;
-window.handleStemSolo = handleStemSolo;
+window.stemLegacyHandleVolumeChange = stemLegacyHandleVolumeChange;
+window.stemLegacyHandleMute = stemLegacyHandleMute;
+window.stemLegacyHandleSolo = stemLegacyHandleSolo;
 window.toggleStemsViewer = () => FileListRenderer.toggleStemsViewer();
 window.toggleMultiStemPlayer = toggleMultiStemPlayer;
 window.toggleMultiStemPlay = toggleMultiStemPlay;
 window.toggleMultiStemMute = toggleMultiStemMute;
 window.toggleMultiStemLoop = toggleMultiStemLoop;
 window.handleMultiStemVolumeChange = handleMultiStemVolumeChange;
-// Phase 2A: Rate control functions
 window.handleStemRateChange = handleStemRateChange;
 window.setStemRatePreset = setStemRatePreset;
 window.toggleStemRateLock = toggleStemRateLock;
-// Phase 2B: Loop region functions
 window.setStemLoopRegion = setStemLoopRegion;
 
-// ============================================
-// VERSION 27D: FULL TEMPLATE SYSTEM EXPORTS
-// ============================================
 
-// Marker functions
 window.toggleStemMarkers = toggleStemMarkers;
 window.setStemMarkerFrequency = setStemMarkerFrequency;
 window.shiftStemBarStartLeft = shiftStemBarStartLeft;
 window.shiftStemBarStartRight = shiftStemBarStartRight;
 
-// Cycle/Loop functions
 window.toggleStemCycleMode = toggleStemCycleMode;
 
-// TODO: Add more function exports as they are implemented:
-// Metronome: toggleStemMetronome, setStemMetronomeSound
-// Cycle/Loop: toggleStemSeekOnClick, clearStemLoopKeepCycle, toggleStemLoopControlsExpanded
-// Loop manipulation: shiftStemLoopLeft, shiftStemLoopRight, moveStemStartLeft, moveStemEndRight, halfStemLoopLength, doubleStemLoopLength
-// Loop modes: toggleStemImmediateJump, toggleStemLoopFades, setStemFadeTime, toggleStemPreserveLoop, toggleStemBPMLock
-// Recording: toggleStemRecordActions, playStemRecordedActions

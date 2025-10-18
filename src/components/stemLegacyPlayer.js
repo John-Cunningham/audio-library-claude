@@ -157,3 +157,87 @@ export function updateLegacyStemVolumes(state) {
         stemWS.setVolume(finalVolume);
     });
 }
+
+/**
+ * Event Handlers for Legacy Stem Controls
+ * These handle volume/mute/solo controls in the file list expansion area
+ */
+
+/**
+ * Handle volume change for a legacy stem
+ * @param {string} stemType - Type of stem ('vocals', 'drums', 'bass', 'other')
+ * @param {number} value - Volume value (0-100)
+ * @param {Object} state - State object
+ * @param {Object} state.stemFiles - Stem files data
+ * @param {Object} state.stemVolumes - Volume state by file ID
+ * @param {string} state.currentFileId - Current parent file ID
+ * @param {Function} updateStemAudioStateCallback - Callback to update audio state
+ */
+export function handleStemVolumeChange(stemType, value, state, updateStemAudioStateCallback) {
+    const { stemFiles, stemVolumes, currentFileId } = state;
+
+    const stemFileId = stemFiles[stemType]?.id;
+    if (!stemFileId) return;
+
+    const volume = value / 100;
+    stemVolumes[stemFileId] = volume;
+
+    const valueDisplay = document.getElementById(`stem-volume-value-${stemType}-${currentFileId}`);
+    if (valueDisplay) {
+        valueDisplay.textContent = `${value}%`;
+    }
+
+    updateStemAudioStateCallback();
+}
+
+/**
+ * Handle mute toggle for a legacy stem
+ * @param {string} stemType - Type of stem
+ * @param {Object} state - State object
+ * @param {Object} state.stemFiles - Stem files data
+ * @param {Object} state.stemMuted - Mute state by file ID
+ * @param {string} state.currentFileId - Current parent file ID
+ * @param {Function} updateStemAudioStateCallback - Callback to update audio state
+ */
+export function handleStemMute(stemType, state, updateStemAudioStateCallback) {
+    const { stemFiles, stemMuted, currentFileId } = state;
+
+    const stemFileId = stemFiles[stemType]?.id;
+    if (!stemFileId) return;
+
+    stemMuted[stemFileId] = !stemMuted[stemFileId];
+
+    const muteBtn = document.getElementById(`stem-mute-${stemType}-${currentFileId}`);
+    if (muteBtn) {
+        muteBtn.textContent = stemMuted[stemFileId] ? '🔇' : '🔊';
+        muteBtn.style.background = stemMuted[stemFileId] ? '#8b0000' : '#2a2a2a';
+    }
+
+    updateStemAudioStateCallback();
+}
+
+/**
+ * Handle solo toggle for a legacy stem
+ * @param {string} stemType - Type of stem
+ * @param {Object} state - State object
+ * @param {Object} state.stemFiles - Stem files data
+ * @param {Object} state.stemSoloed - Solo state by file ID
+ * @param {string} state.currentFileId - Current parent file ID
+ * @param {Function} updateStemAudioStateCallback - Callback to update audio state
+ */
+export function handleStemSolo(stemType, state, updateStemAudioStateCallback) {
+    const { stemFiles, stemSoloed, currentFileId } = state;
+
+    const stemFileId = stemFiles[stemType]?.id;
+    if (!stemFileId) return;
+
+    stemSoloed[stemFileId] = !stemSoloed[stemFileId];
+
+    const soloBtn = document.getElementById(`stem-solo-${stemType}-${currentFileId}`);
+    if (soloBtn) {
+        soloBtn.style.background = stemSoloed[stemFileId] ? '#00aa00' : '#2a2a2a';
+        soloBtn.style.borderColor = stemSoloed[stemFileId] ? '#00ff00' : '#3a3a3a';
+    }
+
+    updateStemAudioStateCallback();
+}

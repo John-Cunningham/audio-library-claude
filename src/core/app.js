@@ -4,6 +4,7 @@
         import { generateStemPlayerBar } from './playerTemplate.js';
         import { PlayerBarComponent } from '../components/playerBar.js';
         import { WaveformComponent } from '../components/waveform.js';
+        import { FileLoader } from '../services/fileLoader.js';
 
         // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
@@ -36,6 +37,7 @@
         let wavesurfer = null;
         let parentWaveform = null; // WaveformComponent instance for parent player
         let parentPlayerComponent = null; // PlayerBarComponent instance for parent player
+        let fileLoader = null; // FileLoader service instance
         let stemPlayerComponents = {}; // PlayerBarComponent instances for stem players {vocals: component, drums: component, ...}
         let currentFileId = null;
         let selectedFiles = new Set();
@@ -1985,174 +1987,24 @@
             return Metronome.setMetronomeSound(sound);
         }
 
-        function loadAudio(fileId, autoplay = true) {
-            const file = audioFiles.find(f => f.id === fileId);
-            if (!file) return;
-
-            // Don't reload if this file is already loaded
-            if (currentFileId === fileId) return;
-
-            // Before changing files: if preserve is enabled and loop exists, save bar indices and cycle mode
-            if (preserveLoopOnFileChange && loopStart !== null && loopEnd !== null && currentFileId && wavesurfer) {
-                const currentFile = audioFiles.find(f => f.id === currentFileId);
-                if (currentFile && currentFile.beatmap) {
-                    preservedLoopStartBar = getBarIndexAtTime(loopStart, currentFile);
-                    preservedLoopEndBar = getBarIndexAtTime(loopEnd, currentFile);
-                    preservedCycleMode = cycleMode; // Save cycle mode state
-
-                    // Calculate relative position within loop for seamless swap
-                    const currentTime = wavesurfer.getCurrentTime();
-                    if (currentTime >= loopStart && currentTime <= loopEnd) {
-                        const loopDuration = loopEnd - loopStart;
-                        preservedPlaybackPositionInLoop = (currentTime - loopStart) / loopDuration;
-                        console.log(`Preserving loop: bar ${preservedLoopStartBar} to bar ${preservedLoopEndBar}, cycle mode: ${preservedCycleMode}, position in loop: ${(preservedPlaybackPositionInLoop * 100).toFixed(1)}%`);
-                    } else {
-                        preservedPlaybackPositionInLoop = null;
-                        console.log(`Preserving loop: bar ${preservedLoopStartBar} to bar ${preservedLoopEndBar}, cycle mode: ${preservedCycleMode}`);
-                    }
-                }
+        // THIN WRAPPER: Delegates to FileLoader service
+        async function loadAudio(fileId, autoplay = true) {
+            if (!fileLoader) {
+                console.error('[app.js] FileLoader not initialized');
+                return;
             }
 
-            currentFileId = fileId;
-
-            // Reset loop when changing files (unless preserve is enabled)
-            if (!preserveLoopOnFileChange) {
-                resetLoop();
-                preservedLoopStartBar = null;
-                preservedLoopEndBar = null;
-                preservedCycleMode = false;
-            } else if (preservedLoopStartBar !== null && preservedLoopEndBar !== null) {
-                // When preserving, temporarily clear loop points but KEEP cycle mode on
-                loopStart = null;
-                loopEnd = null;
-                cycleMode = preservedCycleMode; // Keep cycle mode state during transition
-                nextClickSets = 'start'; // Reset click state for visual feedback
-                updateLoopVisuals();
-            } else {
-                // First time enabling preserve, or no valid loop to preserve
-                // Don't reset anything, just continue
-            }
-
-            // Reset bar start offset when loading new file
+            // Reset bar start offset (managed by app.js)
             barStartOffset = 0;
-            const display = document.getElementById('barStartOffsetDisplay');
-            if (display) {
-                display.textContent = '0';
-            }
 
-            // Destroy and reinitialize WaveSurfer
-            if (wavesurfer) {
-                wavesurfer.pause();
-                wavesurfer.stop();
-                wavesurfer.destroy();
-                wavesurfer = null;
-            }
+            // Delegate to FileLoader service
+            const result = await fileLoader.loadFile(fileId, autoplay);
+            if (!result || result.alreadyLoaded) return;
 
-            // Destroy any existing stems (Phase 4 Step 2A)
-            destroyAllStems();
-
-            initWaveSurfer();
-
-            // Apply current volume to new wavesurfer instance
-            const currentVolume = document.getElementById('volumeSlider').value;
-            wavesurfer.setVolume(currentVolume / 100);
-
-            // Apply current playback rate (natural analog - speed+pitch)
-            wavesurfer.setPlaybackRate(currentRate, false);
-
-            // Load the new file
-            wavesurfer.load(file.file_url);
-
-            document.getElementById('playerFilename').textContent = file.name;
-            document.getElementById('playerTime').textContent = '0:00 / 0:00';
-            document.getElementById('playPauseIcon').textContent = '▶';
-
-            // Add bar markers when waveform is ready
-            wavesurfer.once('ready', async () => {
-                // Ensure parent volume is restored (in case it was muted by stems)
-                const volumeSlider = document.getElementById('volumeSlider');
-                const currentVolume = volumeSlider ? volumeSlider.value / 100 : 1;
-                wavesurfer.setVolume(currentVolume);
-                console.log(`Restored parent volume to ${(currentVolume * 100).toFixed(0)}%`);
-
-                // Load file into parent player component (handles markers)
-                if (parentPlayerComponent) {
-                    parentPlayerComponent.loadFile(file);
-                } else {
-                    // Fallback to old function if component not initialized
-                    addBarMarkers(file);
-                }
-
-                // BPM Lock: Auto-adjust playback rate to match locked BPM
-                if (bpmLockEnabled && lockedBPM !== null && file.bpm) {
-                    const rateAdjustment = lockedBPM / file.bpm;
-                    setPlaybackRate(rateAdjustment);
-                    console.log(`[BPM LOCK] Adjusted rate to ${rateAdjustment.toFixed(3)}x (locked: ${lockedBPM} BPM, file: ${file.bpm} BPM)`);
-                }
-
-                // Restore loop from preserved bar indices (if preserve mode is on)
-                if (preserveLoopOnFileChange && preservedLoopStartBar !== null && preservedLoopEndBar !== null) {
-                    const newLoopStart = getTimeForBarIndex(preservedLoopStartBar, file);
-                    const newLoopEnd = getTimeForBarIndex(preservedLoopEndBar, file);
-
-                    if (newLoopStart !== null && newLoopEnd !== null) {
-                        loopStart = newLoopStart;
-                        loopEnd = newLoopEnd;
-                        cycleMode = preservedCycleMode; // Restore cycle mode state
-                        console.log(`Restored loop: ${newLoopStart.toFixed(2)}s to ${newLoopEnd.toFixed(2)}s (bar ${preservedLoopStartBar} to ${preservedLoopEndBar}), cycle mode: ${cycleMode}`);
-                        updateLoopVisuals();
-
-                        // Seamless swap: restore playback position within loop
-                        if (preservedPlaybackPositionInLoop !== null && autoplay) {
-                            const newLoopDuration = loopEnd - loopStart;
-                            const newPlaybackTime = loopStart + (preservedPlaybackPositionInLoop * newLoopDuration);
-                            wavesurfer.seekTo(newPlaybackTime / wavesurfer.getDuration());
-                            console.log(`Seamless swap: restored playback to ${(preservedPlaybackPositionInLoop * 100).toFixed(1)}% through loop (${newPlaybackTime.toFixed(2)}s)`);
-                            preservedPlaybackPositionInLoop = null; // Clear after use
-                        }
-                    } else {
-                        console.log('Could not restore loop: bar indices out of range for new file');
-                        preservedLoopStartBar = null;
-                        preservedLoopEndBar = null;
-                        preservedPlaybackPositionInLoop = null;
-                    }
-                }
-
-                // Phase 1: Pre-load stems if file has stems (NEW system - silent background loading)
-                if (file.has_stems) {
-                    console.log('🎵 File has stems - pre-loading in background (Phase 1)...');
-                    try {
-                        await preloadMultiStemWavesurfers(fileId);
-                        console.log('✅ Stems pre-loaded successfully and ready');
-
-                        // Show STEMS button
-                        const stemsBtn = document.getElementById('stemsBtn');
-                        if (stemsBtn) {
-                            stemsBtn.style.display = 'block';
-                        }
-                    } catch (error) {
-                        console.error('❌ Failed to pre-load stems:', error);
-                    }
-                }
-
-                // Auto-play parent file if requested
-                if (autoplay) {
-                    wavesurfer.play();
-                    document.getElementById('playPauseIcon').textContent = '⏸';
-                }
-            });
-
-            // Update active file highlighting without re-rendering entire list
-            document.querySelectorAll('.file-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            const currentFileItem = document.querySelector(`.file-item:has(input#checkbox-${fileId})`);
-            if (currentFileItem) {
-                currentFileItem.classList.add('active');
-            }
-
-            // Phase 4: Update STEMS button visibility/state
-            updateStemsButton();
+            // FileLoader manages all other state through callbacks
+            // wavesurfer is set via setWavesurfer callback
+            // currentFileId is set via setCurrentFileId callback
+            // Loop state is managed via get/set callbacks
         }
 
         // Play/Pause audio
@@ -2732,6 +2584,57 @@
 
         // Initialize on load
         loadData();
+
+        // Initialize FileLoader service
+        fileLoader = new FileLoader({
+            // State getters/setters
+            audioFiles: () => audioFiles,
+            getCurrentFileId: () => currentFileId,
+            setCurrentFileId: (id) => { currentFileId = id; },
+            getWavesurfer: () => wavesurfer,
+            setWavesurfer: (ws) => { wavesurfer = ws; },
+            getParentWaveform: () => parentWaveform,
+            getParentPlayerComponent: () => parentPlayerComponent,
+
+            // Loop state
+            getLoopState: () => ({ start: loopStart, end: loopEnd, cycleMode, nextClickSets }),
+            setLoopState: (state) => {
+                if (state.start !== undefined) loopStart = state.start;
+                if (state.end !== undefined) loopEnd = state.end;
+                if (state.cycleMode !== undefined) cycleMode = state.cycleMode;
+                if (state.nextClickSets !== undefined) nextClickSets = state.nextClickSets;
+            },
+            getPreserveLoopOnFileChange: () => preserveLoopOnFileChange,
+            getPreservedLoopBars: () => ({
+                startBar: preservedLoopStartBar,
+                endBar: preservedLoopEndBar,
+                cycleMode: preservedCycleMode,
+                playbackPositionInLoop: preservedPlaybackPositionInLoop
+            }),
+            setPreservedLoopBars: (bars) => {
+                if (bars.startBar !== undefined) preservedLoopStartBar = bars.startBar;
+                if (bars.endBar !== undefined) preservedLoopEndBar = bars.endBar;
+                if (bars.cycleMode !== undefined) preservedCycleMode = bars.cycleMode;
+                if (bars.playbackPositionInLoop !== undefined) preservedPlaybackPositionInLoop = bars.playbackPositionInLoop;
+            },
+
+            // Helpers
+            resetLoop,
+            updateLoopVisuals,
+            getBarIndexAtTime,
+            getTimeForBarIndex,
+            destroyAllStems,
+            preloadMultiStemWavesurfers,
+            updateStemsButton,
+
+            // BPM lock
+            getBpmLockState: () => ({ enabled: bpmLockEnabled, lockedBPM }),
+            setPlaybackRate,
+
+            // UI
+            getCurrentRate: () => currentRate,
+            initWaveSurfer
+        });
 
         // Initialize view tab click handlers
         ViewManager.initViewTabs();

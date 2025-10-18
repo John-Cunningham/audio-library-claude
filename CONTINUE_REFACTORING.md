@@ -1,10 +1,10 @@
 # Continue Refactoring - Session Handoff
 
-**Current Status**: Phase 7 (Waveform Component Extraction) COMPLETE ✅
+**Current Status**: Phase 6 (File Loader Extraction) COMPLETE ✅ - Testing Pending
 **Branch**: `refactor-v28-player-component-architecture`
-**app.js size**: 3,003 lines
+**app.js size**: 2,906 lines
 **Target**: 2,000-2,500 lines
-**Remaining work**: ~500-1,000 lines to remove
+**Remaining work**: ~400 lines to remove (ALMOST THERE!)
 
 ---
 
@@ -31,22 +31,63 @@
 - Replaced app.js `initWaveSurfer()` with 28-line thin wrapper
 - Disabled legacy state.js-based methods in WaveformComponent
 - **Net change**: -80 lines (includes +51 lines for window scope exposures)
-- **Committed**: NOT YET - needs commit before starting Phase 6
+- **Committed**: Yes (commit 0efd3bc)
 - **Testing**: All waveform functionality verified working
+
+### ✅ Phase 6: File Loader Extraction (COMPLETE - Testing Pending)
+- Extracted `loadAudio()` function (168 lines) to `FileLoader.loadFile()`
+- Created FileLoader service with 11 focused methods
+- Replaced app.js `loadAudio()` with 18-line thin wrapper
+- Dependency injection for all state access
+- **Net change**: -97 lines (168-line function → 18-line wrapper, +49 lines for initialization)
+- **Committed**: NOT YET - needs testing first
+- **Testing**: PENDING - needs full file loading tests
 
 ---
 
 ## What Needs to Happen Next
 
-### 1. COMMIT PHASE 7 (Do This First!)
+### 1. TEST PHASE 6 (Do This First!)
 
-Before starting Phase 6, commit the Phase 7 work:
+Before committing Phase 6, test the following critical functionality:
+
+**File Loading Tests**:
+- [ ] Load a file from the list - verify waveform renders correctly
+- [ ] Switch between files - verify old waveform destroyed, new one created
+- [ ] Load file with stems - verify "STEMS" button appears and stems pre-load
+- [ ] Check browser console for errors (should see FileLoader log messages)
+
+**Loop Preservation Tests**:
+- [ ] Enable loop preservation (should be ON by default)
+- [ ] Set loop points on one file
+- [ ] Switch to another file - verify loop restores to same bar positions
+- [ ] Verify cycle mode state preserved
+
+**Playback Tests**:
+- [ ] Load file with autoplay - verify plays automatically
+- [ ] Load file without autoplay - verify stays paused
+- [ ] Volume and rate preserved across file changes
+- [ ] BPM lock enabled - verify rate auto-adjusts when loading new file
+
+**UI Tests**:
+- [ ] Player filename updates correctly
+- [ ] Player time resets to "0:00 / 0:00"
+- [ ] Active file highlighted in list
+- [ ] Play icon resets correctly
+
+If all tests pass, proceed to step 2 (commit).
+
+---
+
+### 2. COMMIT PHASE 6 (After Testing!)
+
+Once all tests pass, commit Phase 6:
 
 ```bash
 git add .
-git commit -m "refactor: Extract waveform initialization to WaveformComponent - Phase 7
+git commit -m "refactor: Extract file loading to FileLoader service - Phase 6
 
-Move initWaveSurfer() logic (164 lines) to WaveformComponent.create():
+Move loadAudio() logic (168 lines) to FileLoader.loadFile():
 - Created 12 event handler methods in WaveformComponent
 - setupFinishHandler() - Handle track end (loop or next)
 - setupPauseHandler() - Stop metronome on pause

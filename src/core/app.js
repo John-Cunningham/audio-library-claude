@@ -3541,160 +3541,49 @@
 
         // Loop manipulation functions
         function shiftLoopLeft() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop to shift');
-                return;
+            const result = LoopControls.shiftLoopLeft({
+                cycleMode, loopStart, loopEnd, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                loopStart = result.loopStart;
+                loopEnd = result.loopEnd;
+                updateLoopVisuals();
             }
-
-            const loopDuration = loopEnd - loopStart;
-            const newStart = loopStart - loopDuration;
-            const newEnd = loopEnd - loopDuration;
-
-            // Don't allow shifting before 0
-            if (newStart < 0) {
-                console.log('Cannot shift loop before start of track');
-                return;
-            }
-
-            loopStart = newStart;
-            loopEnd = newEnd;
-            console.log(`Loop shifted left: ${loopStart.toFixed(2)}s - ${loopEnd.toFixed(2)}s`);
-            recordAction('shiftLoopLeft', { loopStart, loopEnd, loopDuration });
-
-            // Jump to relative position in new loop if immediate jump is enabled
-            if (immediateJump === 'on' && wavesurfer) {
-                const currentTime = wavesurfer.getCurrentTime();
-                const oldLoopStart = loopStart + loopDuration; // Old loop start before shift
-                const oldLoopEnd = loopEnd + loopDuration; // Old loop end before shift
-
-                // Calculate position relative to old loop
-                let relativePosition = 0;
-                if (currentTime >= oldLoopStart && currentTime <= oldLoopEnd) {
-                    relativePosition = (currentTime - oldLoopStart) / loopDuration;
-                }
-
-                // Apply same relative position to new loop
-                const newTime = loopStart + (relativePosition * loopDuration);
-                wavesurfer.seekTo(newTime / wavesurfer.getDuration());
-                console.log(`Jumped to relative position in new loop: ${newTime.toFixed(2)}s (${(relativePosition * 100).toFixed(1)}% through loop)`);
-            } else if (immediateJump === 'clock' && wavesurfer) {
-                // Clock mode: schedule jump to loop start on next beat marker
-                pendingJumpTarget = loopStart;
-                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-            }
-
-            updateLoopVisuals();
         }
 
         function shiftLoopRight() {
-            if (!cycleMode || loopStart === null || loopEnd === null || !wavesurfer) {
-                console.log('No active loop to shift');
-                return;
+            const result = LoopControls.shiftLoopRight({
+                cycleMode, loopStart, loopEnd, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                loopStart = result.loopStart;
+                loopEnd = result.loopEnd;
+                updateLoopVisuals();
             }
-
-            const loopDuration = loopEnd - loopStart;
-            const trackDuration = wavesurfer.getDuration();
-            const newStart = loopStart + loopDuration;
-            const newEnd = loopEnd + loopDuration;
-
-            // Don't allow shifting past end of track
-            if (newEnd > trackDuration) {
-                console.log('Cannot shift loop past end of track');
-                return;
-            }
-
-            loopStart = newStart;
-            loopEnd = newEnd;
-            console.log(`Loop shifted right: ${loopStart.toFixed(2)}s - ${loopEnd.toFixed(2)}s`);
-            recordAction('shiftLoopRight', { loopStart, loopEnd, loopDuration });
-
-            // Jump to relative position in new loop if immediate jump is enabled
-            if (immediateJump === 'on' && wavesurfer) {
-                const currentTime = wavesurfer.getCurrentTime();
-                const oldLoopStart = loopStart - loopDuration; // Old loop start before shift
-                const oldLoopEnd = loopEnd - loopDuration; // Old loop end before shift
-
-                // Calculate position relative to old loop
-                let relativePosition = 0;
-                if (currentTime >= oldLoopStart && currentTime <= oldLoopEnd) {
-                    relativePosition = (currentTime - oldLoopStart) / loopDuration;
-                }
-
-                // Apply same relative position to new loop
-                const newTime = loopStart + (relativePosition * loopDuration);
-                wavesurfer.seekTo(newTime / wavesurfer.getDuration());
-                console.log(`Jumped to relative position in new loop: ${newTime.toFixed(2)}s (${(relativePosition * 100).toFixed(1)}% through loop)`);
-            } else if (immediateJump === 'clock' && wavesurfer) {
-                // Clock mode: schedule jump to loop start on next beat marker
-                pendingJumpTarget = loopStart;
-                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-            }
-
-            updateLoopVisuals();
         }
 
         function halfLoopLength() {
-            if (!cycleMode || loopStart === null || loopEnd === null) {
-                console.log('No active loop to modify');
-                return;
+            const result = LoopControls.halfLoopLength({
+                cycleMode, loopStart, loopEnd, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                loopEnd = result.loopEnd;
+                updateLoopVisuals();
             }
-
-            const loopDuration = loopEnd - loopStart;
-            const newDuration = loopDuration / 2;
-
-            // Don't allow loops shorter than 0.1 seconds
-            if (newDuration < 0.1) {
-                console.log('Loop too short to halve');
-                return;
-            }
-
-            loopEnd = loopStart + newDuration;
-            console.log(`Loop halved: ${loopStart.toFixed(2)}s - ${loopEnd.toFixed(2)}s (${newDuration.toFixed(1)}s)`);
-            recordAction('halfLoopLength', { loopStart, loopEnd, loopDuration: newDuration });
-
-            // Handle jump based on mode
-            if (immediateJump === 'on' && wavesurfer) {
-                wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
-                console.log(`Jumped to loop start: ${loopStart.toFixed(2)}s`);
-            } else if (immediateJump === 'clock' && wavesurfer) {
-                pendingJumpTarget = loopStart;
-                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-            }
-
-            updateLoopVisuals();
         }
 
         function doubleLoopLength() {
-            if (!cycleMode || loopStart === null || loopEnd === null || !wavesurfer) {
-                console.log('No active loop to modify');
-                return;
+            const result = LoopControls.doubleLoopLength({
+                cycleMode, loopStart, loopEnd, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                loopEnd = result.loopEnd;
+                updateLoopVisuals();
             }
-
-            const loopDuration = loopEnd - loopStart;
-            const newDuration = loopDuration * 2;
-            const newEnd = loopStart + newDuration;
-            const trackDuration = wavesurfer.getDuration();
-
-            // Don't allow loop to extend past end of track
-            if (newEnd > trackDuration) {
-                console.log('Cannot double loop - would exceed track duration');
-                return;
-            }
-
-            loopEnd = newEnd;
-            console.log(`Loop doubled: ${loopStart.toFixed(2)}s - ${loopEnd.toFixed(2)}s (${newDuration.toFixed(1)}s)`);
-            recordAction('doubleLoopLength', { loopStart, loopEnd, loopDuration: newDuration });
-
-            // Handle jump based on mode
-            if (immediateJump === 'on' && wavesurfer) {
-                wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
-                console.log(`Jumped to loop start: ${loopStart.toFixed(2)}s`);
-            } else if (immediateJump === 'clock' && wavesurfer) {
-                pendingJumpTarget = loopStart;
-                console.log(`Clock mode: will jump to loop start (${loopStart.toFixed(2)}s) on next beat`);
-            }
-
-            updateLoopVisuals();
         }
 
         // Shift+Left Arrow: Move loop START marker to the LEFT (expand loop from left)
@@ -4114,20 +4003,8 @@
 
         // Toggle loop
         function toggleLoop() {
-            isLooping = !isLooping;
-            const loopBtn = document.getElementById('loopBtn');
-            const shuffleBtn = document.getElementById('shuffleBtn');
-
-            loopBtn.classList.toggle('active', isLooping);
-
-            // Gray out shuffle button when loop is active (loop overrides shuffle)
-            if (isLooping) {
-                shuffleBtn.style.opacity = '0.4';
-                shuffleBtn.style.cursor = 'not-allowed';
-            } else {
-                shuffleBtn.style.opacity = '1';
-                shuffleBtn.style.cursor = 'pointer';
-            }
+            const result = LoopControls.toggleLoop({ isLooping });
+            isLooping = result.isLooping;
         }
 
         // Toggle shuffle

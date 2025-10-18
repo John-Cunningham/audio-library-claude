@@ -4913,8 +4913,6 @@ window.selectAll = () => FileListRenderer.selectAll();
 window.deselectAll = () => FileListRenderer.deselectAll();
 window.batchDelete = () => BatchOperations.batchDelete();
 window.batchEditTags = () => TagEditModal.open(selectedFiles, audioFiles);
-window.batchDetect = () => BatchOperations.batchDetect();
-window.batchSeparateStems = () => BatchOperations.batchSeparateStems();
 window.closeEditTagsModal = () => TagEditModal.close({
     setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
     setSearchQuery: (query) => { searchQuery = query; },

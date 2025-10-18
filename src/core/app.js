@@ -15,6 +15,7 @@
         import * as FileListRenderer from '../views/fileListRenderer.js';
         import * as BatchOperations from './batchOperations.js';
         import * as UploadManager from './uploadManager.js';
+        import * as LoopControls from '../components/loopControls.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -4796,6 +4797,26 @@
             setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
             renderModalTags: () => TagEditModal.render()
         });
+
+        // Initialize loop controls (moved to loopControls.js)
+        LoopControls.init(
+            // Callbacks
+            {
+                recordAction,
+                getAudioFiles: () => audioFiles,
+                getCurrentFileId: () => currentFileId,
+                setPendingJumpTarget: (target) => { pendingJumpTarget = target; }
+            },
+            // State getters
+            {
+                getWavesurfer: () => wavesurfer,
+                getCurrentMarkers: () => currentMarkers,
+                getMultiStemPlayerExpanded: () => multiStemPlayerExpanded,
+                getStemCycleModes: () => stemCycleModes,
+                getStemNextClickSets: () => stemNextClickSets,
+                getStemLoopStates: () => stemLoopStates
+            }
+        );
 
         // Initialize on load
         loadData();

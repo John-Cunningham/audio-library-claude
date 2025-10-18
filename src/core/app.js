@@ -14,6 +14,7 @@
         import * as FileProcessor from './fileProcessor.js';
         import * as FileListRenderer from '../views/fileListRenderer.js';
         import * as BatchOperations from './batchOperations.js';
+        import * as UploadManager from './uploadManager.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -742,100 +743,13 @@
         // Store pending upload files
         let pendingUploadFiles = [];
 
-        // PREF_KEYS now imported from config.js
-
-        // Load processing preferences from localStorage
-        function loadProcessingPreferences() {
-            document.getElementById('processStems').checked = localStorage.getItem(PREF_KEYS.stems) === 'true';
-            document.getElementById('processBpmKey').checked = localStorage.getItem(PREF_KEYS.bpmKey) !== 'false'; // default true
-            document.getElementById('processInstruments').checked = localStorage.getItem(PREF_KEYS.instruments) !== 'false'; // default true
-            document.getElementById('processChords').checked = localStorage.getItem(PREF_KEYS.chords) !== 'false'; // default true
-            document.getElementById('processBeatmap').checked = localStorage.getItem(PREF_KEYS.beatmap) !== 'false'; // default true
-            document.getElementById('processAutoTag').checked = localStorage.getItem(PREF_KEYS.autoTag) !== 'false'; // default true
-            document.getElementById('processConvertMp3').checked = localStorage.getItem(PREF_KEYS.convertMp3) === 'true'; // default false
-        }
-
-        // Save processing preferences to localStorage (only in upload mode)
-        function saveProcessingPreferences() {
-            // Only save if we're in upload mode (pendingUploadFiles has items)
-            if (pendingUploadFiles.length > 0) {
-                localStorage.setItem(PREF_KEYS.stems, document.getElementById('processStems').checked);
-                localStorage.setItem(PREF_KEYS.bpmKey, document.getElementById('processBpmKey').checked);
-                localStorage.setItem(PREF_KEYS.instruments, document.getElementById('processInstruments').checked);
-                localStorage.setItem(PREF_KEYS.chords, document.getElementById('processChords').checked);
-                localStorage.setItem(PREF_KEYS.beatmap, document.getElementById('processBeatmap').checked);
-                localStorage.setItem(PREF_KEYS.autoTag, document.getElementById('processAutoTag').checked);
-                localStorage.setItem(PREF_KEYS.convertMp3, document.getElementById('processConvertMp3').checked);
-            }
-        }
-
-        // Add change listeners to save preferences when checkboxes change
-        document.addEventListener('DOMContentLoaded', () => {
-            ['processStems', 'processBpmKey', 'processInstruments', 'processChords', 'processBeatmap', 'processAutoTag', 'processConvertMp3'].forEach(id => {
-                const checkbox = document.getElementById(id);
-                if (checkbox) {
-                    checkbox.addEventListener('change', saveProcessingPreferences);
-                }
-            });
-        });
-
-        // Open upload flow - trigger file picker
-        function openUploadFlow() {
-            const fileInput = document.getElementById('uploadFileInput');
-            fileInput.value = ''; // Reset
-            fileInput.click();
-        }
-
-        // Handle file selection - show tag modal
-        document.addEventListener('DOMContentLoaded', () => {
-            const fileInput = document.getElementById('uploadFileInput');
-            fileInput.addEventListener('change', (e) => {
-                if (e.target.files && e.target.files.length > 0) {
-                    pendingUploadFiles = Array.from(e.target.files);
-                    openUploadTagModal();
-                }
-            });
-        });
-
-        // Open tag modal for upload
-        function openUploadTagModal() {
-            const modal = document.getElementById('editTagsModal');
-            const modalFileCount = document.getElementById('modalFileCount');
-            const tagInput = document.getElementById('tagInputField');
-            const saveBtn = document.querySelector('.modal-btn-save');
-            const processingOptions = document.getElementById('processingOptions');
-
-            // Update header
-            modalFileCount.textContent = `(${pendingUploadFiles.length} file${pendingUploadFiles.length > 1 ? 's' : ''} to upload)`;
-
-            // Change button text to "Upload"
-            saveBtn.textContent = 'Upload';
-
-            // Show processing options (upload mode)
-            processingOptions.style.display = 'block';
-
-            // Change title and note for upload mode
-            document.getElementById('processingOptionsTitle').textContent = 'Auto-Processing Options:';
-            document.getElementById('processingNote').innerHTML = '<p style="margin: 0; font-size: 11px; color: #888; line-height: 1.4;"><strong>Note:</strong> Your selections are saved and will be remembered for next time.</p>';
-
-            // Load saved preferences from localStorage
-            loadProcessingPreferences();
-
-            // Clear tag state (using setters from tagEditModal.js)
-            TagEditModal.setModalTags(new Map());
-            TagEditModal.setModalTagsToAdd(new Set());
-            TagEditModal.setModalTagsToRemove(new Set());
-            TagEditModal.setSelectedModalTag(null);
-
-            // Render empty tags (user will add what they want)
-            renderModalTags();
-
-            modal.classList.add('active');
-            setTimeout(() => tagInput.focus(), 100);
-        }
-
-        // saveEditedTags() moved to tagEditModal.js
-        // Now uses TagEditModal.save() with callbacks and state
+        // Upload workflow moved to uploadManager.js
+        // - loadProcessingPreferences()
+        // - saveProcessingPreferences()
+        // - openUploadFlow()
+        // - openUploadTagModal()
+        // - File input event listener
+        // - Checkbox change event listeners
 
         // Batch operations moved to batchOperations.js
         // - runSelectedProcessing()
@@ -4876,6 +4790,13 @@
             }
         );
 
+        // Initialize upload manager (moved to uploadManager.js)
+        UploadManager.init({
+            getPendingUploadFiles: () => pendingUploadFiles,
+            setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+            renderModalTags: () => TagEditModal.render()
+        });
+
         // Initialize on load
         loadData();
 
@@ -4908,7 +4829,7 @@ window.handleSearch = handleSearch;
 window.handleSearchKeydown = handleSearchKeydown;
 window.selectAllVisibleTags = selectAllVisibleTags;
 window.deselectAllTags = deselectAllTags;
-window.openUploadFlow = openUploadFlow;
+window.openUploadFlow = () => UploadManager.openUploadFlow();
 window.selectAll = () => FileListRenderer.selectAll();
 window.deselectAll = () => FileListRenderer.deselectAll();
 window.batchDelete = () => BatchOperations.batchDelete();

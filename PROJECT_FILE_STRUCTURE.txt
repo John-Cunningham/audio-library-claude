@@ -1,0 +1,70 @@
+audio-library-claude/
+│
+├── index.html
+│
+├── styles/
+│   ├── main.css
+│   ├── playerBar.css
+│   ├── stems.css
+│   └── views.css
+│
+└── src/
+    │
+    ├── core/
+    │   ├── app.js                    ⭐ 2,670 lines (main)
+    │   ├── audioContext.js
+    │   ├── batchOperations.js
+    │   ├── config.js
+    │   ├── fileProcessor.js
+    │   ├── keyboardShortcuts.js
+    │   ├── metronome.js
+    │   ├── playerTemplate.js         ⭐ 1,326 lines
+    │   ├── state.js
+    │   ├── supabase.js
+    │   ├── tagManager.js
+    │   ├── uploadManager.js
+    │   ├── utils.js
+    │   └── viewManager.js
+    │
+    ├── components/
+    │   ├── loopControls.js
+    │   ├── markerSystem.js
+    │   ├── miniWaveform.js
+    │   ├── playerBar.js              ⭐ 1,451 lines
+    │   ├── processingModal.js
+    │   ├── stemMarkerSystem.js
+    │   ├── stemPlayerManager.js      ⭐ 884 lines
+    │   ├── tagEditModal.js
+    │   └── waveform.js
+    │
+    ├── services/
+    │   ├── actionRecorder.js         ⭐ NEW (Phase 10a)
+    │   └── fileLoader.js             ⭐ 373 lines
+    │
+    ├── views/
+    │   ├── fileListRenderer.js
+    │   ├── galaxyView.js
+    │   ├── libraryView.js
+    │   └── sphereView.js
+    │
+    ├── audio/
+    │   └── signalsmith.js
+    │
+    └── utils/
+        ├── beatmap.js
+        ├── formatting.js
+        └── progressBar.js
+
+================================================================================
+KEY FILES
+================================================================================
+
+⭐ LARGEST/MOST IMPORTANT:
+- src/core/app.js                    2,670 lines - Main orchestrator
+- src/components/playerBar.js        1,451 lines - Player component (reused 5x)
+- src/core/playerTemplate.js         1,326 lines - HTML template generators
+- src/components/stemPlayerManager.js  884 lines - Stem player manager
+- src/services/fileLoader.js           373 lines - File loading service
+- src/services/actionRecorder.js       332 lines - Action recorder (NEW!)
+
+TOTAL JAVASCRIPT: ~10,800 lines across 35 files

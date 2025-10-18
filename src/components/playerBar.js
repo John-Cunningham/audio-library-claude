@@ -991,10 +991,9 @@ export class PlayerBarComponent {
     loadFile(file) {
         this.currentFile = file;
 
-        // Add markers if enabled
-        if (this.markersEnabled && file.beatmap) {
-            this.addBarMarkers(file);
-        }
+        // Always call addBarMarkers to clear old markers if needed
+        // (even if markers are disabled or file has no beatmap)
+        this.addBarMarkers(file);
     }
 
     // ============================================

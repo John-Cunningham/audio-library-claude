@@ -8,6 +8,7 @@
         import * as Metronome from './metronome.js';
         import { initKeyboardShortcuts } from './keyboardShortcuts.js';
         import * as ProgressBar from '../utils/progressBar.js';
+        import * as MiniWaveform from '../components/miniWaveform.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -41,7 +42,6 @@
         let searchQuery = '';
         let currentTagMode = null; // Default mode for tag clicks (null = no mode, normal click behavior)
         let showAllTags = false; // Toggle for showing low-count tags
-        let miniWaveforms = {}; // Track mini waveform instances by file ID
         let isLooping = false;
         let isShuffling = false;
         let markersEnabled = true; // Toggle for bar markers
@@ -2047,69 +2047,7 @@
             updateSelectionUI();
 
             // Render mini waveforms after DOM update
-            setTimeout(() => renderMiniWaveforms(sortedFiles), 0);
-        }
-
-        // Render mini waveforms for each file
-        function renderMiniWaveforms(files) {
-            files.forEach(file => {
-                const container = document.getElementById(`miniwave-${file.id}`);
-                if (!container) return;
-
-                // If waveform already exists and is still attached, skip
-                if (miniWaveforms[file.id] && container.children.length > 0) {
-                    return;
-                }
-
-                // Destroy old instance if it exists but container was recreated
-                if (miniWaveforms[file.id]) {
-                    try {
-                        miniWaveforms[file.id].destroy();
-                    } catch (e) {}
-                }
-
-                // Create mini wavesurfer instance
-                const miniWave = WaveSurfer.create({
-                    container: container,
-                    waveColor: '#444',
-                    progressColor: '#666',
-                    height: 32,
-                    barWidth: 2,
-                    barGap: 1,
-                    barRadius: 2,
-                    interact: true,
-                    hideScrollbar: true,
-                    normalize: true,
-                    cursorWidth: 0
-                });
-
-                // Suppress abort errors (expected when typing quickly in search)
-                miniWave.on('error', (err) => {
-                    // Silently ignore AbortError - these are expected during rapid re-renders
-                    if (err.name === 'AbortError') return;
-                    console.error('Mini waveform error:', err);
-                });
-
-                miniWave.load(file.file_url).catch(err => {
-                    // Silently ignore AbortError - these are expected during rapid re-renders
-                    if (err.name === 'AbortError') return;
-                    console.error('Failed to load mini waveform:', err);
-                });
-
-                // Make it interactive - click to play from that position
-                miniWave.on('click', (relativeX) => {
-                    loadAudio(file.id, true); // Autoplay enabled
-                    setTimeout(() => {
-                        if (wavesurfer) {
-                            wavesurfer.seekTo(relativeX);
-                            // Play is already started by loadAudio autoplay, just seek to position
-                        }
-                    }, 200); // Increased timeout to ensure file is loaded
-                });
-
-                // Store the instance
-                miniWaveforms[file.id] = miniWave;
-            });
+            setTimeout(() => MiniWaveform.renderAll(sortedFiles), 0);
         }
 
         // Track last clicked file for range selection
@@ -6055,10 +5993,7 @@
                 }
 
                 // Clean up mini waveform
-                if (miniWaveforms[fileId]) {
-                    miniWaveforms[fileId].destroy();
-                    delete miniWaveforms[fileId];
-                }
+                MiniWaveform.destroy(fileId);
 
                 // Reload data
                 await loadData();
@@ -6114,10 +6049,7 @@
 
                 // Clean up mini waveforms for deleted files
                 filesToDelete.forEach(fileId => {
-                    if (miniWaveforms[fileId]) {
-                        miniWaveforms[fileId].destroy();
-                        delete miniWaveforms[fileId];
-                    }
+                    MiniWaveform.destroy(fileId);
                 });
 
                 // Reload data
@@ -6584,6 +6516,12 @@
                 isMetronomeEnabled: Metronome.isMetronomeEnabled
             }
         );
+
+        // Initialize mini waveforms (moved to miniWaveform.js)
+        MiniWaveform.init({
+            loadAudio,
+            getWavesurfer: () => wavesurfer
+        });
 
         // Initialize on load
         loadData();

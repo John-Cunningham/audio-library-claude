@@ -907,108 +907,8 @@
             setTimeout(() => tagInput.focus(), 100);
         }
 
-        // Modified saveEditedTags to handle upload mode
-        async function saveEditedTags() {
-            const modal = document.getElementById('editTagsModal');
-
-            // Check if we're in upload mode
-            if (pendingUploadFiles.length > 0) {
-                // Upload mode - collect tags and upload files
-                const tagsToApply = Array.from(TagEditModal.getModalTagsToAdd());
-                modal.classList.remove('active');
-
-                await performUpload(pendingUploadFiles, tagsToApply);
-                pendingUploadFiles = [];
-                return;
-            }
-
-            // Original edit tags logic - edit mode
-            const filesToUpdate = Array.from(selectedFiles);
-
-            // Check which processing options are selected
-            const shouldProcessStems = document.getElementById('processStems').checked;
-            const shouldProcessBpmKey = document.getElementById('processBpmKey').checked;
-            const shouldProcessInstruments = document.getElementById('processInstruments').checked;
-            const shouldProcessChords = document.getElementById('processChords').checked;
-            const shouldProcessBeatmap = document.getElementById('processBeatmap').checked;
-            const shouldProcessAutoTag = document.getElementById('processAutoTag').checked;
-            const shouldConvertMp3 = document.getElementById('processConvertMp3').checked;
-
-            try {
-                // Get BPM and Key values from inputs
-                const bpmInput = document.getElementById('modalBpmInput').value.trim();
-                const keyInput = document.getElementById('modalKeyInput').value.trim();
-
-                // First, update tags/BPM/Key in database
-                for (let fileId of filesToUpdate) {
-                    const file = audioFiles.find(f => f.id === fileId);
-                    if (!file) continue;
-
-                    // Start with current tags
-                    let newTags = [...file.tags];
-
-                    // Remove tags marked for removal
-                    newTags = newTags.filter(tag => !TagEditModal.getModalTagsToRemove().has(tag));
-
-                    // Add new tags
-                    newTags = [...new Set([...newTags, ...TagEditModal.getModalTagsToAdd()])];
-
-                    // Prepare update object
-                    const updateData = { tags: newTags };
-
-                    // Update BPM if provided
-                    if (bpmInput !== '') {
-                        const bpmValue = parseFloat(bpmInput);
-                        updateData.bpm = isNaN(bpmValue) ? null : bpmValue;
-                    }
-
-                    // Update Key if provided
-                    if (keyInput !== '') {
-                        updateData.key = keyInput || null;
-                    }
-
-                    // Update in database
-                    await supabase
-                        .from('audio_files')
-                        .update(updateData)
-                        .eq('id', fileId);
-                }
-
-                // Close modal
-                TagEditModal.close({
-                    setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
-                    setSearchQuery: (query) => { searchQuery = query; },
-                    filters,
-                    renderTags,
-                    renderFiles
-                });
-
-                // Clear selection
-                selectedFiles.clear();
-
-                // Now run any selected processing tasks
-                const anyProcessing = shouldProcessBpmKey || shouldProcessInstruments || shouldProcessChords || shouldProcessBeatmap || shouldProcessStems || shouldProcessAutoTag || shouldConvertMp3;
-
-                if (anyProcessing) {
-                    await runSelectedProcessing(filesToUpdate, {
-                        bpmKey: shouldProcessBpmKey,
-                        instruments: shouldProcessInstruments,
-                        chords: shouldProcessChords,
-                        beatmap: shouldProcessBeatmap,
-                        stems: shouldProcessStems,
-                        auto_tag: shouldProcessAutoTag,
-                        convert_to_mp3: shouldConvertMp3
-                    });
-                }
-
-                // Reload data
-                await loadData();
-
-            } catch (error) {
-                console.error('Error saving file data:', error);
-                alert('Error saving file data. Check console for details.');
-            }
-        }
+        // saveEditedTags() moved to tagEditModal.js
+        // Now uses TagEditModal.save() with callbacks and state
 
         // Run selected processing tasks with progress indication
         async function runSelectedProcessing(fileIds, options) {
@@ -5972,112 +5872,16 @@
 
         // Progress bar functions moved to utils/progressBar.js
 
-        // Modal rendering and tag manipulation functions moved to tagEditModal.js
-
-        // Handle tag input
+        // Modal event handlers moved to tagEditModal.js
+        // Initialize tag edit modal keyboard shortcuts and event handlers
         document.addEventListener('DOMContentLoaded', () => {
-            const tagInput = document.getElementById('tagInputField');
-            const suggestionsContainer = document.getElementById('tagSuggestions');
-            const modal = document.getElementById('editTagsModal');
-
-            tagInput.addEventListener('input', (e) => {
-                const value = e.target.value.trim().toLowerCase();
-
-                if (value.length === 0) {
-                    suggestionsContainer.style.display = 'none';
-                    return;
-                }
-
-                // Get all available tags
-                const allTags = TagManager.getAllTags();
-                const modalTags = TagEditModal.getModalTags();
-                const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
-                const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
-                const suggestions = allTags
-                    .map(({ tag }) => tag)
-                    .filter(tag => {
-                        return tag.includes(value) &&
-                               !modalTags.has(tag) &&
-                               !modalTagsToAdd.has(tag) &&
-                               !modalTagsToRemove.has(tag);
-                    })
-                    .slice(0, 10);
-
-                if (suggestions.length > 0) {
-                    suggestionsContainer.innerHTML = suggestions
-                        .map(tag => `<div class="tag-suggestion-item" onclick="window.addModalTag('${tag}')">${tag}</div>`)
-                        .join('');
-                    suggestionsContainer.style.display = 'block';
-                } else {
-                    suggestionsContainer.style.display = 'none';
-                }
-            });
-
-            tagInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && tagInput.value.trim()) {
-                    e.preventDefault();
-                    TagEditModal.addTag(tagInput.value.trim());
-                } else if ((e.key === 'Backspace' || e.key === 'Delete') && tagInput.value === '') {
-                    e.preventDefault();
-                    const selectedModalTag = TagEditModal.getSelectedModalTag();
-                    if (selectedModalTag) {
-                        // Delete selected tag
-                        TagEditModal.removeSelectedTag();
-                    } else if (e.key === 'Backspace') {
-                        // Backspace with no selection - select last tag
-                        const modalTags = TagEditModal.getModalTags();
-                        const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
-                        const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
-                        const allTags = Array.from(modalTags.keys()).filter(tag => !modalTagsToRemove.has(tag));
-                        const newTags = Array.from(modalTagsToAdd);
-                        const lastTag = newTags.length > 0 ? newTags[newTags.length - 1] : allTags[allTags.length - 1];
-                        if (lastTag) {
-                            TagEditModal.setSelectedModalTag(lastTag);
-                            TagEditModal.render();
-                        }
-                    }
-                }
-            });
-
-            // Global keyboard handler for modal (when input is not focused)
-            document.addEventListener('keydown', (e) => {
-                // Only handle if modal is open and input is not focused
-                if (!modal.classList.contains('active') || document.activeElement === tagInput) return;
-
-                if (e.key === 'Backspace' || e.key === 'Delete') {
-                    e.preventDefault();
-                    const selectedModalTag = TagEditModal.getSelectedModalTag();
-                    if (selectedModalTag) {
-                        TagEditModal.removeSelectedTag();
-                    } else if (e.key === 'Backspace') {
-                        // Select last tag
-                        const modalTags = TagEditModal.getModalTags();
-                        const modalTagsToRemove = TagEditModal.getModalTagsToRemove();
-                        const modalTagsToAdd = TagEditModal.getModalTagsToAdd();
-                        const allTags = Array.from(modalTags.keys()).filter(tag => !modalTagsToRemove.has(tag));
-                        const newTags = Array.from(modalTagsToAdd);
-                        const lastTag = newTags.length > 0 ? newTags[newTags.length - 1] : allTags[allTags.length - 1];
-                        if (lastTag) {
-                            TagEditModal.setSelectedModalTag(lastTag);
-                            TagEditModal.render();
-                        }
-                    }
-                } else if (e.key === 'Escape') {
-                    TagEditModal.close({
-                        setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
-                        setSearchQuery: (query) => { searchQuery = query; },
-                        filters,
-                        renderTags,
-                        renderFiles
-                    });
-                }
-            });
-
-            // Close suggestions when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!suggestionsContainer.contains(e.target) && e.target !== tagInput) {
-                    suggestionsContainer.style.display = 'none';
-                }
+            TagEditModal.initEventHandlers({
+                setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+                setSearchQuery: (query) => { searchQuery = query; },
+                filters,
+                renderTags,
+                renderFiles,
+                getAllTags: () => TagManager.getAllTags()
             });
         });
 
@@ -6204,7 +6008,25 @@ window.closeEditTagsModal = () => TagEditModal.close({
     renderTags,
     renderFiles
 });
-window.saveEditedTags = saveEditedTags;
+window.saveEditedTags = () => TagEditModal.save(
+    {
+        performUpload,
+        runSelectedProcessing,
+        loadData,
+        renderTags,
+        renderFiles
+    },
+    {
+        selectedFiles,
+        audioFiles,
+        pendingUploadFiles,
+        setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+        clearSelectedFiles: () => { selectedFiles.clear(); },
+        setSearchQuery: (query) => { searchQuery = query; },
+        filters,
+        supabase
+    }
+);
 window.previousTrack = previousTrack;
 window.playPause = playPause;
 window.nextTrack = nextTrack;

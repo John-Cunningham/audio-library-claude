@@ -3,8 +3,8 @@
 ## ✅ REFACTORING IN PROGRESS - CONTINUE HERE
 
 **Branch:** `refactor-v28-player-component-architecture`
-**Last Commit:** `3e791d5` - Progress bar extraction
-**Status:** 2 extractions complete, ready for next steps
+**Last Commit:** `63c45c5` - Mini waveforms extraction
+**Status:** 3 extractions complete, ready for next steps
 
 ---
 
@@ -26,9 +26,15 @@ Successfully started systematic refactoring of monolithic `app.js` into modular 
 - Status: Tested and working perfectly
 - Commit: `3e791d5`
 
+**Extraction 3: Mini Waveforms** ✅
+- Removed: 62 lines from app.js
+- Created: `src/components/miniWaveform.js` (143 lines)
+- Status: Tested and working perfectly
+- Commit: `63c45c5`
+
 **Cumulative Results:**
-- **app.js**: 7,037 → 6,767 lines (-270 lines, -3.8%)
-- **Files created**: 2 new modules
+- **app.js**: 7,037 → 6,705 lines (-332 lines, -4.7%)
+- **Files created**: 3 new modules
 - **All features**: Tested and working ✅
 
 ---
@@ -37,30 +43,7 @@ Successfully started systematic refactoring of monolithic `app.js` into modular 
 
 Based on our strategic analysis, here's the recommended order:
 
-### **Next Up: Mini Waveforms** (~60 lines)
-**Priority:** HIGH - Quick win
-**Complexity:** ⭐⭐ Low-Medium
-**File:** `src/components/miniWaveform.js`
-
-**Functions to extract:**
-- `renderMiniWaveforms(files)` (line ~2053)
-- Mini waveform creation logic (~60 lines)
-
-**Why next:**
-- Self-contained logic
-- Minimal dependencies (just WaveSurfer)
-- Easy to test (visible in file list)
-- Another quick win to build momentum
-
-**Test plan:**
-1. Load app
-2. Verify mini waveforms appear in file list
-3. Switch between files
-4. Upload new file, verify waveform renders
-
----
-
-### **After Mini Waveforms: Tag Management** (~100 lines)
+### **Next Up: Tag Management** (~100 lines)
 **Priority:** HIGH
 **Complexity:** ⭐⭐ Medium
 **File:** `src/core/tagManager.js`
@@ -122,11 +105,11 @@ Based on our strategic analysis, here's the recommended order:
 src/
 ├── core/                   # Core business logic
 │   ├── keyboardShortcuts.js  ✅ DONE
-│   ├── tagManager.js          ← NEXT (after mini waveforms)
+│   ├── tagManager.js          ← NEXT
 │   ├── fileProcessor.js       ← FUTURE
 │   └── app.js                 ← Coordinator (target: <2000 lines)
 ├── components/              # Reusable UI components
-│   ├── miniWaveform.js        ← NEXT
+│   ├── miniWaveform.js        ✅ DONE
 │   ├── tagEditModal.js        ← AFTER tag manager
 │   ├── playerBar.js           ← FUTURE (big refactor)
 │   └── processingModal.js     (already exists)
@@ -231,10 +214,11 @@ export class TagManager {
 **Before refactoring started:**
 - app.js: 7,037 lines
 
-**After 2 extractions:**
-- app.js: 6,767 lines
+**After 3 extractions:**
+- app.js: 6,705 lines
 - keyboardShortcuts.js: 329 lines
 - progressBar.js: 136 lines
+- miniWaveform.js: 143 lines
 
 **Target (when complete):**
 - app.js: ~2,000 lines (coordinator only)
@@ -255,8 +239,18 @@ export class TagManager {
 
 - User will track bugs separately (no need to create bug log)
 - Fix critical bugs immediately, log non-critical for later
-- Trust architectural recommendations (proven with 2 successful extractions)
+- Trust architectural recommendations (proven with 3 successful extractions)
 - Provide numbered test instructions for clear feedback
+
+### **Known Issues (Non-Critical - User Tracking):**
+
+1. **Mini waveform click timing** - Brief audio playback at start before seeking to clicked position
+   - Original behavior, not a regression
+   - Could optimize later with event-based approach (wait for 'ready' event)
+
+2. **Audio glitches during rapid search filtering** - WaveSurfer loading causes brief interruptions
+   - Expected behavior due to audio data fetching
+   - Potential optimizations: debounce search, lazy-load visible rows, aggressive caching
 
 ### **Testing Commands:**
 
@@ -286,16 +280,17 @@ Continue refactoring from where we left off. Read REFACTORING_HANDOFF_2025-10-17
 for full context.
 
 Current branch: refactor-v28-player-component-architecture
-Last commit: 3e791d5
+Last commit: 63c45c5
 
 Status:
 ✅ Keyboard shortcuts extracted (203 lines removed)
 ✅ Progress bar extracted (67 lines removed)
-📋 Next up: Mini waveforms (~60 lines)
+✅ Mini waveforms extracted (62 lines removed)
+📋 Next up: Tag management (~100 lines)
 
-app.js reduced from 7,037 → 6,767 lines so far.
+app.js reduced from 7,037 → 6,705 lines so far (-332 lines, -4.7%).
 
-Please extract mini waveforms next following the proven pattern from previous
+Please extract tag management next following the proven pattern from previous
 extractions. Test thoroughly before committing.
 ```
 
@@ -320,5 +315,6 @@ extractions. Test thoroughly before committing.
 ---
 
 **Created:** 2025-10-17
+**Last Updated:** 2025-10-17
 **Status:** Ready to continue refactoring
-**Next:** Extract mini waveforms module
+**Next:** Extract tag management module

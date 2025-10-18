@@ -23,6 +23,7 @@
         import * as MarkerSystem from '../components/markerSystem.js';
         import * as StemMarkerSystem from '../components/stemMarkerSystem.js';
         import * as StemPlayerManager from '../components/stemPlayerManager.js';
+        import * as StemLegacyPlayer from '../components/stemLegacyPlayer.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -269,34 +270,14 @@
                 });
             }
 
-            // Also update OLD stem player volumes (legacy Phase 4 code)
-            // Phase 4 Fix 2: Check if any stems are soloed (using stem file IDs)
-            const stemFileIds = Object.values(stemFiles).map(sf => sf.id);
-            const anySoloed = stemFileIds.some(id => stemSoloed[id]);
-
-            Object.keys(stemWavesurfers).forEach(stemType => {
-                const stemWS = stemWavesurfers[stemType];
-                if (!stemWS) return;
-
-                const stemFileId = stemFiles[stemType]?.id;
-                if (!stemFileId) return;
-
-                // Get state for this specific stem file
-                const isMuted = stemMuted[stemFileId] || false;
-                const isSoloed = stemSoloed[stemFileId] || false;
-                const volume = stemVolumes[stemFileId] || 1.0;
-
-                let finalVolume = 0;
-
-                // If any stems are soloed, only play soloed stems
-                // Otherwise, respect individual mute states
-                if (anySoloed) {
-                    finalVolume = isSoloed ? masterVolume * volume : 0;
-                } else {
-                    finalVolume = isMuted ? 0 : masterVolume * volume;
-                }
-
-                stemWS.setVolume(finalVolume);
+            // Update OLD stem player volumes (delegated to legacy module)
+            StemLegacyPlayer.updateLegacyStemVolumes({
+                masterVolume,
+                stemWavesurfers,
+                stemFiles,
+                stemVolumes,
+                stemMuted,
+                stemSoloed
             });
         }
 
@@ -988,86 +969,14 @@
 
         // Phase 4 Step 2B: Render visual waveforms in expansion containers
         function renderStemWaveforms(fileId) {
-            if (!stemFiles || Object.keys(stemFiles).length === 0) {
-                console.log('No stem files loaded, skipping waveform render');
-                return;
-            }
-
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-
-            stemTypes.forEach(stemType => {
-                const containerId = `stem-waveform-${stemType}-${fileId}`;
-                const container = document.getElementById(containerId);
-
-                if (!container) {
-                    console.warn(`Container ${containerId} not found`);
-                    return;
-                }
-
-                // Clear any existing content
-                container.innerHTML = '';
-
-                // Create a visual-only WaveSurfer instance for this stem
-                const visualWS = WaveSurfer.create({
-                    container: `#${containerId}`,
-                    waveColor: '#666666',
-                    progressColor: '#4a9eff',
-                    cursorColor: 'transparent', // No cursor for visual-only
-                    barWidth: 2,
-                    barRadius: 3,
-                    cursorWidth: 0,
-                    height: 60,
-                    barGap: 2,
-                    responsive: true,
-                    normalize: true,
-                    backend: 'WebAudio',
-                    autoScroll: false,
-                    interact: false // Visual only, no interaction
-                });
-
-                // Load the stem audio file (visual only, no playback)
-                if (stemFiles[stemType] && stemFiles[stemType].file_url) {
-                    visualWS.load(stemFiles[stemType].file_url);
-                    console.log(`Rendered visual waveform for ${stemType} stem`);
-                } else {
-                    console.warn(`No stem file found for ${stemType}`);
-                }
-            });
+            StemLegacyPlayer.renderStemWaveforms(fileId, stemFiles, WaveSurfer);
         }
 
-        // Phase 4 Step 2B: Restore control states after re-expansion
         function restoreStemControlStates(fileId) {
-            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
-
-            stemTypes.forEach(stemType => {
-                // Phase 4 Fix 2: Get stem file ID
-                const stemFileId = stemFiles[stemType]?.id;
-                if (!stemFileId) return;
-
-                // Restore volume slider
-                const volumeSlider = document.getElementById(`stem-volume-${stemType}-${fileId}`);
-                const volumeValue = document.getElementById(`stem-volume-value-${stemType}-${fileId}`);
-                if (volumeSlider && volumeValue) {
-                    const currentVolume = Math.round((stemVolumes[stemFileId] || 1.0) * 100);
-                    volumeSlider.value = currentVolume;
-                    volumeValue.textContent = `${currentVolume}%`;
-                }
-
-                // Restore mute button
-                const muteBtn = document.getElementById(`stem-mute-${stemType}-${fileId}`);
-                if (muteBtn) {
-                    const isMuted = stemMuted[stemFileId] || false;
-                    muteBtn.textContent = isMuted ? '🔇' : '🔊';
-                    muteBtn.style.background = isMuted ? '#8b0000' : '#2a2a2a';
-                }
-
-                // Restore solo button
-                const soloBtn = document.getElementById(`stem-solo-${stemType}-${fileId}`);
-                if (soloBtn) {
-                    const isSoloed = stemSoloed[stemFileId] || false;
-                    soloBtn.style.background = isSoloed ? '#00aa00' : '#2a2a2a';
-                    soloBtn.style.borderColor = isSoloed ? '#00ff00' : '#3a3a3a';
-                }
+            StemLegacyPlayer.restoreStemControlStates(fileId, stemFiles, {
+                stemVolumes,
+                stemMuted,
+                stemSoloed
             });
         }
 

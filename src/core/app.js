@@ -6,6 +6,7 @@
 
         // Import modules (ROUND 2 - Audio Core)
         import * as Metronome from './metronome.js';
+        import { initKeyboardShortcuts } from './keyboardShortcuts.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -6599,261 +6600,57 @@
             document.getElementById('tagSuggestions').style.display = 'none';
         }
 
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            // Don't trigger shortcuts if user is typing in an input field or modal is open
-            const modal = document.getElementById('editTagsModal');
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || modal.classList.contains('active')) {
-                return;
+        // Initialize keyboard shortcuts (moved to keyboardShortcuts.js)
+        initKeyboardShortcuts(
+            // Callbacks object
+            {
+                playPause,
+                toggleMarkers,
+                toggleMetronome: Metronome.toggleMetronome,
+                toggleCycleMode,
+                toggleLoop,
+                resetLoop,
+                toggleShuffle,
+                toggleImmediateJump,
+                setVolume,
+                previousTrack,
+                nextTrack,
+                loadAudio,
+                batchEditTags,
+                shiftLoopLeft,
+                shiftLoopRight,
+                halfLoopLength,
+                doubleLoopLength,
+                moveStartLeft,
+                moveStartRight,
+                moveEndLeft,
+                moveEndRight,
+                filterFiles
+            },
+            // State getters object
+            {
+                getCurrentFileId: () => currentFileId,
+                getSelectedFiles: () => selectedFiles,
+                getCycleMode: () => cycleMode,
+                getLoopStart: () => loopStart,
+                getLoopEnd: () => loopEnd,
+                getUserPaused: () => userPaused,
+                getWavesurfer: () => wavesurfer,
+                getRecordingWaitingForStart: () => recordingWaitingForStart,
+                setRecordingWaitingForStart: (val) => { recordingWaitingForStart = val; },
+                setIsRecordingActions: (val) => { isRecordingActions = val; },
+                setRecordingStartTime: (val) => { recordingStartTime = val; },
+                getRecordedActions: () => recordedActions,
+                getMarkersEnabled: () => markersEnabled,
+                getLoopFadesEnabled: () => loopFadesEnabled,
+                getImmediateJump: () => immediateJump,
+                getSeekOnClick: () => seekOnClick,
+                getCurrentRate: () => currentRate,
+                updateLoopVisuals,
+                recordAction,
+                isMetronomeEnabled: Metronome.isMetronomeEnabled
             }
-
-            // Don't trigger shortcuts if modifier keys are held (allow browser shortcuts like Cmd+R)
-            if (e.metaKey || e.ctrlKey || e.altKey) {
-                return;
-            }
-
-            // If recording is waiting for first keypress, start recording now
-            if (recordingWaitingForStart && wavesurfer) {
-                recordingWaitingForStart = false;
-                isRecordingActions = true;
-                recordingStartTime = wavesurfer.getCurrentTime();
-
-                // Capture playing state immediately
-                const isCurrentlyPlaying = wavesurfer.isPlaying();
-                console.log(`[RECORD] Capturing initial state - wavesurfer.isPlaying() = ${isCurrentlyPlaying}`);
-
-                // Record initial state
-                const initialState = {
-                    playbackTime: recordingStartTime,
-                    loopStart: loopStart,
-                    loopEnd: loopEnd,
-                    cycleMode: cycleMode,
-                    rate: currentRate,
-                    volume: parseInt(document.getElementById('volumeSlider').value),
-                    isPlaying: isCurrentlyPlaying,
-                    currentFileId: currentFileId,
-                    markersEnabled: markersEnabled,
-                    metronomeEnabled: Metronome.isMetronomeEnabled(),
-                    loopFadesEnabled: loopFadesEnabled,
-                    immediateJump: immediateJump,
-                    seekOnClick: seekOnClick
-                };
-
-                recordedActions.push({
-                    time: 0,
-                    playbackTime: recordingStartTime,
-                    action: 'initialState',
-                    data: initialState
-                });
-
-                console.log(`[RECORD] Recording started at ${recordingStartTime.toFixed(3)}s`);
-                console.log('[RECORD] Initial state captured:', initialState);
-                updateLoopVisuals();
-            }
-
-            const filteredFiles = filterFiles();
-            if (filteredFiles.length === 0) return;
-
-            const currentIndex = filteredFiles.findIndex(f => f.id === currentFileId);
-
-            switch(e.key.toLowerCase()) {
-                case 'arrowleft':
-                    e.preventDefault();
-                    if (e.shiftKey && cycleMode && loopStart !== null && loopEnd !== null) {
-                        // Shift+Left: Move START marker left (expand from left)
-                        moveStartLeft();
-                    } else if (cycleMode && loopStart !== null && loopEnd !== null) {
-                        // In cycle mode with full loop: Left arrow = shift loop left
-                        shiftLoopLeft();
-                    } else {
-                        // Left: Previous track
-                        previousTrack();
-                    }
-                    break;
-
-                case 'arrowright':
-                    e.preventDefault();
-                    if (e.shiftKey && cycleMode && loopStart !== null && loopEnd !== null) {
-                        // Shift+Right: Move START marker right (shrink from left)
-                        moveStartRight();
-                    } else if (cycleMode && loopStart !== null && loopEnd !== null) {
-                        // In cycle mode with full loop: Right arrow = shift loop right
-                        shiftLoopRight();
-                    } else {
-                        // Right: Next track
-                        nextTrack();
-                    }
-                    break;
-
-                case 'arrowup':
-                    e.preventDefault();
-                    if (e.shiftKey && cycleMode && loopStart !== null && loopEnd !== null) {
-                        // Shift+Up: Move END marker right (expand loop)
-                        moveEndRight();
-                    } else if (cycleMode) {
-                        // In edit loop mode: Up arrow = double loop length
-                        doubleLoopLength();
-                    } else {
-                        // Up: Play previous file (respect pause state)
-                        if (currentIndex > 0) {
-                            loadAudio(filteredFiles[currentIndex - 1].id, !userPaused);
-                        } else {
-                            // Wrap to last file
-                            loadAudio(filteredFiles[filteredFiles.length - 1].id, !userPaused);
-                        }
-                    }
-                    break;
-
-                case 'arrowdown':
-                    e.preventDefault();
-                    if (e.shiftKey && cycleMode && loopStart !== null && loopEnd !== null) {
-                        // Shift+Down: Move END marker left (shrink loop)
-                        moveEndLeft();
-                    } else if (cycleMode) {
-                        // In edit loop mode: Down arrow = half loop length
-                        halfLoopLength();
-                    } else {
-                        // Down: Play next file (respect pause state)
-                        if (currentIndex < filteredFiles.length - 1) {
-                            loadAudio(filteredFiles[currentIndex + 1].id, !userPaused);
-                        } else {
-                            // Wrap to first file
-                            loadAudio(filteredFiles[0].id, !userPaused);
-                        }
-                    }
-                    break;
-
-                case ' ':
-                case 'spacebar':
-                    e.preventDefault();
-                    // Play/pause
-                    playPause();
-                    break;
-
-                case 'm':
-                    e.preventDefault();
-                    // Toggle bar markers
-                    toggleMarkers();
-                    break;
-
-                case 'k':
-                    e.preventDefault();
-                    // Toggle metronome
-                    Metronome.toggleMetronome(wavesurfer);
-                    break;
-
-                case 'enter':
-                    e.preventDefault();
-                    // Open edit tags for current file
-                    if (currentFileId) {
-                        selectedFiles.clear();
-                        selectedFiles.add(currentFileId);
-
-                        // Update checkboxes
-                        document.querySelectorAll('.file-item input[type="checkbox"]').forEach(cb => {
-                            cb.checked = false;
-                        });
-                        const checkbox = document.getElementById(`checkbox-${currentFileId}`);
-                        if (checkbox) checkbox.checked = true;
-
-                        batchEditTags();
-                    }
-                    break;
-
-                case 'c':
-                    e.preventDefault();
-                    // C: Toggle cycle mode (edit + play loop)
-                    toggleCycleMode();
-                    break;
-
-                case 'f':
-                    e.preventDefault();
-                    // F: Focus search field
-                    document.getElementById('searchBar').focus();
-                    break;
-
-                case '-':
-                case '_':
-                    e.preventDefault();
-                    // Minus key: Decrease volume by 10%
-                    {
-                        const volumeSlider = document.getElementById('volumeSlider');
-                        const currentVolume = parseInt(volumeSlider.value);
-                        const newVolume = Math.max(0, currentVolume - 10);
-                        volumeSlider.value = newVolume;
-                        setVolume(newVolume);
-                    }
-                    break;
-
-                case '=':
-                case '+':
-                    e.preventDefault();
-                    // Equals/Plus key: Increase volume by 10%
-                    {
-                        const volumeSlider = document.getElementById('volumeSlider');
-                        const currentVolume = parseInt(volumeSlider.value);
-                        const newVolume = Math.min(398, currentVolume + 10);
-                        volumeSlider.value = newVolume;
-                        setVolume(newVolume);
-                    }
-                    break;
-
-                case 'l':
-                    e.preventDefault();
-                    if (e.shiftKey) {
-                        // Shift+L: Clear/reset loop
-                        resetLoop();
-                    } else {
-                        // L: Toggle loop
-                        toggleLoop();
-                    }
-                    break;
-
-                case 'r':
-                    e.preventDefault();
-                    // R: Toggle shuffle
-                    toggleShuffle();
-                    break;
-
-                case 'j':
-                    e.preventDefault();
-                    // Toggle immediate jump on shift
-                    toggleImmediateJump();
-                    break;
-
-                case ',':
-                case '<':
-                    e.preventDefault();
-                    // Comma: Previous track
-                    previousTrack();
-                    break;
-
-                case '.':
-                case '>':
-                    e.preventDefault();
-                    // Period: Next track
-                    nextTrack();
-                    break;
-
-                case 's':
-                    e.preventDefault();
-                    // Toggle shuffle
-                    toggleShuffle();
-                    break;
-
-                case 'h':
-                    e.preventDefault();
-                    // Half loop length
-                    halfLoopLength();
-                    break;
-
-                case 'd':
-                    e.preventDefault();
-                    // Double loop length
-                    doubleLoopLength();
-                    break;
-            }
-        });
+        );
 
         // Initialize on load
         loadData();

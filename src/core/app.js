@@ -17,6 +17,7 @@
         import * as UploadManager from './uploadManager.js';
         import * as LoopControls from '../components/loopControls.js';
         import * as MarkerSystem from '../components/markerSystem.js';
+        import * as StemPlayerManager from '../components/stemPlayerManager.js';
 
         // Import modules (Phase 1 - View Manager)
         import * as ViewManager from './viewManager.js';
@@ -174,29 +175,7 @@
 
         // Phase 4 Fix 1: Preload all stem files from database
         async function preloadAllStems() {
-            try {
-                console.log('Preloading all stem files...');
-                const { data, error } = await supabase
-                    .from('audio_files_stems')
-                    .select('*');
-
-                if (error) throw error;
-
-                // Organize stems by parent file ID
-                allStemFiles = {};
-                if (data) {
-                    data.forEach(stem => {
-                        if (!allStemFiles[stem.audio_file_id]) {
-                            allStemFiles[stem.audio_file_id] = {};
-                        }
-                        allStemFiles[stem.audio_file_id][stem.stem_type] = stem;
-                    });
-                }
-
-                console.log(`✅ Preloaded stems for ${Object.keys(allStemFiles).length} files`);
-            } catch (error) {
-                console.error('Error preloading stems:', error);
-            }
+            allStemFiles = await StemPlayerManager.preloadAllStems(supabase);
         }
 
         // Polling removed - data refreshes immediately after processing completes
@@ -207,83 +186,26 @@
 
         // Fetch stem files for a parent audio file from audio_files_stems table
         async function fetchStemFiles(parentFileId) {
-            try {
-                const { data, error } = await supabase
-                    .from('audio_files_stems')
-                    .select('*')
-                    .eq('audio_file_id', parentFileId);
-
-                if (error) throw error;
-
-                // Organize stems by type
-                const stems = {};
-                if (data) {
-                    data.forEach(stem => {
-                        stems[stem.stem_type] = stem;
-                    });
-                }
-
-                console.log(`Fetched ${data?.length || 0} stems for file ${parentFileId}:`, stems);
-                return stems;
-            } catch (error) {
-                console.error('Error fetching stem files:', error);
-                return {};
-            }
+            return await StemPlayerManager.fetchStemFiles(supabase, parentFileId);
         }
 
         // Destroy all stem WaveSurfer instances
         function destroyAllStems() {
-            // Destroy OLD stem system (disabled at line 4163)
-            Object.keys(stemWavesurfers).forEach(stemType => {
-                if (stemWavesurfers[stemType]) {
-                    stemWavesurfers[stemType].destroy();
-                }
+            const result = StemPlayerManager.destroyAllStems({
+                stemWavesurfers,
+                stemPlayerWavesurfers,
+                stemPlayerComponents,
+                wavesurfer
             });
-            stemWavesurfers = {};
 
-            // Phase 1: Destroy NEW multi-stem player system
-            if (Object.keys(stemPlayerWavesurfers).length > 0) {
-                console.log('Destroying multi-stem player wavesurfers');
-
-                // Clean up event listeners from parent
-                if (wavesurfer) {
-                    wavesurfer.un('play');
-                    wavesurfer.un('pause');
-                    wavesurfer.un('seeking');
-                    wavesurfer.un('audioprocess');
-                }
-
-                // Destroy all stem wavesurfers
-                Object.values(stemPlayerWavesurfers).forEach(ws => {
-                    if (ws) {
-                        ws.destroy();
-                    }
-                });
-                stemPlayerWavesurfers = {};
-                stemPlayerComponents = {}; // Clear component instances too
-                multiStemReadyCount = 0;
-                stemsPreloaded = false;
-
-                // Clear multi-stem player UI
-                const multiStemPlayer = document.getElementById('multiStemPlayer');
-                if (multiStemPlayer) {
-                    multiStemPlayer.innerHTML = '';
-                    multiStemPlayer.classList.add('collapsed');
-                }
-
-                // Hide STEMS button
-                const stemsBtn = document.getElementById('stemsBtn');
-                if (stemsBtn) {
-                    stemsBtn.style.display = 'none';
-                    stemsBtn.classList.remove('active');
-                }
-
-                multiStemPlayerExpanded = false;
-                console.log('✓ Multi-stem player cleaned up');
-            }
-
-            stemFiles = {};
-            console.log('All stem WaveSurfers destroyed');
+            // Apply new state
+            stemWavesurfers = result.stemWavesurfers;
+            stemPlayerWavesurfers = result.stemPlayerWavesurfers;
+            stemPlayerComponents = result.stemPlayerComponents;
+            stemFiles = result.stemFiles;
+            multiStemReadyCount = result.multiStemReadyCount;
+            stemsPreloaded = result.stemsPreloaded;
+            multiStemPlayerExpanded = result.multiStemPlayerExpanded;
         }
 
         // Create WaveSurfer instance for a single stem (hidden, no container)
@@ -889,25 +811,21 @@
 
         // Update STEMS button visibility and active state (Player Bar UI - NOT file list)
         function updateStemsButton() {
+            StemPlayerManager.updateStemsButton({
+                allStemFiles,
+                currentFileId,
+                multiStemPlayerExpanded
+            });
+
+            // Update text based on expanded state
             const stemsBtn = document.getElementById('stemsBtn');
-            if (!stemsBtn) return;
-
-            // Get current file
-            const currentFile = audioFiles.find(f => f.id === currentFileId);
-
-            // Show button only if current file has stems
-            if (currentFile && currentFile.has_stems) {
-                stemsBtn.style.display = 'block';
-                // Toggle active class and text based on multi-stem player state
+            if (stemsBtn && stemsBtn.style.display !== 'none') {
                 if (multiStemPlayerExpanded) {
-                    stemsBtn.classList.add('active');
                     stemsBtn.innerHTML = '<span>▼ STEMS</span>';
                 } else {
-                    stemsBtn.classList.remove('active');
                     stemsBtn.innerHTML = '<span>▲ STEMS</span>';
                 }
-            } else {
-                stemsBtn.style.display = 'none';
+            } else if (stemsBtn) {
                 // Close multi-stem player if it's open and file has no stems
                 if (multiStemPlayerExpanded) {
                     toggleMultiStemPlayer();

@@ -1874,89 +1874,47 @@ function wireUpMenuControls() {
 /**
  * Wires up additional controls that need special event listeners
  * Called after menu HTML is loaded and initial wiring is complete
+ *
+ * Most controls work via inline oninput handlers in the HTML.
+ * This function only adds missing functionality.
  */
 function wireUpAdditionalControls() {
     console.log('🔧 Wiring up additional menu controls...');
 
-    // Visibility distance slider - sync display value when changed
-    const visibilitySlider = document.getElementById('galaxyVisibilityDistance');
+    // Visibility distance slider - the HTML inline handler doesn't call updateVisibilityDistance()
+    // Find the slider by finding the display span first, then its previous sibling
     const visibilityDisplay = document.getElementById('galaxyVisibilityValue');
-    if (visibilitySlider && visibilityDisplay) {
-        visibilitySlider.addEventListener('input', (e) => {
-            window.visibilityDistance = parseInt(e.target.value);
-            visibilityDisplay.textContent = window.visibilityDistance;
-            window.updateVisibilityDistance();
-        });
-        // Set initial value
-        visibilitySlider.value = window.visibilityDistance;
-        visibilityDisplay.textContent = window.visibilityDistance;
+    if (visibilityDisplay) {
+        // Find the input slider (it's the next element after the label)
+        const label = visibilityDisplay.parentElement;
+        const slider = label ? label.nextElementSibling : null;
+
+        if (slider && slider.tagName === 'INPUT') {
+            // Add updateVisibilityDistance() call to existing oninput handler
+            const originalHandler = slider.oninput;
+            slider.oninput = function(e) {
+                if (originalHandler) originalHandler.call(this, e);
+                window.updateVisibilityDistance();
+            };
+            console.log('✅ Visibility distance slider augmented with updateVisibilityDistance()');
+
+            // Set initial value if needed
+            if (scene && scene.fog) {
+                scene.fog.far = window.visibilityDistance;
+            }
+        }
     }
 
-    // Brightness slider - sync display value when changed
-    const brightnessSlider = document.getElementById('galaxyBrightness');
-    const brightnessDisplay = document.getElementById('galaxyBrightnessValue');
-    if (brightnessSlider && brightnessDisplay) {
-        brightnessSlider.addEventListener('input', (e) => {
-            window.particleBrightness = parseFloat(e.target.value);
-            brightnessDisplay.textContent = window.particleBrightness.toFixed(1);
-            window.updateBrightness();
-        });
-        // Set initial value
-        brightnessSlider.value = window.particleBrightness;
-        brightnessDisplay.textContent = window.particleBrightness.toFixed(1);
-    }
+    // Set initial values for visualization mode dropdowns
+    const colorModeSelect = document.getElementById('galaxyColorMode');
+    const xModeSelect = document.getElementById('galaxyXAxisMode');
+    const yModeSelect = document.getElementById('galaxyYAxisMode');
+    const zModeSelect = document.getElementById('galaxyZAxisMode');
 
-    // Audio reactivity strength slider - sync display
-    const audioStrengthSlider = document.getElementById('galaxyAudioReactivity');
-    const audioStrengthDisplay = document.getElementById('galaxyAudioReactivityValue');
-    if (audioStrengthSlider && audioStrengthDisplay) {
-        audioStrengthSlider.addEventListener('input', (e) => {
-            window.audioReactivityStrength = parseFloat(e.target.value);
-            audioStrengthDisplay.textContent = window.audioReactivityStrength;
-        });
-        // Set initial value
-        audioStrengthSlider.value = window.audioReactivityStrength;
-        audioStrengthDisplay.textContent = window.audioReactivityStrength;
-    }
-
-    // Cluster spread slider - sync display
-    const clusterSpreadSlider = document.getElementById('galaxyClusterSpread');
-    const clusterSpreadDisplay = document.getElementById('galaxyClusterSpreadValue');
-    if (clusterSpreadSlider && clusterSpreadDisplay) {
-        clusterSpreadSlider.addEventListener('input', (e) => {
-            window.clusterSpreadOnAudio = parseFloat(e.target.value);
-            clusterSpreadDisplay.textContent = window.clusterSpreadOnAudio;
-        });
-        // Set initial value
-        clusterSpreadSlider.value = window.clusterSpreadOnAudio;
-        clusterSpreadDisplay.textContent = window.clusterSpreadOnAudio;
-    }
-
-    // Move speed slider - sync display
-    const moveSpeedSlider = document.getElementById('galaxyMoveSpeed');
-    const moveSpeedDisplay = document.getElementById('galaxyMoveSpeedValue');
-    if (moveSpeedSlider && moveSpeedDisplay) {
-        moveSpeedSlider.addEventListener('input', (e) => {
-            window.moveSpeed = parseFloat(e.target.value);
-            moveSpeedDisplay.textContent = window.moveSpeed.toFixed(1);
-        });
-        // Set initial value
-        moveSpeedSlider.value = window.moveSpeed;
-        moveSpeedDisplay.textContent = window.moveSpeed.toFixed(1);
-    }
-
-    // Look sensitivity slider - sync display
-    const lookSensSlider = document.getElementById('galaxyLookSensitivity');
-    const lookSensDisplay = document.getElementById('galaxyLookSensitivityValue');
-    if (lookSensSlider && lookSensDisplay) {
-        lookSensSlider.addEventListener('input', (e) => {
-            window.lookSensitivity = parseFloat(e.target.value);
-            lookSensDisplay.textContent = (window.lookSensitivity * 1000).toFixed(1);
-        });
-        // Set initial value
-        lookSensSlider.value = window.lookSensitivity;
-        lookSensDisplay.textContent = (window.lookSensitivity * 1000).toFixed(1);
-    }
+    if (colorModeSelect) colorModeSelect.value = window.currentColorMode;
+    if (xModeSelect) xModeSelect.value = window.currentXMode;
+    if (yModeSelect) yModeSelect.value = window.currentYMode;
+    if (zModeSelect) zModeSelect.value = window.currentZMode;
 
     console.log('✅ Additional controls wired up');
 }

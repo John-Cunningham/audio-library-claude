@@ -1650,7 +1650,16 @@
 
         console.log('[app.js] ActionRecorder service initialized');
 
-        ViewManager.initViewTabs();
+        // Initialize view tabs with data provider for Galaxy View
+        ViewManager.initViewTabs(() => {
+            // Return current player state for views (e.g., Galaxy View)
+            const currentFile = audioFiles.find(f => f.id === currentFileId);
+            return {
+                currentFile: currentFile || null,
+                renderFunction: FileListRenderer.render,
+                renderTagsFunction: renderTags
+            };
+        });
 
         // ============================================
         // WINDOW OBJECT EXPOSURE

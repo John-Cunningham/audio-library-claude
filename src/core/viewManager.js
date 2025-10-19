@@ -108,13 +108,16 @@ function updateViewTabs(activeViewName) {
 /**
  * Initialize view tabs with click handlers
  * Call this once on page load
+ * @param {Function} getViewData - Optional function to get data for view switching
  */
-export function initViewTabs() {
+export function initViewTabs(getViewData = null) {
     document.querySelectorAll('.view-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             const viewName = tab.getAttribute('data-view');
             if (viewName) {
-                switchView(viewName);
+                // Get current data if function provided
+                const data = getViewData ? getViewData() : {};
+                switchView(viewName, data);
             }
         });
     });

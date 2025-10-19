@@ -1531,8 +1531,153 @@ function wireUpMenuControls() {
         console.log('▶️ Play button toggle not implemented yet');
     };
 
-    // Note: toggleOptionsMenu2 and toggleSection are defined in the HTML file's <script> section
-    // Do NOT override them here - the HTML's versions are correct
+    // Options menu collapse/expand functions (from HTML's script section)
+    // Scripts in innerHTML don't execute, so we define them here
+    window.toggleOptionsMenu2 = function() {
+        const menu = document.getElementById('optionsMenu2');
+        const icon = document.getElementById('optionsCollapseIcon2');
+
+        if (menu && icon) {
+            menu.classList.toggle('options-collapsed');
+            icon.textContent = menu.classList.contains('options-collapsed') ? '☰' : '−';
+        }
+    };
+
+    window.toggleSection = function(header) {
+        header.classList.toggle('collapsed');
+        const content = header.nextElementSibling;
+        if (content) {
+            content.classList.toggle('collapsed');
+        }
+    };
+
+    // Initialize drag functionality
+    window.initOptionsMenu2Drag = function() {
+        const menu = document.getElementById('optionsMenu2');
+        const titleBar = menu?.querySelector('.options-title-bar');
+
+        if (!menu || !titleBar) return;
+
+        let isDragging = false;
+        let startX, startY;
+        let startMenuX, startMenuY;
+
+        // Mouse events
+        titleBar.addEventListener('mousedown', (e) => {
+            if (e.target === titleBar || e.target.tagName === 'H2') {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+
+                const rect = menu.getBoundingClientRect();
+                startMenuX = rect.left;
+                startMenuY = rect.top;
+
+                menu.classList.add('dragging');
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+
+            const newX = Math.max(0, Math.min(window.innerWidth - menu.offsetWidth, startMenuX + deltaX));
+            const newY = Math.max(0, Math.min(window.innerHeight - menu.offsetHeight, startMenuY + deltaY));
+
+            menu.style.left = newX + 'px';
+            menu.style.top = newY + 'px';
+            menu.style.right = 'auto';
+            menu.style.bottom = 'auto';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                menu.classList.remove('dragging');
+            }
+        });
+
+        // Touch events
+        titleBar.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            isDragging = true;
+            startX = touch.clientX;
+            startY = touch.clientY;
+
+            const rect = menu.getBoundingClientRect();
+            startMenuX = rect.left;
+            startMenuY = rect.top;
+
+            menu.classList.add('dragging');
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - startX;
+            const deltaY = touch.clientY - startY;
+
+            const newX = Math.max(0, Math.min(window.innerWidth - menu.offsetWidth, startMenuX + deltaX));
+            const newY = Math.max(0, Math.min(window.innerHeight - menu.offsetHeight, startMenuY + deltaY));
+
+            menu.style.left = newX + 'px';
+            menu.style.top = newY + 'px';
+            menu.style.right = 'auto';
+            menu.style.bottom = 'auto';
+
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchend', () => {
+            if (isDragging) {
+                isDragging = false;
+                menu.classList.remove('dragging');
+            }
+        });
+    };
+
+    // Initialize resize functionality
+    window.initOptionsMenu2Resize = function() {
+        const menu = document.getElementById('optionsMenu2');
+        const resizeHandle = document.getElementById('optionsResizeHandle');
+
+        if (!resizeHandle || !menu) return;
+
+        let isResizing = false;
+        let startWidth, startHeight;
+        let startX, startY;
+
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = menu.offsetWidth;
+            startHeight = menu.offsetHeight;
+
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const newWidth = Math.max(220, Math.min(400, startWidth + e.clientX - startX));
+            const newHeight = Math.max(300, Math.min(window.innerHeight - 40, startHeight + e.clientY - startY));
+
+            menu.style.width = newWidth + 'px';
+            menu.style.maxHeight = newHeight + 'px';
+            menu.style.maxWidth = newWidth + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+        });
+    };
 
     // Database source toggles (stub)
     window.toggleGalaxyDbSource = function(source, event) {

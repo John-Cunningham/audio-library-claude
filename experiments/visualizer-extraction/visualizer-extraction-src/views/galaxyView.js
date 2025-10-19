@@ -1075,6 +1075,15 @@ function loadOptionsMenu() {
                 window.initOptionsMenu2Resize();
             }
 
+            // Define toggleSection function globally for inline onclick handlers
+            window.toggleSection = function(element) {
+                element.classList.toggle('collapsed');
+                const content = element.nextElementSibling;
+                if (content && content.classList.contains('collapsible-content')) {
+                    content.classList.toggle('collapsed');
+                }
+            };
+
             // Update file count
             updateFileCount();
 

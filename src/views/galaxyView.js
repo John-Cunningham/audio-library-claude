@@ -6,7 +6,7 @@ let camera = null;
 let renderer = null;
 let particles = [];
 let raycaster = null;
-let mouse = new THREE.Vector2();
+let mouse = null;  // Will be initialized after Three.js loads
 let animationFrameId = null;
 let isPointerLocked = false;
 
@@ -14,7 +14,7 @@ let isPointerLocked = false;
 let moveSpeed = 5.0;
 let lookSensitivity = 0.002;
 let keys = {};
-let velocity = new THREE.Vector3();
+let velocity = null;  // Will be initialized after Three.js loads
 let pitch = 0;
 let yaw = 0;
 
@@ -51,6 +51,10 @@ export async function init(data = {}) {
 
     // Load Three.js first
     await loadThreeJS();
+
+    // Initialize Three.js-dependent variables
+    mouse = new THREE.Vector2();
+    velocity = new THREE.Vector3();
 
     // Store audio files data
     if (data.audioFiles) {

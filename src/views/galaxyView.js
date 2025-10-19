@@ -80,18 +80,18 @@ export async function init(data = {}) {
         return;
     }
     console.log('📦 Container found:', container.id);
-    console.log('📐 Container dimensions:', {
-        width: container.clientWidth,
-        height: container.clientHeight,
-        display: container.style.display,
-        position: container.style.position
-    });
 
+    // MUST show container BEFORE reading dimensions
     container.style.display = 'block';
     container.innerHTML = '';
-    container.style.position = 'relative';
-    container.style.width = '100%';
-    container.style.height = '100%';
+
+    console.log('📐 Container dimensions AFTER showing:', {
+        width: container.clientWidth,
+        height: container.clientHeight,
+        offsetWidth: container.offsetWidth,
+        offsetHeight: container.offsetHeight,
+        computedStyle: window.getComputedStyle(container).position
+    });
 
     // Create instructions overlay
     const instructions = document.createElement('div');

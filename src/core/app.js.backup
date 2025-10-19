@@ -1,0 +1,2487 @@
+        /**
+         * ============================================
+         * AUDIO LIBRARY CLAUDE - MAIN APPLICATION
+         * ============================================
+         *
+         * Main coordination file for the audio library application.
+         * Manages state, initializes modules, and exposes functions to HTML.
+         *
+         * ARCHITECTURE:
+         * - Multi-view support (Library, Galaxy, Sphere)
+         * - State managers for persistence across views
+         * - Component-based player system
+         * - Hybrid state pattern (local cache + centralized state)
+         *
+         * RESPONSIBILITIES:
+         * - Initialize all modules with dependencies
+         * - Coordinate between modules
+         * - Expose functions to window for HTML onclick handlers
+         * - Sync local state cache with centralized state managers
+         *
+         * FILE SIZE: ~2,188 lines
+         * - Imports: 36 lines
+         * - State initialization: 93 lines
+         * - State sync functions: 208 lines
+         * - Module initialization: 263 lines
+         * - Window exposure: 263 lines
+         * - Core logic + wrappers: ~1,325 lines
+         */
+
+        // ============================================
+        // IMPORTS - FOUNDATION MODULES
+        // ============================================
+        import { supabase, PREF_KEYS } from './config.js';
+        import * as Utils from './utils.js';
+        import { generateStemPlayerBar } from './playerTemplate.js';
+        import { PlayerBarComponent } from '../components/playerBar.js';
+        import { WaveformComponent } from '../components/waveform.js';
+        import { FileLoader } from '../services/fileLoader.js';
+        import { ActionRecorder } from '../services/actionRecorder.js';
+
+        // ============================================
+        // IMPORTS - AUDIO CORE MODULES
+        // ============================================
+        import * as Metronome from './metronome.js';
+        import { initKeyboardShortcuts } from './keyboardShortcuts.js';
+        import * as ProgressBar from '../utils/progressBar.js';
+        import * as MiniWaveform from '../components/miniWaveform.js';
+        import { calculateBPMFromOnsets } from '../utils/bpmDetector.js';
+        import * as TagManager from './tagManager.js';
+        import * as TagEditModal from '../components/tagEditModal.js';
+        import * as FileProcessor from './fileProcessor.js';
+        import * as FileListRenderer from '../views/fileListRenderer.js';
+        import * as BatchOperations from './batchOperations.js';
+        import * as UploadManager from './uploadManager.js';
+        import * as LoopControls from '../components/loopControls.js';
+        import * as MarkerSystem from '../components/markerSystem.js';
+        import * as StemMarkerSystem from '../components/stemMarkerSystem.js';
+        import * as StemPlayerManager from '../components/stemPlayerManager.js';
+        import * as StemLegacyPlayer from '../components/stemLegacyPlayer.js';
+        import * as AdvancedRateMode from '../components/advancedRateMode.js';
+
+        // ============================================
+        // IMPORTS - STATE MANAGERS
+        // ============================================
+        import * as StemState from '../state/stemStateManager.js';
+        import * as LoopState from '../state/loopStateManager.js';
+        import * as PlayerState from '../state/playerStateManager.js';
+
+        // ============================================
+        // IMPORTS - VIEW SYSTEM
+        // ============================================
+        import * as ViewManager from './viewManager.js';
+        import * as LibraryView from '../views/libraryView.js';
+        import * as GalaxyView from '../views/galaxyView.js';
+        import * as SphereView from '../views/sphereView.js';
+
+        // ============================================
+        // LOCAL STATE VARIABLES
+        // ============================================
+        // These variables are managed locally in app.js
+        // Most are synced to state managers (StemState, LoopState, PlayerState)
+
+        // CORE DATA
+        let audioFiles = [];                    // All audio files from Supabase
+        let wavesurfer = null;                  // Parent WaveSurfer instance
+        let parentWaveform = null;              // WaveformComponent instance for parent player
+        let parentPlayerComponent = null;       // PlayerBarComponent instance for parent player
+        let fileLoader = null;                  // FileLoader service instance
+        let actionRecorder = null;              // ActionRecorder service instance
+        let stemPlayerComponents = {};          // PlayerBarComponent instances for stems {vocals, drums, bass, other}
+
+        // FILE SELECTION & PROCESSING
+        let selectedFiles = new Set();          // Currently selected files in UI
+        let processingFiles = new Set();        // Files currently being processed (BPM detection, stem separation)
+        let expandedStems = new Set();          // Files with expanded stems view in file list
+
+        // STEM PLAYBACK STATE (Legacy - OLD stem system)
+        let stemWavesurfers = {};               // { vocals: WaveSurfer, drums: WaveSurfer, bass: WaveSurfer, other: WaveSurfer }
+        let stemFiles = {};                     // Cached stem file data for CURRENT file
+        let allStemFiles = {};                  // Preloaded ALL stem files (keyed by parent file ID)
+        let stemMuted = {};                     // { stemFileId: true/false } - mute state by stem file ID
+        let stemSoloed = {};                    // { stemFileId: true/false } - solo state by stem file ID
+        let stemVolumes = {};                   // { stemFileId: 0.0-1.0 } - volume by stem file ID
+
+        // SEARCH & TAGS
+        let searchQuery = '';                   // Current search query
+        let currentTagMode = null;              // Tag click mode (null = normal, 'canHave', 'mustHave', 'exclude')
+        let showAllTags = false;                // Toggle for showing low-count tags
+
+        // UPLOAD STATE
+        let pendingUploadFiles = [];            // Files pending upload (set after tag modal)
+
+        // ============================================
+        // LOOP STATE MANAGEMENT - HYBRID APPROACH
+        // ============================================
+        /**
+         * LOOP STATE (17 variables)
+         *
+         * SOURCE: ../state/loopStateManager.js
+         *
+         * HYBRID PATTERN:
+         * - Local variables = fast cache for performance
+         * - Changes synced to LoopStateManager = single source of truth
+         * - Initialized from LoopStateManager on startup
+         * - Persists across view switches (Library → Galaxy → Sphere)
+         *
+         * SYNC FUNCTIONS: Lines 538-625
+         * - syncLoopStartToState()
+         * - syncLoopEndToState()
+         * - syncCycleModeToState()
+         * - ... (14 more sync functions)
+         *
+         * VARIABLES:
+         * - Core loop: loopStart, loopEnd, cycleMode, nextClickSets
+         * - Loop modes: immediateJump, pendingJumpTarget, seekOnClick
+         * - UI: loopControlsExpanded
+         * - Options: loopFadesEnabled, fadeTime
+         * - Preservation: preserveLoopOnFileChange, preserved loop bars, playback position
+         * - BPM lock: bpmLockEnabled, lockedBPM
+         */
+
+        // Initialize local cache variables from LoopState on startup
+        let loopStart = LoopState.getLoopStart();
+        let loopEnd = LoopState.getLoopEnd();
+        let cycleMode = LoopState.getCycleMode();
+        let nextClickSets = LoopState.getNextClickSets();
+        let immediateJump = LoopState.getImmediateJump();
+        let pendingJumpTarget = LoopState.getPendingJumpTarget();
+        let seekOnClick = LoopState.getSeekOnClick();
+        let loopControlsExpanded = LoopState.getLoopControlsExpanded();
+        let loopFadesEnabled = LoopState.getLoopFadesEnabled();
+        let fadeTime = LoopState.getFadeTime();
+        let preserveLoopOnFileChange = LoopState.getPreserveLoopOnFileChange();
+        let preservedLoopStartBar = LoopState.getPreservedLoopStartBar();
+        let preservedLoopEndBar = LoopState.getPreservedLoopEndBar();
+        let preservedCycleMode = LoopState.getPreservedCycleMode();
+        let preservedPlaybackPositionInLoop = LoopState.getPreservedPlaybackPositionInLoop();
+        let bpmLockEnabled = LoopState.getBpmLockEnabled();
+        let lockedBPM = LoopState.getLockedBPM();
+
+        // ============================================
+        // PLAYER STATE MANAGEMENT - HYBRID APPROACH
+        // ============================================
+        /**
+         * PLAYER STATE (11 variables)
+         *
+         * SOURCE: ../state/playerStateManager.js
+         *
+         * HYBRID PATTERN:
+         * - Local variables = fast cache for performance
+         * - Changes synced to PlayerStateManager = single source of truth
+         * - Initialized from PlayerStateManager on startup
+         * - Persists across view switches (Library → Galaxy → Sphere)
+         *
+         * SYNC FUNCTIONS: Lines 628-685
+         * - syncCurrentFileIdToState()
+         * - syncCurrentRateToState()
+         * - syncIsShufflingToState()
+         * - ... (8 more sync functions)
+         *
+         * VARIABLES:
+         * - Current file: currentFileId
+         * - Playback: currentRate, isShuffling, userPaused
+         * - Volume: isMuted, volumeBeforeMute
+         * - Markers: markersEnabled, markerFrequency, barStartOffset, currentMarkers
+         * - Old-style loop: isLooping (deprecated)
+         *
+         * ADDITIONAL LOCAL STATE (not in PlayerState):
+         * - filters: {canHave, mustHave, exclude} - Tag filtering
+         * - sortBy, sortOrder - File list sorting
+         */
+
+        // Initialize local cache variables from PlayerState on startup
+        let currentFileId = PlayerState.getCurrentFileId();
+        let currentRate = PlayerState.getCurrentRate();
+        let isShuffling = PlayerState.getIsShuffling();
+        let userPaused = PlayerState.getUserPaused();
+        let isMuted = PlayerState.getIsMuted();
+        let volumeBeforeMute = PlayerState.getVolumeBeforeMute();
+        let markersEnabled = PlayerState.getMarkersEnabled();
+        let markerFrequency = PlayerState.getMarkerFrequency();
+        let barStartOffset = PlayerState.getBarStartOffset();
+        let currentMarkers = PlayerState.getCurrentMarkers();
+        let isLooping = PlayerState.getIsLooping();
+        let filters = {
+            canHave: new Set(),
+            mustHave: new Set(),
+            exclude: new Set()
+        };
+        let sortBy = 'date'; // 'name', 'date', 'bpm', 'key', 'length'
+        let sortOrder = 'desc'; // 'asc' or 'desc'
+
+        // ============================================
+        // SEARCH & TAG FILTER FUNCTIONS
+        // ============================================
+        // DEPENDENCIES: TagManager, FileListRenderer
+
+        // Set tag click mode (for mobile)
+        // THIN WRAPPER: Delegates to TagManager module
+        function setTagMode(mode) {
+            TagManager.setMode(mode);
+        }
+
+        // Handle search input
+        // Updates search query and re-renders tags and file list
+        function handleSearch(query) {
+            searchQuery = query;
+            TagManager.render(searchQuery);
+            FileListRenderer.render();
+        }
+
+        // Handle keyboard navigation in search field
+        // Enter = blur field, ArrowDown = move to first tag or file
+        function handleSearchKeydown(e) {
+            if (e.key === 'Enter') {
+                // Exit search field
+                e.target.blur();
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                // Move to first tag
+                const firstTag = document.querySelector('.tag-pill');
+                if (firstTag) {
+                    firstTag.focus();
+                } else {
+                    // If no tags, move to first file
+                    const firstFile = document.querySelector('.file-item');
+                    if (firstFile) {
+                        firstFile.click();
+                    }
+                }
+            }
+        }
+
+        // ============================================
+        // DATA LOADING & INITIALIZATION
+        // ============================================
+        // DEPENDENCIES: Supabase, ViewManager, StemPlayerManager
+
+        // Load data from Supabase on startup
+        async function loadData() {
+            try {
+                const { data, error } = await supabase
+                    .from('audio_files')
+                    .select('*')
+                    .order('created_at', { ascending: false});
+
+                if (error) throw error;
+
+                audioFiles = data || [];
+
+                // Phase 4 Fix 1: Preload ALL stem files for instant access
+                await preloadAllStems();
+
+                // Initialize view manager on first load
+                if (!ViewManager.getCurrentViewName()) {
+                    // Register all views
+                    ViewManager.registerView('library', LibraryView);
+                    ViewManager.registerView('galaxy', GalaxyView);
+                    ViewManager.registerView('sphere', SphereView);
+
+                    // Switch to library view with render functions
+                    await ViewManager.switchView('library', {
+                        renderFunction: FileListRenderer.render,
+                        renderTagsFunction: renderTags
+                    });
+                } else {
+                    // Just render if view already initialized
+                    renderTags();
+                    FileListRenderer.render();
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert('Error loading files from Supabase. Check console for details.');
+            }
+        }
+
+        // Phase 4 Fix 1: Preload all stem files from database
+        async function preloadAllStems() {
+            allStemFiles = await StemPlayerManager.preloadAllStems(supabase);
+        }
+
+        // Polling removed - data refreshes immediately after processing completes
+
+        // ============================================
+        // STEM PLAYBACK FUNCTIONS (Legacy System)
+        // ============================================
+        /**
+         * LEGACY OLD stem system functions (Phase 4 Step 2A)
+         *
+         * DEPENDENCIES: StemPlayerManager, StemLegacyPlayer
+         *
+         * PURPOSE:
+         * - Load and sync stem audio files for a parent track
+         * - Manage OLD stem playback system (separate from NEW multi-stem player)
+         *
+         * FUNCTIONS:
+         * - fetchStemFiles() - Load stem files from database
+         * - destroyAllStems() - Clean up all stem instances
+         * - createStemWaveSurfer() - Create hidden WaveSurfer for stem
+         * - loadStems() - Load all stems for a file
+         * - syncStemsWithMain() - Sync stem playback with parent
+         * - updateStemAudioState() - Apply volume/mute/solo logic
+         *
+         * NOTE: This is the OLD stem system. NEW multi-stem player uses PlayerBarComponent.
+         */
+
+        // Fetch stem files for a parent audio file from audio_files_stems table
+        async function fetchStemFiles(parentFileId) {
+            return await StemPlayerManager.fetchStemFiles(supabase, parentFileId);
+        }
+
+        // Destroy all stem WaveSurfer instances
+        function destroyAllStems() {
+            const result = StemPlayerManager.destroyAllStems({
+                stemWavesurfers,
+                stemPlayerWavesurfers,
+                stemPlayerComponents,
+                wavesurfer
+            });
+
+            // Apply new state (sync to StemState)
+            stemWavesurfers = result.stemWavesurfers;
+            syncWavesurfersToState(result.stemPlayerWavesurfers);
+            syncComponentsToState(result.stemPlayerComponents);
+            stemFiles = result.stemFiles;
+            syncReadyCountToState(result.multiStemReadyCount);
+            syncPreloadedToState(result.stemsPreloaded);
+            syncExpandedToState(result.multiStemPlayerExpanded);
+        }
+
+        // Create WaveSurfer instance for a single stem (hidden, no container)
+        function createStemWaveSurfer(stemType) {
+            return StemPlayerManager.createStemWaveSurfer(stemType, WaveSurfer);
+        }
+
+        // Load and sync all stems for a file
+        async function loadStems(parentFileId, autoplay = true) {
+            const result = await StemPlayerManager.loadStems(parentFileId, {
+                allStemFiles,
+                stemWavesurfers
+            }, WaveSurfer, autoplay);
+
+            if (result.success) {
+                stemWavesurfers = result.stemWavesurfers;
+                stemFiles = result.stemFiles;
+                // Sync stems with main WaveSurfer events
+                syncStemsWithMain(autoplay);
+            }
+
+            return result.success;
+        }
+
+        // Sync all stem WaveSurfers with main WaveSurfer
+        function syncStemsWithMain(autoplay = true) {
+            StemPlayerManager.syncStemsWithMain({
+                wavesurfer,
+                stemWavesurfers
+            }, autoplay);
+        }
+
+        // Apply solo/mute logic to stems
+        function updateStemAudioState() {
+            // Phase 4 Step 2B: Get master volume from slider
+            const volumeSlider = document.getElementById('volumeSlider');
+            const sliderValue = volumeSlider ? parseFloat(volumeSlider.value) : 100;
+            const sliderMax = volumeSlider ? parseFloat(volumeSlider.max) : 398;
+
+            // Calculate master volume as 0-1 range, ensuring complete silence at 0
+            const masterVolume = sliderValue === 0 ? 0 : sliderValue / sliderMax;
+
+            // Update NEW multi-stem player volumes (when expanded) - delegated to StemPlayerManager
+            if (multiStemPlayerExpanded) {
+                StemPlayerManager.updateMultiStemVolumes(stemPlayerWavesurfers, masterVolume);
+            }
+
+            // Update OLD stem player volumes (delegated to legacy module)
+            StemLegacyPlayer.updateLegacyStemVolumes({
+                masterVolume,
+                stemWavesurfers,
+                stemFiles,
+                stemVolumes,
+                stemMuted,
+                stemSoloed
+            });
+        }
+
+        // ============================================
+        // END STEM PLAYBACK FUNCTIONS (Legacy)
+        // ============================================
+
+        // ============================================
+        // WAVEFORM & PLAYER COMPONENT INITIALIZATION
+        // ============================================
+        /**
+         * DEPENDENCIES: WaveformComponent, PlayerBarComponent
+         *
+         * PURPOSE:
+         * - Create and initialize parent waveform and player bar
+         * - Uses component-based architecture for reusability
+         *
+         * COMPONENTS:
+         * - parentWaveform: WaveformComponent instance
+         * - parentPlayerComponent: PlayerBarComponent instance
+         * - wavesurfer: WaveSurfer instance (created by WaveformComponent)
+         */
+
+        // Initialize WaveSurfer
+        // THIN WRAPPER: Delegates to WaveformComponent
+        function initWaveSurfer() {
+            // Create parent waveform component if doesn't exist
+            if (!parentWaveform) {
+                parentWaveform = new WaveformComponent({
+                    playerType: 'parent',
+                    container: '#waveform',
+                    dependencies: {
+                        Metronome: Metronome
+                    }
+                });
+            }
+
+            // Create wavesurfer instance via component
+            wavesurfer = parentWaveform.create(WaveSurfer);
+
+            // Create and initialize parent player bar component (only once)
+            if (!parentPlayerComponent) {
+                parentPlayerComponent = new PlayerBarComponent({
+                    playerType: 'parent',
+                    waveform: wavesurfer
+                });
+                parentPlayerComponent.init();
+                console.log('Parent PlayerBarComponent initialized');
+            } else {
+                // Update waveform reference for existing component
+                parentPlayerComponent.waveform = wavesurfer;
+                console.log('Parent PlayerBarComponent waveform reference updated');
+            }
+        }
+
+        // ============================================
+        // DELEGATED FUNCTIONS (Moved to Modules)
+        // ============================================
+        /**
+         * The following functions have been extracted to dedicated modules:
+         *
+         * FILE PROCESSING (fileProcessor.js):
+         * - extractTagsFromFilename() - Auto-tag from filename
+         * - getAudioDuration() - Get audio file duration
+         * - performUpload() - Upload audio files to Supabase
+         * - uploadAudio() - Core upload logic
+         *
+         * UPLOAD MANAGEMENT (uploadManager.js):
+         * - loadProcessingPreferences() - Load user prefs
+         * - saveProcessingPreferences() - Save user prefs
+         * - openUploadFlow() - Open file picker
+         * - openUploadTagModal() - Open tag modal for uploads
+         * - File input event listener
+         * - Checkbox change event listeners
+         *
+         * BATCH OPERATIONS (batchOperations.js):
+         * - runSelectedProcessing() - Process selected files
+         * - deleteFile() - Delete single file
+         * - batchDelete() - Delete multiple files
+         * - batchDetect() - Batch BPM detection
+         * - batchSeparateStems() - Batch stem separation
+         *
+         * TAG MANAGEMENT (tagManager.js):
+         * - getAllTags() - Get unique tags with counts
+         * - handleClick() - Handle tag click
+         * - render() - Render tag pills
+         * - selectAllVisible() - Select all visible tags
+         * - deselectAll() - Deselect all tags
+         * - toggleShowAll() - Toggle showing low-count tags
+         *
+         * NOTE: Thin wrapper functions below provide window object exposure.
+         */
+
+        // ============================================
+        // TAG MANAGEMENT - THIN WRAPPERS
+        // ============================================
+        // DEPENDENCIES: TagManager module
+        function handleTagClick(tag, event) {
+            TagManager.handleClick(tag, event);
+        }
+
+        function selectAllVisibleTags() {
+            TagManager.selectAllVisible();
+        }
+
+        function deselectAllTags() {
+            TagManager.deselectAll();
+        }
+
+        // Render tags (moved to tagManager.js)
+        function renderTags(searchQuery = '') {
+            TagManager.render(searchQuery);
+        }
+
+        // Toggle showing all tags (moved to tagManager.js)
+        function toggleShowAllTags() {
+            TagManager.toggleShowAll();
+        }
+
+        // BPM/Key filtering functions removed - were unused (no UI containers exist)
+
+
+        // File list rendering moved to src/views/fileListRenderer.js
+
+        // Update STEMS button visibility and active state (Player Bar UI - NOT file list)
+        function updateStemsButton() {
+            StemPlayerManager.updateStemsButton({
+                allStemFiles,
+                currentFileId,
+                multiStemPlayerExpanded
+            });
+
+            // Update text based on expanded state
+            const stemsBtn = document.getElementById('stemsBtn');
+            if (stemsBtn && stemsBtn.style.display !== 'none') {
+                if (multiStemPlayerExpanded) {
+                    stemsBtn.innerHTML = '<span>▼ STEMS</span>';
+                } else {
+                    stemsBtn.innerHTML = '<span>▲ STEMS</span>';
+                }
+            } else if (stemsBtn) {
+                // Close multi-stem player if it's open and file has no stems
+                if (multiStemPlayerExpanded) {
+                    toggleMultiStemPlayer();
+                }
+            }
+        }
+
+        // ============================================
+        // STEM STATE MANAGEMENT - HYBRID APPROACH
+        // ============================================
+        /**
+         * STEM STATE (7 variables)
+         *
+         * SOURCE: ../state/stemStateManager.js
+         *
+         * HYBRID PATTERN:
+         * - Local variables = fast cache for performance
+         * - Changes synced to StemStateManager = single source of truth
+         * - Initialized from StemStateManager on startup
+         * - Persists across view switches (Library → Galaxy → Sphere)
+         *
+         * SYNC FUNCTIONS: Lines 476-535
+         * - syncExpandedToState()
+         * - syncWavesurfersToState()
+         * - syncComponentsToState()
+         * - syncReadyCountToState()
+         * - syncAutoPlayToState()
+         * - syncPreloadedToState()
+         * - syncParentBPMToState()
+         *
+         * VARIABLES:
+         * - UI: multiStemPlayerExpanded
+         * - Player instances: stemPlayerWavesurfers, stemPlayerComponents
+         * - Loading state: multiStemReadyCount, multiStemAutoPlayOnReady, stemsPreloaded
+         * - BPM: currentParentFileBPM
+         *
+         * DEPENDENCIES:
+         * - StemPlayerManager module (handles multi-stem player UI and logic)
+         * - PlayerBarComponent (one instance per stem: vocals, drums, bass, other)
+         */
+
+        // Initialize local cache variables from StemState on startup
+        let multiStemPlayerExpanded = StemState.isExpanded();
+        let stemPlayerWavesurfers = StemState.getPlayerWavesurfers();
+        // Note: stemPlayerComponents already declared at line 46
+        stemPlayerComponents = StemState.getPlayerComponents();
+        let multiStemReadyCount = StemState.getReadyCount();
+        let multiStemAutoPlayOnReady = StemState.getAutoPlayOnReady();
+        let stemsPreloaded = StemState.isPreloaded();
+        let currentParentFileBPM = StemState.getCurrentParentFileBPM();
+
+        // Helper functions to sync local cache to StemState (single source of truth)
+        function syncExpandedToState(value) {
+            multiStemPlayerExpanded = value;
+            StemState.setExpanded(value);
+        }
+
+        function syncWavesurfersToState(wavesurfers) {
+            stemPlayerWavesurfers = wavesurfers;
+            StemState.setPlayerWavesurfers(wavesurfers);
+        }
+
+        function syncComponentsToState(components) {
+            stemPlayerComponents = components;
+            StemState.setPlayerComponents(components);
+            window.stemPlayerComponents = components; // Legacy window exposure
+        }
+
+        function syncReadyCountToState(count) {
+            multiStemReadyCount = count;
+            StemState.setReadyCount(count);
+        }
+
+        function syncAutoPlayToState(value) {
+            multiStemAutoPlayOnReady = value;
+            StemState.setAutoPlayOnReady(value);
+        }
+
+        function syncPreloadedToState(value) {
+            stemsPreloaded = value;
+            StemState.setPreloaded(value);
+        }
+
+        function syncParentBPMToState(bpm) {
+            currentParentFileBPM = bpm;
+            StemState.setCurrentParentFileBPM(bpm);
+        }
+
+        // ============================================
+        // LOOP STATE SYNC FUNCTIONS
+        // ============================================
+        // Helper functions to sync local cache to LoopState (single source of truth)
+
+        function syncLoopStartToState(value) {
+            loopStart = value;
+            LoopState.setLoopStart(value);
+        }
+
+        function syncLoopEndToState(value) {
+            loopEnd = value;
+            LoopState.setLoopEnd(value);
+        }
+
+        function syncCycleModeToState(value) {
+            cycleMode = value;
+            LoopState.setCycleMode(value);
+        }
+
+        function syncNextClickSetsToState(value) {
+            nextClickSets = value;
+            LoopState.setNextClickSets(value);
+        }
+
+        function syncImmediateJumpToState(value) {
+            immediateJump = value;
+            LoopState.setImmediateJump(value);
+        }
+
+        function syncPendingJumpTargetToState(value) {
+            pendingJumpTarget = value;
+            LoopState.setPendingJumpTarget(value);
+        }
+
+        function syncSeekOnClickToState(value) {
+            seekOnClick = value;
+            LoopState.setSeekOnClick(value);
+        }
+
+        function syncLoopControlsExpandedToState(value) {
+            loopControlsExpanded = value;
+            LoopState.setLoopControlsExpanded(value);
+        }
+
+        function syncLoopFadesEnabledToState(value) {
+            loopFadesEnabled = value;
+            LoopState.setLoopFadesEnabled(value);
+        }
+
+        function syncFadeTimeToState(value) {
+            fadeTime = value;
+            LoopState.setFadeTime(value);
+        }
+
+        function syncPreserveLoopOnFileChangeToState(value) {
+            preserveLoopOnFileChange = value;
+            LoopState.setPreserveLoopOnFileChange(value);
+        }
+
+        function syncPreservedLoopStartBarToState(value) {
+            preservedLoopStartBar = value;
+            LoopState.setPreservedLoopStartBar(value);
+        }
+
+        function syncPreservedLoopEndBarToState(value) {
+            preservedLoopEndBar = value;
+            LoopState.setPreservedLoopEndBar(value);
+        }
+
+        function syncPreservedCycleModeToState(value) {
+            preservedCycleMode = value;
+            LoopState.setPreservedCycleMode(value);
+        }
+
+        function syncPreservedPlaybackPositionInLoopToState(value) {
+            preservedPlaybackPositionInLoop = value;
+            LoopState.setPreservedPlaybackPositionInLoop(value);
+        }
+
+        function syncBpmLockEnabledToState(value) {
+            bpmLockEnabled = value;
+            LoopState.setBpmLockEnabled(value);
+        }
+
+        function syncLockedBPMToState(value) {
+            lockedBPM = value;
+            LoopState.setLockedBPM(value);
+        }
+
+        // ============================================
+        // PLAYER STATE SYNC FUNCTIONS
+        // ============================================
+        // Helper functions to sync local cache to PlayerState (single source of truth)
+
+        function syncCurrentFileIdToState(value) {
+            currentFileId = value;
+            PlayerState.setCurrentFileId(value);
+        }
+
+        function syncCurrentRateToState(value) {
+            currentRate = value;
+            PlayerState.setCurrentRate(value);
+        }
+
+        function syncIsShufflingToState(value) {
+            isShuffling = value;
+            PlayerState.setIsShuffling(value);
+        }
+
+        function syncUserPausedToState(value) {
+            userPaused = value;
+            PlayerState.setUserPaused(value);
+        }
+
+        function syncIsMutedToState(value) {
+            isMuted = value;
+            PlayerState.setIsMuted(value);
+        }
+
+        function syncVolumeBeforeMuteToState(value) {
+            volumeBeforeMute = value;
+            PlayerState.setVolumeBeforeMute(value);
+        }
+
+        function syncMarkersEnabledToState(value) {
+            markersEnabled = value;
+            PlayerState.setMarkersEnabled(value);
+        }
+
+        function syncMarkerFrequencyToState(value) {
+            markerFrequency = value;
+            PlayerState.setMarkerFrequency(value);
+        }
+
+        function syncBarStartOffsetToState(value) {
+            barStartOffset = value;
+            PlayerState.setBarStartOffset(value);
+        }
+
+        function syncCurrentMarkersToState(value) {
+            currentMarkers = value;
+            PlayerState.setCurrentMarkers(value);
+        }
+
+        function syncIsLoopingToState(value) {
+            isLooping = value;
+            PlayerState.setIsLooping(value);
+        }
+
+        // ============================================
+        // NEW MULTI-STEM PLAYER (Phase 1-4)
+        // ============================================
+        /**
+         * DEPENDENCIES: StemPlayerManager, PlayerBarComponent
+         *
+         * NEW multi-stem player system (separate from legacy stem system)
+         *
+         * ARCHITECTURE:
+         * - Each stem has its own PlayerBarComponent instance
+         * - Stems pre-loaded in background when file loads
+         * - Independent loop/cycle controls per stem
+         * - Independent rate control per stem (with parent lock option)
+         * - Markers, metronome, and all controls per stem
+         *
+         * PHASES:
+         * - Phase 1: Pre-loading and UI generation
+         * - Phase 2: Individual rate controls
+         * - Phase 3: Loop regions
+         * - Phase 4: Full template system (markers, cycle, metronome per stem)
+         *
+         * FUNCTIONS:
+         * - preloadMultiStemWavesurfers() - Load stems in background
+         * - toggleMultiStemPlayer() - Show/hide stem player
+         * - generateMultiStemPlayerUI() - Show pre-loaded UI
+         * - initializeMultiStemPlayerWavesurfers() - Initialize stem WaveSurfers
+         * - playAllStems() - Play all stems
+         * - setupParentStemSync() - Sync stems with parent
+         * - toggleMultiStem*() - Control individual stems
+         */
+
+        // Phase 1: Pre-load stems silently in background when file loads
+        async function preloadMultiStemWavesurfers(fileId) {
+            const result = await StemPlayerManager.preloadMultiStemWavesurfers(
+                fileId,
+                {
+                    supabase,
+                    audioFiles,
+                    currentRate,
+                    WaveSurfer,
+                    PlayerBarComponent,
+                    Utils,
+                    generateStemPlayerBar
+                },
+                {
+                    currentFileId,
+                    stemPlayerWavesurfers,
+                    stemPlayerComponents,
+                    currentParentFileBPM,
+                    wavesurfer
+                    // Note: Per-stem state (stemLoopStates, stemMarkersEnabled, etc.) accessed via window objects from StemState
+                },
+                {
+                    addStemBarMarkers,
+                    setupParentStemSync
+                }
+            );
+
+            // Update app.js state with results (sync to StemState)
+            stemFiles = result.stemFiles;
+            syncWavesurfersToState(result.stemPlayerWavesurfers);
+            syncComponentsToState(result.stemPlayerComponents);
+            // Note: stemIndependentRates, stemRateLocked managed by PlayerBarComponent internally
+            syncParentBPMToState(result.currentParentFileBPM);
+            syncPreloadedToState(result.stemsPreloaded);
+        }
+
+        // Phase 1: Simplified toggle - just mute/unmute, no loading/destroying
+        function toggleMultiStemPlayer() {
+            const result = StemPlayerManager.toggleMultiStemPlayer(
+                {
+                    currentFileId,
+                    multiStemPlayerExpanded,
+                    wavesurfer,
+                    stemPlayerWavesurfers
+                },
+                {
+                    // No dependencies needed - function accesses DOM directly
+                }
+            );
+
+            // Update app.js state (sync to StemState)
+            syncExpandedToState(result.multiStemPlayerExpanded);
+
+            // CRITICAL: Set up parent-stem sync when expanding
+            if (multiStemPlayerExpanded && wavesurfer && Object.keys(stemPlayerWavesurfers).length > 0) {
+                setupParentStemSync();
+                console.log('✓ Parent-stem sync established after expanding stems');
+            }
+        }
+
+        // Phase 1: UI generation only - stems already loaded by preloadMultiStemWavesurfers()
+        // This function just makes the pre-existing waveform containers visible
+        function generateMultiStemPlayerUI() {
+            console.log('=== generateMultiStemPlayerUI (Phase 1 - Show Pre-loaded UI) ===');
+
+            // The UI containers already exist (created in preloadMultiStemWavesurfers)
+            // This function is now essentially a no-op since UI is pre-built
+            // Just ensure visibility is correct
+
+            const multiStemPlayer = document.getElementById('multiStemPlayer');
+            if (multiStemPlayer) {
+                console.log('Multi-stem UI already exists and ready');
+            }
+
+            console.log('=== UI ready ===');
+        }
+
+        async function initializeMultiStemPlayerWavesurfers() {
+            const result = await StemPlayerManager.initializeMultiStemPlayerWavesurfers(
+                {
+                    wavesurfer,
+                    stemFiles,
+                    stemPlayerWavesurfers,
+                    stemPlaybackIndependent: window.stemPlaybackIndependent,
+                    stemLoopStates: window.stemLoopStates,
+                    multiStemReadyCount,
+                    multiStemAutoPlayOnReady,
+                    cycleMode,
+                    loopStart,
+                    loopEnd
+                },
+                {
+                    wavesurfer,
+                    WaveSurfer,
+                    Utils,
+                    stemFiles,
+                    audioFiles,
+                    currentFileId
+                },
+                playAllStems,
+                setupParentStemSync
+            );
+
+            // Update app.js state (sync to StemState)
+            syncWavesurfersToState(result.stemPlayerWavesurfers);
+            // Note: stemPlaybackIndependent managed via window object from StemState
+        }
+
+        // THIN WRAPPER: Delegates to StemPlayerManager
+        function playAllStems() {
+            StemPlayerManager.playAllStems(stemPlayerWavesurfers);
+        }
+
+
+        // Store parent-stem sync event handlers so we can clean them up
+        let parentStemSyncHandlers = {
+            play: null,
+            pause: null,
+            seeking: null
+        };
+
+        // Wrapper function to call module version with current state
+        function setupParentStemSync() {
+            StemPlayerManager.setupParentStemSync(
+                {},  // state not used by module version
+                {
+                    wavesurfer,
+                    stemPlayerWavesurfers,
+                    multiStemPlayerExpanded,
+                    stemPlaybackIndependent: window.stemPlaybackIndependent,
+                    stemLoopStates: window.stemLoopStates
+                }
+            );
+        }
+
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function toggleMultiStemPlay(stemType) {
+            stemPlayerComponents[stemType]?.playPause();
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function toggleMultiStemMute(stemType) {
+            stemPlayerComponents[stemType]?.toggleMute();
+        }
+
+        function toggleMultiStemLoop(stemType) {
+            // Phase 4: Instead of toggling basic loop, toggle cycle mode
+            toggleStemCycleMode(stemType);
+        }
+
+        // Helper function to set stem loop region
+        function setStemLoopRegion(stemType, startTime, endTime) {
+            const loopState = stemLoopStates[stemType];
+            loopState.start = startTime;
+            loopState.end = endTime;
+            console.log(`${stemType} loop region set: ${startTime}s - ${endTime}s`);
+
+            // TODO: Render loop region visual overlay on waveform
+        }
+
+        // Phase 4: Toggle Cycle Mode for individual stem
+        // Delegates to PlayerBarComponent (all stems have components)
+        function toggleStemCycleMode(stemType) {
+            const stemComponent = stemPlayerComponents[stemType];
+            if (stemComponent) {
+                stemComponent.toggleCycleMode();
+            } else {
+                console.error(`[toggleStemCycleMode] No PlayerBarComponent found for ${stemType} - this should not happen!`);
+            }
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function handleMultiStemVolumeChange(stemType, value) {
+            stemPlayerComponents[stemType]?.setVolume(value);
+        }
+
+        // Phase 2A: Individual Rate Control Functions
+        // THIN WRAPPERS: All delegate to PlayerBarComponent methods
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function handleStemRateChange(stemType, sliderValue) {
+            stemPlayerComponents[stemType]?.setRate(sliderValue);
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function setStemRatePreset(stemType, presetRate) {
+            stemPlayerComponents[stemType]?.setRatePreset(presetRate);
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function toggleStemRateLock(stemType) {
+            stemPlayerComponents[stemType]?.toggleRateLock();
+        }
+
+        // Generate stems for a file
+        function generateStems(fileId, event) {
+            console.log('🎵 generateStems called with fileId:', fileId);
+            event.preventDefault();
+            event.stopPropagation();
+
+            const file = audioFiles.find(f => f.id === fileId);
+            console.log('📁 File found:', file?.name || 'NOT FOUND');
+            if (!file) {
+                console.warn('⚠️ File not found for ID:', fileId);
+                return;
+            }
+
+            // Open the processing modal with stems icon context
+            // This will pre-check the "Split Stems" checkbox and allow user to add other processing options
+            console.log('🔍 Checking for window.openEditTagsModal:', typeof window.openEditTagsModal);
+            if (window.openEditTagsModal) {
+                console.log('✅ Opening modal with stems context');
+                window.openEditTagsModal('stems', fileId);
+            } else {
+                console.error('❌ window.openEditTagsModal is not available!');
+            }
+        }
+
+        // Load audio file
+        // Add bar markers from beatmap data
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function addBarMarkers(file) {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.addBarMarkers(file);
+            }
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function toggleMarkers() {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.toggleMarkers();
+            }
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function setMarkerFrequency(freq) {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.setMarkerFrequency(freq);
+            }
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function shiftBarStartLeft() {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.shiftBarStartLeft();
+            }
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function shiftBarStartRight() {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.shiftBarStartRight();
+            }
+        }
+
+        // ============================================
+        // VERSION 27D: PER-STEM MARKER FUNCTIONS
+        // ============================================
+        // Note: findNearestMarkerToLeft() moved to MarkerSystem module
+
+        // === STEM MARKER WRAPPERS (delegate to PlayerBarComponent) ===
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function toggleStemMarkers(stemType) {
+            if (stemPlayerComponents[stemType]) {
+                stemPlayerComponents[stemType].toggleMarkers();
+            }
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function setStemMarkerFrequency(stemType, freq) {
+            if (stemPlayerComponents[stemType]) {
+                stemPlayerComponents[stemType].setMarkerFrequency(freq);
+            }
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function shiftStemBarStartLeft(stemType) {
+            if (stemPlayerComponents[stemType]) {
+                stemPlayerComponents[stemType].shiftBarStartLeft();
+            }
+        }
+
+        // THIN WRAPPER: Delegates to PlayerBarComponent
+        function shiftStemBarStartRight(stemType) {
+            if (stemPlayerComponents[stemType]) {
+                stemPlayerComponents[stemType].shiftBarStartRight();
+            }
+        }
+
+        // Add bar markers to stem waveform
+        function addStemBarMarkers(stemType, file) {
+            // Call pure function from StemMarkerSystem module
+            // Per-stem state is accessed via window objects from StemStateManager
+            const markerTimes = StemMarkerSystem.addStemBarMarkers(
+                stemType,
+                file,
+                stemPlayerWavesurfers,
+                {
+                    stemMarkersEnabled: window.stemMarkersEnabled || {},
+                    stemMarkerFrequency: window.stemMarkerFrequency || {},
+                    stemBarStartOffset: window.stemBarStartOffset || {},
+                    stemCurrentMarkers: window.stemCurrentMarkers || {}
+                }
+            );
+
+            // Update window object with new marker times (per-stem state lives in StemStateManager)
+            if (!window.stemCurrentMarkers) window.stemCurrentMarkers = {};
+            window.stemCurrentMarkers[stemType] = markerTimes;
+        }
+
+        // Find nearest marker to the left for stem
+        function findStemNearestMarkerToLeft(stemType, clickTime) {
+            // Per-stem state is accessed via window objects from StemStateManager
+            const stemMarkers = window.stemCurrentMarkers?.[stemType] || [];
+            return StemMarkerSystem.findStemNearestMarkerToLeft(
+                clickTime,
+                stemMarkers
+            );
+        }
+
+        // ============================================
+        // END PER-STEM MARKER FUNCTIONS
+        // ============================================
+
+        // Toggle Cycle Mode (combined edit + active loop)
+        function toggleCycleMode() {
+            // Call pure function from LoopControls module
+            // Note: stemCycleModes, stemNextClickSets, stemLoopStates accessed via window objects from StemState
+            const result = LoopControls.toggleCycleMode({
+                cycleMode,
+                nextClickSets,
+                multiStemPlayerExpanded,
+                stemCycleModes: window.stemCycleModes,
+                stemNextClickSets: window.stemNextClickSets,
+                stemLoopStates: window.stemLoopStates
+            });
+
+            // Apply results to app.js state (sync to LoopState)
+            syncCycleModeToState(result.cycleMode);
+            syncNextClickSetsToState(result.nextClickSets);
+
+            // Update UI
+            updateLoopVisuals();
+        }
+
+        function toggleSeekOnClick() {
+            const result = LoopControls.toggleSeekOnClick({ seekOnClick });
+            syncSeekOnClickToState(result.seekOnClick);
+            updateLoopVisuals();
+        }
+
+        function resetLoop() {
+            const result = LoopControls.resetLoop();
+            syncLoopStartToState(result.loopStart);
+            syncLoopEndToState(result.loopEnd);
+            syncCycleModeToState(result.cycleMode);
+            syncNextClickSetsToState(result.nextClickSets);
+            updateLoopVisuals();
+        }
+
+        function clearLoopKeepCycle() {
+            const result = LoopControls.clearLoopKeepCycle();
+            syncLoopStartToState(result.loopStart);
+            syncLoopEndToState(result.loopEnd);
+            syncNextClickSetsToState(result.nextClickSets);
+            // Keep cycleMode = true so user can immediately set new loop
+            updateLoopVisuals();
+        }
+
+        function updateLoopVisuals() {
+            // Call pure function from LoopControls module (handles loop-specific UI)
+            LoopControls.updateLoopVisuals({
+                cycleMode,
+                loopStart,
+                loopEnd,
+                nextClickSets,
+                seekOnClick,
+                loopControlsExpanded,
+                immediateJump,
+                loopFadesEnabled,
+                preserveLoopOnFileChange,
+                bpmLockEnabled,
+                wavesurfer
+            });
+
+            // Update record/playback actions button states (delegated to ActionRecorder)
+            if (actionRecorder) {
+                actionRecorder.updateButtonStates();
+            }
+        }
+
+        function toggleLoopControlsExpanded() {
+            const result = LoopControls.toggleLoopControlsExpanded({ loopControlsExpanded });
+            syncLoopControlsExpandedToState(result.loopControlsExpanded);
+            updateLoopVisuals();
+        }
+
+        function updateLoopRegion() {
+            const waveformContainer = document.getElementById('waveform');
+            if (!waveformContainer) return;
+
+            // Remove existing loop region and progress mask
+            const existingRegion = waveformContainer.querySelector('.loop-region');
+            if (existingRegion) {
+                existingRegion.remove();
+            }
+            const existingMask = waveformContainer.querySelector('.loop-progress-mask');
+            if (existingMask) {
+                existingMask.remove();
+            }
+
+            // Don't draw if cycle mode is off or loop not fully set
+            if (!cycleMode || loopStart === null || loopEnd === null || !wavesurfer) return;
+
+            const duration = wavesurfer.getDuration();
+            if (duration === 0) return;
+
+            const startPercent = (loopStart / duration) * 100;
+            const endPercent = (loopEnd / duration) * 100;
+            const widthPercent = endPercent - startPercent;
+
+            const loopRegion = document.createElement('div');
+            loopRegion.className = 'loop-region';
+            loopRegion.style.left = `${startPercent}%`;
+            loopRegion.style.width = `${widthPercent}%`;
+
+            waveformContainer.appendChild(loopRegion);
+
+            // Add progress mask to hide blue progress before loop start (when loop is active)
+            if (cycleMode && startPercent > 0) {
+                const progressMask = document.createElement('div');
+                progressMask.className = 'loop-progress-mask';
+                progressMask.style.width = `${startPercent}%`;
+                waveformContainer.appendChild(progressMask);
+            }
+        }
+
+        function toggleImmediateJump() {
+            const result = LoopControls.toggleImmediateJump({ immediateJump });
+            syncImmediateJumpToState(result.immediateJump);
+            updateLoopVisuals();
+        }
+
+        function toggleLoopFades() {
+            const result = LoopControls.toggleLoopFades({ loopFadesEnabled });
+            syncLoopFadesEnabledToState(result.loopFadesEnabled);
+            updateLoopVisuals();
+        }
+
+        function setFadeTime(milliseconds) {
+            const timeInSeconds = milliseconds / 1000; // Convert to seconds
+            syncFadeTimeToState(timeInSeconds);
+            console.log(`Fade time: ${milliseconds}ms`);
+
+            // Update display
+            const display = document.getElementById('fadeTimeValue');
+            if (display) {
+                display.textContent = `${milliseconds}ms`;
+            }
+        }
+
+        function togglePreserveLoop() {
+            const result = LoopControls.togglePreserveLoop({ preserveLoopOnFileChange });
+            syncPreserveLoopOnFileChangeToState(result.preserveLoopOnFileChange);
+            updateLoopVisuals();
+        }
+
+        function toggleBPMLock() {
+            const result = LoopControls.toggleBPMLock({
+                bpmLockEnabled,
+                audioFiles,
+                currentFileId
+            });
+
+            syncBpmLockEnabledToState(result.bpmLockEnabled);
+            syncLockedBPMToState(result.lockedBPM);
+            updateLoopVisuals();
+        }
+
+        // THIN WRAPPER: Delegates to ActionRecorder service
+        function toggleRecordActions() {
+            if (!actionRecorder) {
+                console.error('[app.js] ActionRecorder not initialized');
+                return;
+            }
+            return actionRecorder.toggleRecording();
+        }
+
+        // THIN WRAPPER: Delegates to ActionRecorder service
+        function recordAction(actionName, data = {}) {
+            if (!actionRecorder) return;
+            return actionRecorder.recordAction(actionName, data);
+        }
+
+        // THIN WRAPPER: Delegates to ActionRecorder service
+        function stopPlayback() {
+            if (!actionRecorder) return;
+            return actionRecorder.stopPlayback();
+        }
+
+        // THIN WRAPPER: Delegates to ActionRecorder service
+        function playRecordedActions() {
+            if (!actionRecorder) {
+                console.error('[app.js] ActionRecorder not initialized');
+                return;
+            }
+            return actionRecorder.playRecordedActions();
+        }
+
+        // Helper function to find which bar marker index a time corresponds to
+        function getBarIndexAtTime(time, file) {
+            if (!file || !file.beatmap) return null;
+
+            // Get all bar markers (beatNum = 1)
+            const barMarkers = file.beatmap.filter(m => m.beatNum === 1);
+            if (barMarkers.length === 0) return null;
+
+            // Find the closest bar marker to this time
+            let closestBarIndex = 0;
+            let closestDistance = Math.abs(barMarkers[0].time - time);
+
+            for (let i = 1; i < barMarkers.length; i++) {
+                const distance = Math.abs(barMarkers[i].time - time);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestBarIndex = i;
+                }
+            }
+
+            return closestBarIndex;
+        }
+
+        // Helper function to get time for a given bar marker index
+        function getTimeForBarIndex(barIndex, file) {
+            if (!file || !file.beatmap) return null;
+
+            // Get all bar markers (beatNum = 1)
+            const barMarkers = file.beatmap.filter(m => m.beatNum === 1);
+            if (barMarkers.length === 0 || barIndex < 0 || barIndex >= barMarkers.length) return null;
+
+            return barMarkers[barIndex].time;
+        }
+
+        // Loop manipulation functions
+        function shiftLoopLeft() {
+            const result = LoopControls.shiftLoopLeft({
+                cycleMode, loopStart, loopEnd, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                syncLoopStartToState(result.loopStart);
+                syncLoopEndToState(result.loopEnd);
+                updateLoopVisuals();
+            }
+        }
+
+        function shiftLoopRight() {
+            const result = LoopControls.shiftLoopRight({
+                cycleMode, loopStart, loopEnd, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                syncLoopStartToState(result.loopStart);
+                syncLoopEndToState(result.loopEnd);
+                updateLoopVisuals();
+            }
+        }
+
+        function halfLoopLength() {
+            const result = LoopControls.halfLoopLength({
+                cycleMode, loopStart, loopEnd, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                syncLoopEndToState(result.loopEnd);
+                updateLoopVisuals();
+            }
+        }
+
+        function doubleLoopLength() {
+            const result = LoopControls.doubleLoopLength({
+                cycleMode, loopStart, loopEnd, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                syncLoopEndToState(result.loopEnd);
+                updateLoopVisuals();
+            }
+        }
+
+        // Shift+Left Arrow: Move loop START marker to the LEFT (expand loop from left)
+        function moveStartLeft() {
+            const result = LoopControls.moveStartLeft({
+                cycleMode, loopStart, loopEnd, currentMarkers, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                syncLoopStartToState(result.loopStart);
+                updateLoopVisuals();
+            }
+        }
+
+        function moveEndRight() {
+            const result = LoopControls.moveEndRight({
+                cycleMode, loopStart, loopEnd, currentMarkers, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                syncLoopEndToState(result.loopEnd);
+                updateLoopVisuals();
+            }
+        }
+
+        function moveStartRight() {
+            const result = LoopControls.moveStartRight({
+                cycleMode, loopStart, loopEnd, currentMarkers, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                syncLoopStartToState(result.loopStart);
+                updateLoopVisuals();
+            }
+        }
+
+        function moveEndLeft() {
+            const result = LoopControls.moveEndLeft({
+                cycleMode, loopStart, loopEnd, currentMarkers, immediateJump
+            }, wavesurfer);
+
+            if (result) {
+                syncLoopEndToState(result.loopEnd);
+                updateLoopVisuals();
+            }
+        }
+
+        // ============================================
+        // METRONOME FUNCTIONS - THIN WRAPPERS
+        // ============================================
+        /**
+         * DEPENDENCIES: Metronome module
+         *
+         * All metronome functionality extracted to metronome.js (ROUND 2)
+         * Wrapper functions below provide window object exposure
+         */
+
+        function toggleMetronome() {
+            return Metronome.toggleMetronome(wavesurfer);
+        }
+
+        function setMetronomeSound(sound) {
+            return Metronome.setMetronomeSound(sound);
+        }
+
+        // ============================================
+        // CORE PLAYER CONTROLS
+        // ============================================
+        /**
+         * DEPENDENCIES: FileLoader, FileListRenderer, ActionRecorder
+         *
+         * Core playback control functions:
+         * - loadAudio() - Load file into player
+         * - playPause() - Play/pause toggle
+         * - updatePlayerTime() - Update time display
+         * - toggleLoop() - Old-style loop (deprecated)
+         * - toggleShuffle() - Shuffle mode
+         * - setVolume() - Volume control
+         * - toggleMute() - Mute/unmute
+         * - setPlaybackRate() - Rate control (affects parent + stems)
+         * - nextTrack() / previousTrack() - Navigation
+         */
+
+        // THIN WRAPPER: Delegates to FileLoader service
+        async function loadAudio(fileId, autoplay = true) {
+            if (!fileLoader) {
+                console.error('[app.js] FileLoader not initialized');
+                return;
+            }
+
+            // Reset bar start offset (managed by app.js, sync to PlayerState)
+            syncBarStartOffsetToState(0);
+
+            // Delegate to FileLoader service
+            const result = await fileLoader.loadFile(fileId, autoplay);
+            if (!result || result.alreadyLoaded) return;
+
+            // FileLoader manages all other state through callbacks
+            // wavesurfer is set via setWavesurfer callback
+            // currentFileId is set via setCurrentFileId callback
+            // Loop state is managed via get/set callbacks
+        }
+
+        // Play/Pause audio
+        function playPause() {
+            // If no file loaded, load the top file in the list
+            if (!wavesurfer || !currentFileId) {
+                const filteredFiles = FileListRenderer.filterFiles();
+                const sortedFiles = FileListRenderer.sortFiles(filteredFiles);
+                if (sortedFiles.length > 0) {
+                    loadAudio(sortedFiles[0].id, true); // Load and play the top file
+                }
+                return;
+            }
+
+            // ALWAYS control the parent wavesurfer
+            // Even when stems are expanded, parent plays (muted) and stems sync via events
+            wavesurfer.playPause();
+            const icon = document.getElementById('playPauseIcon');
+            icon.textContent = wavesurfer.isPlaying() ? '⏸' : '▶';
+
+            // Track user pause state (if pausing, set to true; if playing, set to false)
+            syncUserPausedToState(!wavesurfer.isPlaying());
+
+            // Record action
+            recordAction(wavesurfer.isPlaying() ? 'play' : 'pause', {});
+        }
+
+        // Update player time display
+        function updatePlayerTime() {
+            if (!wavesurfer) return;
+
+            const current = wavesurfer.getCurrentTime();
+            const duration = wavesurfer.getDuration();
+
+            const formatTime = (seconds) => {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            document.getElementById('playerTime').textContent =
+                `${formatTime(current)} / ${formatTime(duration)}`;
+        }
+
+        // Toggle loop
+        function toggleLoop() {
+            const result = LoopControls.toggleLoop({ isLooping });
+            syncIsLoopingToState(result.isLooping);
+        }
+
+        // Toggle shuffle
+        function toggleShuffle() {
+            // Prevent toggling shuffle when loop is active
+            if (isLooping) return;
+
+            syncIsShufflingToState(!isShuffling);
+            const btn = document.getElementById('shuffleBtn');
+            btn.classList.toggle('active', isShuffling);
+        }
+
+        // Set volume
+        function setVolume(value) {
+            const volume = value / 100;
+            if (wavesurfer) {
+                wavesurfer.setVolume(volume);
+            }
+
+            // Phase 4 Step 2B: Update all stem volumes
+            updateStemAudioState();
+
+            // Calculate decibels (relative to 100% = 0dB)
+            let db;
+            if (value === 0) {
+                db = '-∞';
+            } else {
+                db = (20 * Math.log10(value / 100)).toFixed(1);
+                db = (db >= 0 ? '+' : '') + db;
+            }
+
+            document.getElementById('volumePercent').textContent = `${value}% (${db} dB)`;
+        }
+
+        // Reset volume to 100%
+        function resetVolume() {
+            document.getElementById('volumeSlider').value = 100;
+            setVolume(100);
+        }
+
+        function toggleMute() {
+            const volumeSlider = document.getElementById('volumeSlider');
+            const muteBtn = document.getElementById('muteBtn');
+
+            if (isMuted) {
+                // Unmute: restore previous volume
+                volumeSlider.value = volumeBeforeMute;
+                setVolume(volumeBeforeMute);
+                syncIsMutedToState(false);
+                muteBtn.textContent = '🔊';
+            } else {
+                // Mute: save current volume and set to 0
+                syncVolumeBeforeMuteToState(parseInt(volumeSlider.value));
+                volumeSlider.value = 0;
+                setVolume(0);
+                syncIsMutedToState(true);
+                muteBtn.textContent = '🔇';
+            }
+        }
+
+        // Set playback rate (natural analog - speed and pitch together)
+        function setPlaybackRate(rate) {
+            syncCurrentRateToState(rate);
+            window.currentRate = rate; // Expose to window for PlayerBarComponent access
+
+            // Check for OLD stem system (disabled but code still exists)
+            const hasStemWavesurfers = Object.keys(stemWavesurfers).length > 0;
+
+            // Phase 1: Check for NEW multi-stem player system
+            const hasMultiStemWavesurfers = Object.keys(stemPlayerWavesurfers).length > 0;
+            const wasPlaying = wavesurfer && wavesurfer.isPlaying();
+
+            // Pause old stems if present (shouldn't happen but just in case)
+            if (hasStemWavesurfers && wasPlaying) {
+                Object.keys(stemWavesurfers).forEach(stemType => {
+                    const stemWS = stemWavesurfers[stemType];
+                    if (stemWS && stemWS.isPlaying()) {
+                        stemWS.pause();
+                    }
+                });
+            }
+
+            // Phase 1: Pause new multi-stem player stems if playing
+            if (hasMultiStemWavesurfers && wasPlaying) {
+                Object.keys(stemPlayerWavesurfers).forEach(stemType => {
+                    const stemWS = stemPlayerWavesurfers[stemType];
+                    if (stemWS && stemWS.isPlaying()) {
+                        stemWS.pause();
+                    }
+                });
+            }
+
+            // Set rate on parent WaveSurfer
+            if (wavesurfer) {
+                wavesurfer.setPlaybackRate(rate, false); // false = natural analog (speed+pitch)
+            }
+
+            // Set rate on OLD stem WaveSurfers (if any exist)
+            Object.keys(stemWavesurfers).forEach(stemType => {
+                const stemWS = stemWavesurfers[stemType];
+                if (stemWS) {
+                    stemWS.setPlaybackRate(rate, false);
+                }
+            });
+
+            // Phase 2A: Recalculate and set rate on NEW multi-stem player WaveSurfers
+            // Each stem's final rate = independentRate × parentRate (multiplicative)
+            // Delegate to PlayerBarComponent to calculate and update
+            Object.keys(stemPlayerWavesurfers).forEach(stemType => {
+                const stemComponent = stemPlayerComponents[stemType];
+                if (stemComponent) {
+                    const finalRate = stemComponent.calculateFinalRate();
+                    stemPlayerWavesurfers[stemType].setPlaybackRate(finalRate, false);
+                    stemComponent.updateRateDisplay(finalRate);
+                    console.log(`✓ ${stemType} rate set to ${finalRate.toFixed(2)}x (${stemComponent.rateLocked ? 'locked' : `independent: ${stemComponent.independentRate.toFixed(2)}x`})`);
+                }
+            });
+
+            // Re-sync and resume OLD stems (if any)
+            if (hasStemWavesurfers && wasPlaying) {
+                const currentProgress = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
+                Object.keys(stemWavesurfers).forEach(stemType => {
+                    const stemWS = stemWavesurfers[stemType];
+                    if (stemWS) {
+                        stemWS.seekTo(currentProgress);
+                    }
+                });
+
+                setTimeout(() => {
+                    Object.keys(stemWavesurfers).forEach(stemType => {
+                        const stemWS = stemWavesurfers[stemType];
+                        if (stemWS && !stemWS.isPlaying()) {
+                            stemWS.play();
+                        }
+                    });
+                }, 50);
+            }
+
+            // Phase 1: Re-sync and resume NEW multi-stem player stems
+            if (hasMultiStemWavesurfers && wasPlaying) {
+                const currentProgress = wavesurfer.getCurrentTime() / wavesurfer.getDuration();
+                Object.keys(stemPlayerWavesurfers).forEach(stemType => {
+                    const stemWS = stemPlayerWavesurfers[stemType];
+                    if (stemWS) {
+                        stemWS.seekTo(currentProgress);
+                    }
+                });
+
+                setTimeout(() => {
+                    Object.keys(stemPlayerWavesurfers).forEach(stemType => {
+                        const stemWS = stemPlayerWavesurfers[stemType];
+                        if (stemWS && !stemWS.isPlaying()) {
+                            stemWS.play();
+                            console.log(`✓ ${stemType} resumed at ${rate.toFixed(2)}x`);
+                        }
+                    });
+                }, 50);
+            }
+
+            // Clear any scheduled metronome notes when rate changes
+            // This prevents "copies" of metronome sounds at different rates
+            Metronome.stopAllMetronomeSounds();
+            Metronome.setLastMetronomeScheduleTime(0); // Force rescheduling
+
+            // Immediately reschedule metronome if it's enabled and playing
+            if (Metronome.isMetronomeEnabled() && wavesurfer && wavesurfer.isPlaying()) {
+                Metronome.scheduleMetronome(audioFiles, currentFileId, wavesurfer, barStartOffset, currentRate);
+                Metronome.setLastMetronomeScheduleTime(Date.now());
+            }
+
+            // Update slider and display
+            document.getElementById('rateSlider').value = rate;
+            document.getElementById('rateValue').textContent = rate.toFixed(1) + 'x';
+
+            // Update button states (check within small tolerance for floating point)
+            document.getElementById('halfRateBtn').classList.toggle('active', Math.abs(rate - 0.5) < 0.05);
+            document.getElementById('normalRateBtn').classList.toggle('active', Math.abs(rate - 1) < 0.05);
+            document.getElementById('doubleRateBtn').classList.toggle('active', Math.abs(rate - 2) < 0.05);
+
+            // Record action
+            recordAction('setRate', { rate });
+        }
+
+        // Reset rate to 1.0x
+        function resetRate() {
+            setPlaybackRate(1.0);
+        }
+
+        // ============================================
+        // ADVANCED RATE MODE - THIN WRAPPERS
+        // ============================================
+        /**
+         * DEPENDENCIES: AdvancedRateMode module
+         *
+         * Placeholder for Signalsmith time/pitch stretching integration.
+         * Provides UI controls for independent speed and pitch manipulation.
+         *
+         * CURRENT STATE: Placeholder only
+         * - Speed control: Works (uses simple rate - chipmunk effect)
+         * - Pitch control: NOT functional yet (waiting for Signalsmith)
+         * - Lock toggle: NOT functional yet
+         *
+         * KNOWN BUGS (to be fixed when implementing Signalsmith):
+         * 1. Speed/Pitch Lock Not Functional - sliders always independent
+         * 2. Rate Preset Buttons Not Connected - don't update speed slider
+         * 3. Missing Reset Buttons - only double-click works
+         *
+         * These thin wrappers exist for window object exposure (HTML onclick handlers)
+         */
+
+        function toggleRateMode() {
+            return AdvancedRateMode.toggleRateMode();
+        }
+
+        function setSpeed(speed) {
+            return AdvancedRateMode.setSpeed(speed);
+        }
+
+        function resetSpeed() {
+            return AdvancedRateMode.resetSpeed();
+        }
+
+        function setPitch(semitones) {
+            return AdvancedRateMode.setPitch(semitones);
+        }
+
+        function resetPitch() {
+            return AdvancedRateMode.resetPitch();
+        }
+
+        function toggleSpeedPitchLock() {
+            return AdvancedRateMode.toggleSpeedPitchLock();
+        }
+
+        // ============================================
+        // LEGACY STEM VOLUME/MUTE/SOLO CONTROLS
+        // ============================================
+        /**
+         * DEPENDENCIES: OLD stem system
+         *
+         * Volume, mute, and solo controls for LEGACY OLD stem system
+         * (Not used by NEW multi-stem player - that uses PlayerBarComponent)
+         *
+         * NOTE: These functions use stem file IDs, not stem types
+         */
+
+        // Phase 4 Step 2B: Stem volume control
+        function handleStemVolumeChange(stemType, value) {
+            // Phase 4 Fix 2: Use stem file ID instead of stem type
+            const stemFileId = stemFiles[stemType]?.id;
+            if (!stemFileId) return;
+
+            const volume = value / 100;
+            stemVolumes[stemFileId] = volume;
+
+            // Update the volume value display
+            const valueDisplay = document.getElementById(`stem-volume-value-${stemType}-${currentFileId}`);
+            if (valueDisplay) {
+                valueDisplay.textContent = `${value}%`;
+            }
+
+            // Update actual audio volume
+            updateStemAudioState();
+        }
+
+        // Phase 4 Step 2B: Stem mute toggle
+        function handleStemMute(stemType) {
+            // Phase 4 Fix 2: Use stem file ID instead of stem type
+            const stemFileId = stemFiles[stemType]?.id;
+            if (!stemFileId) return;
+
+            stemMuted[stemFileId] = !stemMuted[stemFileId];
+
+            // Update button appearance
+            const muteBtn = document.getElementById(`stem-mute-${stemType}-${currentFileId}`);
+            if (muteBtn) {
+                muteBtn.textContent = stemMuted[stemFileId] ? '🔇' : '🔊';
+                muteBtn.style.background = stemMuted[stemFileId] ? '#8b0000' : '#2a2a2a';
+            }
+
+            // Update actual audio volume
+            updateStemAudioState();
+        }
+
+        // Phase 4 Step 2B: Stem solo toggle
+        function handleStemSolo(stemType) {
+            // Phase 4 Fix 2: Use stem file ID instead of stem type
+            const stemFileId = stemFiles[stemType]?.id;
+            if (!stemFileId) return;
+
+            stemSoloed[stemFileId] = !stemSoloed[stemFileId];
+
+            // Update button appearance
+            const soloBtn = document.getElementById(`stem-solo-${stemType}-${currentFileId}`);
+            if (soloBtn) {
+                soloBtn.style.background = stemSoloed[stemFileId] ? '#00aa00' : '#2a2a2a';
+                soloBtn.style.borderColor = stemSoloed[stemFileId] ? '#00ff00' : '#3a3a3a';
+            }
+
+            // Update actual audio volume
+            updateStemAudioState();
+        }
+
+        // ============================================
+        // TRACK NAVIGATION
+        // ============================================
+        /**
+         * DEPENDENCIES: FileListRenderer
+         *
+         * Navigate between tracks in the file list
+         * - nextTrack() - Go to next track (shuffle support)
+         * - previousTrack() - Go to previous track or restart current track
+         *
+         * BEHAVIOR:
+         * - Respects shuffle mode (random vs sequential)
+         * - Respects user pause state (maintains paused/playing)
+         * - Previous track: If >1s into track, restart; otherwise go to previous
+         * - Previous track in cycle mode: Jump to loop start instead
+         */
+
+        // Next track
+        function nextTrack() {
+            const filteredFiles = FileListRenderer.filterFiles();
+            if (filteredFiles.length === 0) return;
+
+            let nextIndex;
+            if (isShuffling) {
+                nextIndex = Math.floor(Math.random() * filteredFiles.length);
+            } else {
+                const currentIndex = filteredFiles.findIndex(f => f.id === currentFileId);
+                nextIndex = (currentIndex + 1) % filteredFiles.length;
+            }
+
+            loadAudio(filteredFiles[nextIndex].id, !userPaused); // Respect pause state
+        }
+
+        // Previous track
+        function previousTrack() {
+            const filteredFiles = FileListRenderer.filterFiles();
+            if (filteredFiles.length === 0) return;
+
+            // If in cycle mode with loop set, jump to loop start
+            if (cycleMode && loopStart !== null && loopEnd !== null) {
+                if (wavesurfer) {
+                    wavesurfer.seekTo(loopStart / wavesurfer.getDuration());
+                    if (!wavesurfer.isPlaying()) {
+                        wavesurfer.play();
+                    }
+                }
+                return;
+            }
+
+            // If currently playing and more than 1 second into the file, restart from beginning
+            if (currentFileId && wavesurfer && wavesurfer.getCurrentTime() > 1.0) {
+                wavesurfer.seekTo(0);
+                return;
+            }
+
+            // Otherwise, go to previous file
+            const currentIndex = filteredFiles.findIndex(f => f.id === currentFileId);
+            const prevIndex = (currentIndex - 1 + filteredFiles.length) % filteredFiles.length;
+
+            loadAudio(filteredFiles[prevIndex].id, !userPaused); // Respect pause state
+        }
+
+        // Delete and batch operation functions moved to batchOperations.js
+
+        // Progress bar functions moved to utils/progressBar.js
+
+        // ============================================
+        // MODULE INITIALIZATION
+        // ============================================
+        /**
+         * This section initializes all modules and services with their dependencies.
+         * Each module receives callbacks and state getters to access app.js state.
+         *
+         * INITIALIZATION ORDER:
+         * 1. DOM event listeners (TagEditModal)
+         * 2. Keyboard shortcuts
+         * 3. UI modules (MiniWaveform, TagManager, FileListRenderer)
+         * 4. Operations modules (BatchOperations, UploadManager)
+         * 5. Control modules (LoopControls, AdvancedRateMode)
+         * 6. Data loading (loadData)
+         * 7. Services (FileLoader, ActionRecorder)
+         * 8. View system (ViewManager)
+         */
+
+        // Modal event handlers moved to tagEditModal.js
+        // Initialize tag edit modal keyboard shortcuts and event handlers
+        document.addEventListener('DOMContentLoaded', () => {
+            TagEditModal.initEventHandlers({
+                setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+                setSearchQuery: (query) => { searchQuery = query; },
+                filters,
+                renderTags,
+                renderFiles: FileListRenderer.render,
+                getAllTags: () => TagManager.getAllTags()
+            });
+        });
+
+        // addModalTag() moved to tagEditModal.js
+
+        // Initialize keyboard shortcuts (moved to keyboardShortcuts.js)
+        initKeyboardShortcuts(
+            // Callbacks object
+            {
+                playPause,
+                toggleMarkers,
+                toggleMetronome: Metronome.toggleMetronome,
+                toggleCycleMode,
+                toggleLoop,
+                resetLoop,
+                toggleShuffle,
+                toggleImmediateJump,
+                setVolume,
+                previousTrack,
+                nextTrack,
+                loadAudio,
+                batchEditTags: () => TagEditModal.open(selectedFiles, audioFiles),
+                shiftLoopLeft,
+                shiftLoopRight,
+                halfLoopLength,
+                doubleLoopLength,
+                moveStartLeft,
+                moveStartRight,
+                moveEndLeft,
+                moveEndRight,
+                filterFiles: FileListRenderer.filterFiles
+            },
+            // State getters object
+            {
+                getCurrentFileId: () => currentFileId,
+                getSelectedFiles: () => selectedFiles,
+                getCycleMode: () => cycleMode,
+                getLoopStart: () => loopStart,
+                getLoopEnd: () => loopEnd,
+                getUserPaused: () => userPaused,
+                getWavesurfer: () => wavesurfer,
+                getRecordingWaitingForStart: () => actionRecorder ? actionRecorder.getRecordingWaiting() : false,
+                setRecordingWaitingForStart: (val) => { if (actionRecorder) actionRecorder.setRecordingWaiting(val); },
+                setIsRecordingActions: (val) => { if (actionRecorder) actionRecorder.setIsRecording(val); },
+                setRecordingStartTime: (val) => { if (actionRecorder) actionRecorder.setRecordingStartTime(val); },
+                getRecordedActions: () => actionRecorder ? actionRecorder.getRecordedActions() : [],
+                getMarkersEnabled: () => markersEnabled,
+                getLoopFadesEnabled: () => loopFadesEnabled,
+                getImmediateJump: () => immediateJump,
+                getSeekOnClick: () => seekOnClick,
+                getCurrentRate: () => currentRate,
+                updateLoopVisuals,
+                recordAction,
+                isMetronomeEnabled: Metronome.isMetronomeEnabled
+            }
+        );
+
+        // Initialize mini waveforms (moved to miniWaveform.js)
+        MiniWaveform.init({
+            loadAudio,
+            getWavesurfer: () => wavesurfer
+        });
+
+        // Initialize tag manager (moved to tagManager.js)
+        TagManager.init(
+            // Callbacks
+            {
+                renderFiles: () => FileListRenderer.render()
+            },
+            // State getters/setters
+            {
+                getAudioFiles: () => audioFiles,
+                getFilters: () => filters,
+                getShowAllTags: () => showAllTags,
+                setShowAllTags: (val) => { showAllTags = val; },
+                getCurrentTagMode: () => currentTagMode,
+                setCurrentTagMode: (val) => { currentTagMode = val; },
+                getSearchQuery: () => searchQuery,
+                setSearchQuery: (val) => { searchQuery = val; }
+            }
+        );
+
+        // Initialize file list renderer (moved to fileListRenderer.js)
+        FileListRenderer.init(
+            // Callbacks
+            {
+                loadFile: loadAudio,
+                renderMiniWaveforms: (files) => MiniWaveform.renderAll(files),
+                openTagEditModal: (selectedFiles, audioFiles) => TagEditModal.open(selectedFiles, audioFiles),
+                updateStemsButton
+            },
+            // State getters
+            {
+                getAudioFiles: () => audioFiles,
+                getSearchQuery: () => searchQuery,
+                getFilters: () => filters,
+                getSelectedFiles: () => selectedFiles,
+                getCurrentFileId: () => currentFileId,
+                getProcessingFiles: () => processingFiles,
+                getExpandedStems: () => expandedStems,
+                getStemWavesurfers: () => stemWavesurfers
+            }
+        );
+
+        // Initialize batch operations (moved to batchOperations.js)
+        BatchOperations.init(
+            // Callbacks
+            {
+                loadData,
+                clearPlayer: () => {
+                    syncCurrentFileIdToState(null);
+                    if (wavesurfer) {
+                        wavesurfer.destroy();
+                        wavesurfer = null;
+                    }
+                    document.getElementById('playerFilename').textContent = 'No file selected';
+                    document.getElementById('playerTime').textContent = '0:00 / 0:00';
+                    document.getElementById('playPauseIcon').textContent = '▶';
+                }
+            },
+            // State getters
+            {
+                getSupabase: () => supabase,
+                getAudioFiles: () => audioFiles,
+                getSelectedFiles: () => selectedFiles,
+                getCurrentFileId: () => currentFileId,
+                getProcessingFiles: () => processingFiles
+            }
+        );
+
+        // Initialize upload manager (moved to uploadManager.js)
+        UploadManager.init({
+            getPendingUploadFiles: () => pendingUploadFiles,
+            setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+            renderModalTags: () => TagEditModal.render()
+        });
+
+        // Initialize loop controls (pure function approach - state passed to each function call)
+        LoopControls.init({
+            recordAction,
+            getAudioFiles: () => audioFiles,
+            getCurrentFileId: () => currentFileId,
+            setPendingJumpTarget: (target) => { syncPendingJumpTargetToState(target); }
+        });
+
+        // Initialize advanced rate mode (placeholder for Signalsmith time/pitch stretching)
+        AdvancedRateMode.init({
+            setPlaybackRate
+        });
+
+        // Initialize on load
+        loadData();
+
+        // Initialize FileLoader service
+        fileLoader = new FileLoader({
+            // State getters/setters
+            audioFiles: () => audioFiles,
+            getCurrentFileId: () => currentFileId,
+            setCurrentFileId: (id) => { syncCurrentFileIdToState(id); },
+            getWavesurfer: () => wavesurfer,
+            setWavesurfer: (ws) => { wavesurfer = ws; },
+            getParentWaveform: () => parentWaveform,
+            getParentPlayerComponent: () => parentPlayerComponent,
+
+            // Loop state (sync to LoopState on all writes)
+            getLoopState: () => ({ start: loopStart, end: loopEnd, cycleMode, nextClickSets }),
+            setLoopState: (state) => {
+                if (state.start !== undefined) syncLoopStartToState(state.start);
+                if (state.end !== undefined) syncLoopEndToState(state.end);
+                if (state.cycleMode !== undefined) syncCycleModeToState(state.cycleMode);
+                if (state.nextClickSets !== undefined) syncNextClickSetsToState(state.nextClickSets);
+            },
+            getPreserveLoopOnFileChange: () => preserveLoopOnFileChange,
+            getPreservedLoopBars: () => ({
+                startBar: preservedLoopStartBar,
+                endBar: preservedLoopEndBar,
+                cycleMode: preservedCycleMode,
+                playbackPositionInLoop: preservedPlaybackPositionInLoop
+            }),
+            setPreservedLoopBars: (bars) => {
+                if (bars.startBar !== undefined) syncPreservedLoopStartBarToState(bars.startBar);
+                if (bars.endBar !== undefined) syncPreservedLoopEndBarToState(bars.endBar);
+                if (bars.cycleMode !== undefined) syncPreservedCycleModeToState(bars.cycleMode);
+                if (bars.playbackPositionInLoop !== undefined) syncPreservedPlaybackPositionInLoopToState(bars.playbackPositionInLoop);
+            },
+
+            // Helpers
+            resetLoop,
+            updateLoopVisuals,
+            getBarIndexAtTime,
+            getTimeForBarIndex,
+            destroyAllStems,
+            preloadMultiStemWavesurfers,
+            updateStemsButton,
+
+            // BPM lock (sync to LoopState on writes)
+            getBpmLockState: () => ({ enabled: bpmLockEnabled, lockedBPM }),
+            setBpmLockState: (state) => {
+                if (state.enabled !== undefined) syncBpmLockEnabledToState(state.enabled);
+                if (state.lockedBPM !== undefined) syncLockedBPMToState(state.lockedBPM);
+            },
+            setPlaybackRate,
+
+            // UI
+            getCurrentRate: () => currentRate,
+            initWaveSurfer
+        });
+
+        // Initialize ActionRecorder service
+        actionRecorder = new ActionRecorder({
+            getWavesurfer: () => wavesurfer,
+            updateLoopVisuals,
+            loopActions: {
+                shiftLoopLeft,
+                shiftLoopRight,
+                moveStartRight,
+                moveEndLeft,
+                halfLoopLength,
+                doubleLoopLength,
+                setLoopStart: (data) => {
+                    if (cycleMode) {
+                        syncLoopStartToState(data.loopStart);
+                        syncLoopEndToState(null);
+                        syncNextClickSetsToState('end');
+                        updateLoopVisuals();
+                    }
+                },
+                setLoopEnd: (data) => {
+                    if (cycleMode && loopStart !== null) {
+                        syncLoopEndToState(data.loopEnd);
+                        syncCycleModeToState(true);
+                        updateLoopVisuals();
+                    }
+                },
+                restoreLoop: (start, end) => {
+                    syncLoopStartToState(start);
+                    syncLoopEndToState(end);
+                },
+                setCycleMode: (mode) => {
+                    syncCycleModeToState(mode);
+                }
+            },
+            setPlaybackRate
+        });
+
+        console.log('[app.js] ActionRecorder service initialized');
+
+        // Initialize view tab click handlers
+        ViewManager.initViewTabs();
+
+        // ============================================
+        // WINDOW OBJECT EXPOSURE
+        // ============================================
+        /**
+         * This section exposes functions and state to the window object for HTML onclick handlers.
+         *
+         * WHY THIS IS NECESSARY:
+         * - HTML onclick attributes require global functions: <button onclick="playPause()">
+         * - Dynamically generated HTML (file list, tags, player bars) uses onclick handlers
+         * - Component-based architecture requires accessing functions from HTML
+         *
+         * CATEGORIES:
+         * - File management: handleTagClick, generateStems, fileList* functions
+         * - Playback controls: playPause, nextTrack, previousTrack, setVolume
+         * - Loop/cycle controls: toggleCycleMode, shiftLoop*, moveStart/End*
+         * - Stem controls: toggleMultiStem*, handleStem*, setStem*
+         * - Modal/UI: openUploadFlow, batchEditTags, closeEditTagsModal
+         * - State properties: cycleMode, loopStart, loopEnd, currentFileId (using getters/setters)
+         *
+         * TOTAL: ~79 window assignments
+         *
+         * NOTE: This is the cleanest approach for HTML integration. Alternative approaches
+         * (event delegation, data attributes) would add complexity without clear benefits.
+         */
+
+        // Expose functions to global scope for HTML onclick handlers
+window.handleTagClick = handleTagClick;
+window.toggleShowAllTags = toggleShowAllTags;
+window.generateStems = generateStems;
+
+// Expose TagManager functions to window (used by onclick handlers in rendered HTML)
+window.tagManagerHandleClick = (tag, event) => TagManager.handleClick(tag, event);
+window.tagManagerToggleShowAll = () => TagManager.toggleShowAll();
+
+// Expose FileListRenderer functions to window (used by onclick handlers in rendered HTML)
+window.fileListHandleFileClick = (fileId, event) => FileListRenderer.handleFileClick(fileId, event);
+window.fileListHandleSort = (column) => FileListRenderer.handleSort(column);
+window.fileListToggleSelection = (fileId, event) => FileListRenderer.toggleFileSelection(fileId, event);
+window.fileListQuickEdit = (fileId, event) => FileListRenderer.quickEditFile(fileId, event);
+window.fileListOpenStemsViewer = (fileId, event) => FileListRenderer.openStemsViewer(fileId, event);
+window.addModalTag = (tag) => TagEditModal.addTag(tag);
+window.renderModalTags = () => TagEditModal.render();
+window.selectModalTag = (tag) => TagEditModal.selectTag(tag);
+window.removeSelectedModalTag = () => TagEditModal.removeSelectedTag();
+window.setTagMode = setTagMode;
+window.handleSearch = handleSearch;
+window.handleSearchKeydown = handleSearchKeydown;
+window.selectAllVisibleTags = selectAllVisibleTags;
+window.deselectAllTags = deselectAllTags;
+window.openUploadFlow = () => UploadManager.openUploadFlow();
+window.selectAll = () => FileListRenderer.selectAll();
+window.deselectAll = () => FileListRenderer.deselectAll();
+window.batchDelete = () => BatchOperations.batchDelete();
+window.batchEditTags = () => TagEditModal.open(selectedFiles, audioFiles);
+window.closeEditTagsModal = () => TagEditModal.close({
+    setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+    setSearchQuery: (query) => { searchQuery = query; },
+    filters,
+    renderTags,
+    renderFiles: FileListRenderer.render
+});
+window.saveEditedTags = () => TagEditModal.save(
+    {
+        performUpload: (files, tags) => FileProcessor.performUpload(files, tags, {
+            supabase,
+            loadData,
+            closeModal: TagEditModal.close,
+            setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+            setSearchQuery: (query) => { searchQuery = query; },
+            filters,
+            renderTags,
+            renderFiles: FileListRenderer.render
+        }),
+        runSelectedProcessing: BatchOperations.runSelectedProcessing,
+        loadData,
+        renderTags,
+        renderFiles: FileListRenderer.render
+    },
+    {
+        selectedFiles,
+        audioFiles,
+        pendingUploadFiles,
+        setPendingUploadFiles: (files) => { pendingUploadFiles = files; },
+        clearSelectedFiles: () => { selectedFiles.clear(); },
+        setSearchQuery: (query) => { searchQuery = query; },
+        filters,
+        supabase
+    }
+);
+window.previousTrack = previousTrack;
+window.playPause = playPause;
+window.nextTrack = nextTrack;
+window.toggleLoop = toggleLoop;
+window.toggleShuffle = toggleShuffle;
+window.setVolume = setVolume;
+window.toggleMute = toggleMute;
+window.resetVolume = resetVolume;
+window.setPlaybackRate = setPlaybackRate;
+window.resetRate = resetRate;
+window.toggleRateMode = toggleRateMode;
+window.setSpeed = setSpeed;
+window.resetSpeed = resetSpeed;
+window.setPitch = setPitch;
+window.resetPitch = resetPitch;
+window.toggleSpeedPitchLock = toggleSpeedPitchLock;
+// Store references to old functions before overwriting
+        const _oldToggleMarkers = toggleMarkers;
+        const _oldSetMarkerFrequency = setMarkerFrequency;
+        const _oldShiftBarStartLeft = shiftBarStartLeft;
+        const _oldShiftBarStartRight = shiftBarStartRight;
+
+// CRITICAL: Expose setters to sync component state to global variables
+        // This allows waveform click handler (cycle mode) to access marker data
+        // TODO: Remove once waveform click handling is moved into component
+        window.updateCurrentMarkers = (markers) => {
+            syncCurrentMarkersToState(markers);
+            console.log(`[Global] currentMarkers updated, length: ${markers.length}`);
+        };
+        window.updateMarkersEnabled = (enabled) => {
+            syncMarkersEnabledToState(enabled);
+            console.log(`[Global] markersEnabled updated: ${enabled}`);
+        };
+
+        // Expose loop/cycle state variables for component click handler
+        // Using getters/setters so component can read AND write the module-scoped variables
+        Object.defineProperty(window, 'cycleMode', {
+            get: () => cycleMode,
+            set: (value) => { cycleMode = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'loopStart', {
+            get: () => loopStart,
+            set: (value) => { loopStart = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'loopEnd', {
+            get: () => loopEnd,
+            set: (value) => { loopEnd = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'nextClickSets', {
+            get: () => nextClickSets,
+            set: (value) => { nextClickSets = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'seekOnClick', {
+            get: () => seekOnClick,
+            set: (value) => { seekOnClick = value; },
+            configurable: true
+        });
+
+        // Expose helper functions for component
+        window.updateLoopVisuals = updateLoopVisuals;
+        window.recordAction = recordAction;
+
+        // Expose functions needed by WaveformComponent
+        window.updatePlayerTime = updatePlayerTime;
+        window.setupParentStemSync = setupParentStemSync;
+
+        // Expose state variables needed by WaveformComponent event handlers
+        Object.defineProperty(window, 'isLooping', {
+            get: () => isLooping,
+            set: (value) => { syncIsLoopingToState(value); },
+            configurable: true
+        });
+        Object.defineProperty(window, 'pendingJumpTarget', {
+            get: () => pendingJumpTarget,
+            set: (value) => { syncPendingJumpTargetToState(value); },
+            configurable: true
+        });
+        Object.defineProperty(window, 'markersEnabled', {
+            get: () => markersEnabled,
+            set: (value) => { syncMarkersEnabledToState(value); },
+            configurable: true
+        });
+        Object.defineProperty(window, 'currentFileId', {
+            get: () => currentFileId,
+            set: (value) => { syncCurrentFileIdToState(value); },
+            configurable: true
+        });
+        Object.defineProperty(window, 'audioFiles', {
+            get: () => audioFiles,
+            set: (value) => { audioFiles = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'barStartOffset', {
+            get: () => barStartOffset,
+            set: (value) => { syncBarStartOffsetToState(value); },
+            configurable: true
+        });
+        Object.defineProperty(window, 'loopFadesEnabled', {
+            get: () => loopFadesEnabled,
+            set: (value) => { loopFadesEnabled = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'fadeTime', {
+            get: () => fadeTime,
+            set: (value) => { fadeTime = value; },
+            configurable: true
+        });
+        Object.defineProperty(window, 'stemPlayerWavesurfers', {
+            get: () => stemPlayerWavesurfers,
+            set: (value) => { syncWavesurfersToState(value); },
+            configurable: true
+        });
+// Wrapper functions that delegate to PlayerBarComponent
+        window.toggleMarkers = () => {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.toggleMarkers();
+            } else {
+                _oldToggleMarkers(); // Fallback to old function
+            }
+        };
+        window.setMarkerFrequency = (freq) => {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.setMarkerFrequency(freq);
+            } else {
+                _oldSetMarkerFrequency(freq); // Fallback
+            }
+        };
+        window.shiftBarStartLeft = () => {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.shiftBarStartLeft();
+            } else {
+                _oldShiftBarStartLeft(); // Fallback
+            }
+        };
+        window.shiftBarStartRight = () => {
+            if (parentPlayerComponent) {
+                parentPlayerComponent.shiftBarStartRight();
+            } else {
+                _oldShiftBarStartRight(); // Fallback
+            }
+        };
+window.toggleMetronome = toggleMetronome;
+window.setMetronomeSound = setMetronomeSound;
+window.toggleCycleMode = toggleCycleMode;
+window.toggleSeekOnClick = toggleSeekOnClick;
+window.clearLoopKeepCycle = clearLoopKeepCycle;
+window.toggleLoopControlsExpanded = toggleLoopControlsExpanded;
+window.shiftLoopLeft = shiftLoopLeft;
+window.shiftLoopRight = shiftLoopRight;
+window.moveStartLeft = moveStartLeft;
+window.moveEndRight = moveEndRight;
+window.halfLoopLength = halfLoopLength;
+window.doubleLoopLength = doubleLoopLength;
+window.toggleImmediateJump = toggleImmediateJump;
+window.toggleLoopFades = toggleLoopFades;
+window.setFadeTime = setFadeTime;
+window.togglePreserveLoop = togglePreserveLoop;
+window.toggleBPMLock = toggleBPMLock;
+window.toggleRecordActions = toggleRecordActions;
+window.playRecordedActions = playRecordedActions;
+window.handleStemVolumeChange = handleStemVolumeChange;
+window.handleStemMute = handleStemMute;
+window.handleStemSolo = handleStemSolo;
+window.toggleStemsViewer = () => FileListRenderer.toggleStemsViewer();
+window.toggleMultiStemPlayer = toggleMultiStemPlayer;
+window.toggleMultiStemPlay = toggleMultiStemPlay;
+window.toggleMultiStemMute = toggleMultiStemMute;
+window.toggleMultiStemLoop = toggleMultiStemLoop;
+window.handleMultiStemVolumeChange = handleMultiStemVolumeChange;
+// Phase 2A: Rate control functions
+window.handleStemRateChange = handleStemRateChange;
+window.setStemRatePreset = setStemRatePreset;
+window.toggleStemRateLock = toggleStemRateLock;
+// Phase 2B: Loop region functions
+window.setStemLoopRegion = setStemLoopRegion;
+
+// ============================================
+// VERSION 27D: FULL TEMPLATE SYSTEM EXPORTS
+// ============================================
+
+// Marker functions
+window.toggleStemMarkers = toggleStemMarkers;
+window.setStemMarkerFrequency = setStemMarkerFrequency;
+window.shiftStemBarStartLeft = shiftStemBarStartLeft;
+window.shiftStemBarStartRight = shiftStemBarStartRight;
+
+// Cycle/Loop functions
+window.toggleStemCycleMode = toggleStemCycleMode;
+
+// TODO: Add more function exports as they are implemented:
+// Metronome: toggleStemMetronome, setStemMetronomeSound
+// Cycle/Loop: toggleStemSeekOnClick, clearStemLoopKeepCycle, toggleStemLoopControlsExpanded
+// Loop manipulation: shiftStemLoopLeft, shiftStemLoopRight, moveStemStartLeft, moveStemEndRight, halfStemLoopLength, doubleStemLoopLength
+// Loop modes: toggleStemImmediateJump, toggleStemLoopFades, setStemFadeTime, toggleStemPreserveLoop, toggleStemBPMLock
+// Recording: toggleStemRecordActions, playStemRecordedActions

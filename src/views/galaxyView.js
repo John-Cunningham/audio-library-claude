@@ -1449,15 +1449,24 @@ function loadOptionsMenu() {
             // Wire up controls to Galaxy View variables
             wireUpMenuControls();
 
-            // Initialize drag and resize functionality (if defined in the HTML)
-            if (typeof window.initOptionsMenu2Drag === 'function') {
-                window.initOptionsMenu2Drag();
-                console.log('✅ Menu drag functionality initialized');
-            }
-            if (typeof window.initOptionsMenu2Resize === 'function') {
-                window.initOptionsMenu2Resize();
-                console.log('✅ Menu resize functionality initialized');
-            }
+            // The HTML's <script> tag will execute when innerHTML is set, defining
+            // initOptionsMenu2Drag and initOptionsMenu2Resize functions.
+            // We need to call them manually since DOMContentLoaded has already fired.
+            setTimeout(() => {
+                if (typeof window.initOptionsMenu2Drag === 'function') {
+                    window.initOptionsMenu2Drag();
+                    console.log('✅ Menu drag functionality initialized');
+                } else {
+                    console.warn('⚠️ initOptionsMenu2Drag not found');
+                }
+
+                if (typeof window.initOptionsMenu2Resize === 'function') {
+                    window.initOptionsMenu2Resize();
+                    console.log('✅ Menu resize functionality initialized');
+                } else {
+                    console.warn('⚠️ initOptionsMenu2Resize not found');
+                }
+            }, 100); // Small delay to ensure scripts have executed
 
             console.log('✅ Galaxy View options menu loaded successfully');
         })
@@ -1522,19 +1531,8 @@ function wireUpMenuControls() {
         console.log('▶️ Play button toggle not implemented yet');
     };
 
-    window.toggleOptionsMenu2 = function() {
-        const menu = document.getElementById('optionsMenu2');
-        if (menu) {
-            menu.classList.toggle('collapsed');
-        }
-    };
-
-    window.toggleSection = function(element) {
-        const section = element.parentElement;
-        if (section) {
-            section.classList.toggle('collapsed');
-        }
-    };
+    // Note: toggleOptionsMenu2 and toggleSection are defined in the HTML file's <script> section
+    // Do NOT override them here - the HTML's versions are correct
 
     // Database source toggles (stub)
     window.toggleGalaxyDbSource = function(source, event) {

@@ -15,6 +15,8 @@
  *   MiniWaveform.destroy(fileId);
  */
 
+import { loadAudioIntoWaveSurfer } from '../utils/audioFetch.js';
+
 // Track mini waveform instances by file ID
 let miniWaveforms = {};
 
@@ -84,11 +86,13 @@ export function renderAll(files) {
             console.error('[MiniWaveform] Error:', err);
         });
 
-        miniWave.load(file.file_url).catch(err => {
-            // Silently ignore AbortError - these are expected during rapid re-renders
-            if (err.name === 'AbortError') return;
-            console.error('[MiniWaveform] Failed to load:', err);
-        });
+        // Load audio with retry logic to handle QUIC protocol errors
+        loadAudioIntoWaveSurfer(miniWave, file.file_url, 'MiniWaveform')
+            .catch(err => {
+                // Silently ignore AbortError - these are expected during rapid re-renders
+                if (err.name === 'AbortError') return;
+                console.error('[MiniWaveform] Failed to load waveform:', err);
+            });
 
         // Make it interactive - click to play from that position
         miniWave.on('click', (relativeX) => {

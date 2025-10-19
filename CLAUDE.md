@@ -89,7 +89,29 @@ audio-library-claude/
 
 ## 🚨 CRITICAL RULES FOR NEW CODE
 
-### 1. FOLLOW MODULAR ARCHITECTURE
+### 1. LOCALHOST URLs - ALWAYS USE FULL PATHS
+**IMPORTANT**: When working on files that require localhost URLs, ALWAYS provide the FULL URL including the complete path.
+
+**Server Location**: The development server runs from the project root:
+```bash
+cd /Users/jcc/Resilio Sync/JC Cloud/Developer/audio-library-claude
+python3 -m http.server 5501
+```
+
+**Correct URL Format**:
+- ✅ **Main App**: `http://localhost:5501/index.html`
+- ✅ **Experiments**: `http://localhost:5501/experiments/visualizer-extraction/index.html`
+- ✅ **Test Files**: `http://localhost:5501/experiments/visualizer-extraction/test-galaxy-view-supabase.html`
+
+**Never provide partial paths like**:
+- ❌ `http://localhost:5501/index.html` (when file is in experiments/)
+- ❌ Relative paths like `./index.html`
+
+**Always verify the server's working directory with**: `lsof -p [PID] | grep cwd`
+
+---
+
+### 2. FOLLOW MODULAR ARCHITECTURE
 **DO NOT add large functions to app.js!**
 
 If adding new functionality:
@@ -102,13 +124,13 @@ If adding new functionality:
 3. Add thin wrapper in app.js (3-7 lines max)
 4. Expose to window if needed by HTML
 
-### 2. MULTI-VIEW REQUIREMENT
+### 3. MULTI-VIEW REQUIREMENT
 **App has 3 views** (Library working, Galaxy/Sphere planned):
 - State must persist across view switches
 - Player must work in all views
 - Use state managers for shared state
 
-### 3. USE EXISTING PATTERNS
+### 4. USE EXISTING PATTERNS
 - **State**: Use PlayerStateManager, LoopStateManager, StemStateManager
 - **Components**: Follow existing component patterns
 - **Coordination**: app.js coordinates, doesn't implement

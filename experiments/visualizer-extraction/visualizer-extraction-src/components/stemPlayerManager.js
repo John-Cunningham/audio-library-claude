@@ -15,6 +15,8 @@
  * Extended: 2025-10-18 - Added 5 core lifecycle functions (617 lines)
  */
 
+import { loadAudioIntoWaveSurfer } from '../utils/audioFetch.js';
+
 /**
  * Preload all stem files from database
  * @param {Object} supabase - Supabase client
@@ -301,15 +303,19 @@ export async function loadStems(parentFileId, state, WaveSurfer, autoplay = true
         newStemWavesurfers[stemType] = createStemWaveSurfer(stemType, WaveSurfer);
     });
 
-    // Load audio for each stem
+    // Load audio for each stem with retry logic
     const loadPromises = stemTypes.map(stemType => {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const stemWS = newStemWavesurfers[stemType];
             stemWS.on('ready', () => {
                 console.log(`${stemType} stem ready`);
                 resolve();
             });
-            stemWS.load(stems[stemType].file_url);
+            loadAudioIntoWaveSurfer(stemWS, stems[stemType].file_url, `StemPlayer-${stemType}`)
+                .catch(err => {
+                    console.error(`[StemPlayer] Failed to load ${stemType} stem:`, err);
+                    reject(err);
+                });
         });
     });
 
@@ -433,8 +439,11 @@ export async function preloadMultiStemWavesurfers(fileId, dependencies, state, c
             responsive: true
         });
 
-        // Load the stem file
-        ws.load(stemFile.file_url);
+        // Load the stem file with retry logic
+        loadAudioIntoWaveSurfer(ws, stemFile.file_url, `StemPlayerLegacy-${stemType}`)
+            .catch(err => {
+                console.error(`[StemPlayerLegacy] Failed to load ${stemType} stem:`, err);
+            });
 
         // Mute by default
         ws.setVolume(0);
@@ -715,7 +724,12 @@ export async function initializeMultiStemPlayerWavesurfers(state, dependencies, 
 
             ws._stemFile = stemFile;
             ws._stemType = stemType;
-            ws.load(stemFile.file_url);
+
+            // Load with retry logic
+            loadAudioIntoWaveSurfer(ws, stemFile.file_url, `StemPlayerIndependent-${stemType}`)
+                .catch(err => {
+                    console.error(`[StemPlayerIndependent] Failed to load ${stemType} stem:`, err);
+                });
 
             stemPlayerWavesurfers[stemType] = ws;
             stemPlaybackIndependent[stemType] = true;

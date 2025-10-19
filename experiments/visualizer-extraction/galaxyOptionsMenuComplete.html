@@ -48,6 +48,32 @@
     background: rgba(255, 255, 255, 0.3);
 }
 
+/* Section Headers - Purple styling */
+#optionsMenu2 h3 {
+    font-size: 11px;
+    color: #667eea !important;
+    margin-bottom: 6px;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+#optionsMenu2 h3:hover {
+    color: #8899ff !important;
+}
+
+#optionsMenu2 h3::after {
+    content: '▼';
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+#optionsMenu2 h3.collapsed::after {
+    transform: rotate(-90deg);
+}
+
 /* Options Title Bar - Draggable */
 .options-title-bar {
     position: sticky;
@@ -454,6 +480,14 @@
     <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Movement & Camera</h3>
     <div class="collapsible-content collapsed">
 
+        <!-- Crosshair Toggle -->
+        <div class="mode-section">
+            <button id="galaxyCrosshairToggle" onclick="toggleCrosshair()" style="width: 100%; padding: 8px; background: rgba(102,126,234,0.3); border: 1px solid rgba(102,126,234,0.5); color: #fff; border-radius: 4px; cursor: pointer;">
+                Crosshair: ON
+            </button>
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px; margin-bottom: 10px;">Toggle crosshair visibility (auto-hides when mouse unlocked)</div>
+        </div>
+
         <!-- Stem Offset Distance -->
         <div class="mode-section">
             <label>Stem Galaxy Offset: <span id="stemOffsetValue">0</span></label>
@@ -521,17 +555,17 @@
         <div class="mode-section">
             <label>Particle Size: <span id="galaxyParticleSizeValue">17.5</span></label>
             <input type="range" min="1" max="100" step="0.5" value="17.5"
-                   oninput="window.particleSize = parseFloat(this.value); document.getElementById('galaxyParticleSizeValue').textContent = this.value; window.recreateParticles();">
+                   oninput="updateParticleSize(this.value);">
         </div>
         <div class="mode-section">
             <label>Brightness: <span id="galaxyBrightnessValue">0.8</span></label>
             <input type="range" min="0.1" max="10" step="0.1" value="0.8"
-                   oninput="window.particleBrightness = parseFloat(this.value); document.getElementById('galaxyBrightnessValue').textContent = this.value; window.updateBrightness();">
+                   oninput="updateParticleBrightness(this.value);">
         </div>
         <div class="mode-section">
             <label>Visibility Distance: <span id="galaxyVisibilityValue">900</span></label>
             <input type="range" min="100" max="2000" step="50" value="900"
-                   oninput="window.visibilityDistance = parseInt(this.value); document.getElementById('galaxyVisibilityValue').textContent = this.value;">
+                   oninput="updateVisibility(this.value);">
         </div>
     </div>
 
@@ -556,12 +590,13 @@
             </select>
         </div>
         <div class="mode-section">
-            <label>Speed: <span id="speedValue">0.0000015</span></label>
-            <input type="range" id="speedSlider" min="0" max="0.00003" step="0.0000001" value="0.0000015"
+            <label>Motion Speed: <span id="galaxyMotionSpeedValue">50</span></label>
+            <input type="range" id="speedSlider" min="0" max="100" step="1" value="50"
                    oninput="updateMotionSpeed(this.value)">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">0=static, 50=default, 100=fast</div>
         </div>
         <div class="mode-section">
-            <label>Amplitude: <span id="radiusValue">80</span></label>
+            <label>Motion Amplitude: <span id="galaxyMotionRadiusValue">80</span></label>
             <input type="range" id="radiusSlider" min="0" max="100" step="1" value="80"
                    oninput="updateMotionRadius(this.value)">
         </div>
@@ -573,26 +608,54 @@
         <div class="mode-section">
             <label>Particles per Cluster: <span id="subParticleCountValue">48</span></label>
             <input type="range" min="3" max="100" step="1" value="48"
-                   oninput="window.particlesPerCluster = parseInt(this.value); document.getElementById('subParticleCountValue').textContent = this.value; window.recreateParticles();">
+                   oninput="updateSubParticleCount(this.value);">
         </div>
         <div class="mode-section">
             <label>Cluster Spread: <span id="clusterSpreadValue">10.0</span></label>
             <input type="range" min="0.1" max="50" step="0.5" value="10.0"
-                   oninput="window.clusterRadius = parseFloat(this.value); document.getElementById('clusterSpreadValue').textContent = this.value; window.recreateParticles();">
+                   oninput="updateClusterSpread(this.value);">
         </div>
     </div>
 
     <!-- Audio Reactivity Section -->
     <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Audio Reactivity</h3>
     <div class="collapsible-content collapsed">
+        <div class="mode-section current-file-display" style="background: rgba(0, 255, 0, 0.1); padding: 8px; border-radius: 4px; margin-bottom: 10px;">
+            <span style="color: #0f0; font-weight: bold;">No file playing</span>
+        </div>
         <div class="mode-section">
             <label>Current Amplitude: <span id="audioAmplitudeDisplay" style="color: #667eea;">0.00</span></label>
         </div>
-        <div class="mode-section">
-            <label>Pulse Strength: <span id="audioStrengthValue">40</span></label>
-            <input type="range" min="0" max="100" step="1" value="40"
-                   oninput="window.audioReactivityStrength = parseInt(this.value); document.getElementById('audioStrengthValue').textContent = this.value;">
+
+        <div class="mode-section" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px;">
+            <div style="text-align: center;">
+                <div style="color: rgba(255,255,255,0.5);">Bass</div>
+                <div id="bassAmplitudeDisplay" style="color: #f87171;">0.00</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: rgba(255,255,255,0.5);">Mids</div>
+                <div id="midsAmplitudeDisplay" style="color: #60a5fa;">0.00</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: rgba(255,255,255,0.5);">Highs</div>
+                <div id="highsAmplitudeDisplay" style="color: #4ade80;">0.00</div>
+            </div>
         </div>
+
+        <div class="mode-section">
+            <label>Audio Strength (Current File): <span id="audioStrengthValue">40</span></label>
+            <input type="range" min="0" max="100" step="1" value="40"
+                   oninput="updateAudioStrength(this.value);">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">How strongly the current playing file reacts</div>
+        </div>
+
+        <div class="mode-section">
+            <label>Global Reactivity (All): <span id="globalReactivityValue">4.4</span></label>
+            <input type="range" min="0" max="10" step="0.1" value="4.4"
+                   oninput="updateGlobalReactivity(this.value);">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">How all particles react to audio</div>
+        </div>
+
         <div class="mode-section">
             <label>Frequency Range:</label>
             <select onchange="window.audioFrequencyMode = this.value;">
@@ -610,11 +673,11 @@
         <div class="mode-section">
             <label>Bloom/Glow: <span id="bloomStrengthValue">0.8</span></label>
             <input type="range" min="0" max="10" step="0.1" value="0.8"
-                   oninput="window.bloomStrength = parseFloat(this.value); document.getElementById('bloomStrengthValue').textContent = this.value; window.updateBloomStrength();">
+                   oninput="updateBloomStrength(this.value);">
         </div>
         <div class="mode-section">
             <label>Particle Shape:</label>
-            <select onchange="window.particleShape = this.value; window.recreateParticles();">
+            <select onchange="updateParticleShape(this.value);">
                 <option value="circle">Circle</option>
                 <option value="square">Square</option>
                 <option value="disc">Disc</option>

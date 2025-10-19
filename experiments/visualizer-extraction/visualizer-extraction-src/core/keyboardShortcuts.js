@@ -57,6 +57,8 @@
  * @param {Function} state.isMetronomeEnabled - Get metronome enabled state
  */
 export function initKeyboardShortcuts(callbacks, state) {
+    let lastLoggedKey = null; // Define in closure scope, not on 'this'
+
     document.addEventListener('keydown', (e) => {
         // Don't trigger shortcuts if user is typing in an input field or modal is open
         const modal = document.getElementById('editTagsModal');
@@ -67,6 +69,30 @@ export function initKeyboardShortcuts(callbacks, state) {
         // Don't trigger shortcuts if modifier keys are held (allow browser shortcuts like Cmd+R)
         if (e.metaKey || e.ctrlKey || e.altKey) {
             return;
+        }
+
+        // Don't trigger shortcuts if pointer is locked for Galaxy View navigation
+        // Galaxy View has its own spacebar handler in galaxyInteraction.js
+        const isPointerLocked = window.isPointerLocked || false;
+        if (isPointerLocked) {
+            // Only log once per key press to reduce spam
+            if (!lastLoggedKey || lastLoggedKey !== e.key) {
+                console.log('[KeyboardShortcuts] Pointer locked, skipping shortcuts (Galaxy View handles them)');
+                lastLoggedKey = e.key;
+            }
+            return;
+        } else {
+            lastLoggedKey = null; // Reset when not locked
+        }
+
+        // Special case: In Galaxy View but pointer NOT locked, spacebar should still work
+        // Don't let galaxyInteraction.js handle it since onKeyDown might still fire
+        const inGalaxyView = window.currentView === 'galaxy' || document.getElementById('galaxyViewContainer')?.style.display !== 'none';
+        const isSpacebar = e.key === ' ';
+
+        if (inGalaxyView && isSpacebar && !isPointerLocked) {
+            // Prevent galaxyInteraction from also handling it
+            e.stopPropagation();
         }
 
         // If recording is waiting for first keypress, start recording now

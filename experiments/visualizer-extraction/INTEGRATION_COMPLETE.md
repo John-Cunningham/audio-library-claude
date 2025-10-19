@@ -148,6 +148,29 @@ Library view initializing...
 Library view initialized
 ```
 
+## Recent Fixes (Latest Update)
+
+### Fixed Issues
+
+1. **File Count Display** - Now updates correctly with periodic refresh
+   - Added querySelectorAll to handle any duplicate elements
+   - Added 100ms delayed update for late-rendering elements
+   - Added 1-second periodic refresh to ensure count stays correct
+
+2. **Particle Size Slider** - Now updates smoothly without recreating
+   - Added `updateParticleSizes()` function for efficient size updates
+   - No more "repositioning" effect when adjusting size
+
+3. **Missing Slider Functions** - Added all missing handlers
+   - `updateMotionSpeed()` - Controls orbit speed
+   - `updateMotionRadius()` - Controls orbit amplitude
+   - `updateStemOffset()` - Controls stem galaxy offset
+
+### IMPORTANT: Clear Browser Cache
+**You MUST do a hard refresh to see these fixes:**
+- Mac: `Cmd + Shift + R`
+- Windows/Linux: `Ctrl + Shift + R`
+
 ## Known Issues & Limitations
 
 1. **Options Menu Path**: The `loadOptionsMenu()` function looks for `./galaxyOptionsMenuComplete.html`. This works when serving from `experiments/visualizer-extraction/` directory.
@@ -155,6 +178,8 @@ Library view initialized
 2. **Sphere View**: Not yet implemented (shows placeholder message).
 
 3. **First Load**: Galaxy View may take a moment to load Three.js libraries on first switch.
+
+4. **Browser Caching**: Changes to JavaScript require hard refresh to take effect.
 
 ## Troubleshooting
 

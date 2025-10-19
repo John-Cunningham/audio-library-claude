@@ -13,6 +13,8 @@
  * Used by: app.js (thin wrapper delegates to this service)
  */
 
+import { loadAudioIntoWaveSurfer } from '../utils/audioFetch.js';
+
 export class FileLoader {
     constructor(dependencies) {
         // State
@@ -97,8 +99,14 @@ export class FileLoader {
         // Step 7: Apply current volume and rate
         this._applyVolumeAndRate(wavesurfer);
 
-        // Step 8: Load audio file
-        wavesurfer.load(file.file_url);
+        // Step 8: Load audio file with retry logic for QUIC errors
+        loadAudioIntoWaveSurfer(wavesurfer, file.file_url, 'FileLoader')
+            .catch(error => {
+                console.error('[FileLoader] ❌ Failed to load audio file:', error);
+                // Show error in UI
+                document.getElementById('playerFilename').textContent = `Error: ${file.name}`;
+                document.getElementById('playerTime').textContent = 'Failed to load';
+            });
 
         // Step 9: Update player UI
         this._updatePlayerUI(file);

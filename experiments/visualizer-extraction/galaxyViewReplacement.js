@@ -49,6 +49,9 @@ let xAxisScale = 1.0;
 let yAxisScale = 1.0;
 let zAxisScale = 1.0;
 
+// Crosshair control
+let crosshairEnabled = true; // Default to ON
+
 // Mouse interaction
 let mouseInteractionEnabled = true;
 let hoveredCluster = null;
@@ -148,6 +151,13 @@ export function renderGalaxyView(container) {
     // Initialize stats display
     updateStats();
 
+    // Periodically update file count to ensure it stays correct
+    setInterval(() => {
+        if (window.audioFiles && window.audioFiles.length > 0) {
+            updateFileCount();
+        }
+    }, 1000);
+
     return {
         destroy: destroyGalaxyView,
         updateFiles: (files) => createParticles(files),
@@ -219,6 +229,18 @@ function initScene(container) {
 
         document.addEventListener('pointerlockchange', () => {
             isPointerLocked = document.pointerLockElement === renderer.domElement;
+
+            // Update crosshair visibility based on pointer lock state
+            const crosshair = document.querySelector('.crosshair');
+            if (crosshair) {
+                // Show crosshair when pointer is locked AND crosshair is enabled
+                // Hide when pointer is not locked
+                if (isPointerLocked && crosshairEnabled) {
+                    crosshair.style.display = 'block';
+                } else {
+                    crosshair.style.display = 'none';
+                }
+            }
         });
     }
 }
@@ -559,32 +581,153 @@ function updateParticles() {
  * Connect to global WaveSurfer instance for audio analysis
  */
 function connectToWavesurfer(wavesurfer) {
-    if (!wavesurfer) return;
+    if (!wavesurfer) {
+        console.warn('⚠️ No wavesurfer instance provided to connect to');
+        return;
+    }
 
-    // Get audio context from wavesurfer
+    console.log('🎵 Connecting Galaxy View to audio...');
+
     try {
-        // WaveSurfer v7 approach
-        const backend = wavesurfer.backend;
-        if (backend && backend.ac) {
-            audioContext = backend.ac;
+        // Get Web Audio API context - try multiple methods
+        let ctx = null;
+        let sourceNode = null;
 
-            // Create analyser
+        // Method 1: Try getBackend() for WaveSurfer v7+
+        if (wavesurfer.getBackend && typeof wavesurfer.getBackend === 'function') {
+            const backend = wavesurfer.getBackend();
+            if (backend && backend.getAudioContext) {
+                ctx = backend.getAudioContext();
+                console.log('✅ Got context via getBackend().getAudioContext()');
+            } else if (backend && backend.ac) {
+                ctx = backend.ac;
+                console.log('✅ Got context via backend.ac');
+            }
+
+            // Try to get the source node
+            if (backend && backend.source) {
+                sourceNode = backend.source;
+            }
+        }
+
+        // Method 2: Direct backend access
+        if (!ctx && wavesurfer.backend) {
+            if (wavesurfer.backend.ac) {
+                ctx = wavesurfer.backend.ac;
+                console.log('✅ Got context via backend.ac');
+            } else if (wavesurfer.backend.audioContext) {
+                ctx = wavesurfer.backend.audioContext;
+                console.log('✅ Got context via backend.audioContext');
+            }
+
+            // Try to get the source node
+            if (wavesurfer.backend.source) {
+                sourceNode = wavesurfer.backend.source;
+            }
+        }
+
+        // Method 3: Check for Web Audio backend with existing analyser
+        if (!ctx && wavesurfer.backend && wavesurfer.backend.analyser) {
+            // Already has analyser, just use it
+            analyser = wavesurfer.backend.analyser;
+            audioContext = analyser.context;
+            audioDataArray = new Uint8Array(analyser.frequencyBinCount);
+            console.log('✅ Using existing WaveSurfer analyser');
+
+            // Display current file info
+            updateCurrentFileDisplay();
+            return;
+        }
+
+        if (ctx) {
+            audioContext = ctx;
+
+            // Create our own analyser
             analyser = audioContext.createAnalyser();
             analyser.fftSize = 512;
             analyser.smoothingTimeConstant = 0.8;
+            audioDataArray = new Uint8Array(analyser.frequencyBinCount);
 
-            // Try to insert into audio chain
-            if (backend.gainNode) {
-                backend.gainNode.disconnect();
-                backend.gainNode.connect(analyser);
-                analyser.connect(audioContext.destination);
-
-                audioDataArray = new Uint8Array(analyser.frequencyBinCount);
-                console.log('Connected to WaveSurfer audio');
+            // Try to connect to the audio graph
+            if (wavesurfer.backend && wavesurfer.backend.analyser) {
+                // WaveSurfer already has an analyser, connect to it
+                wavesurfer.backend.analyser.connect(analyser);
+                console.log('✅ Connected to existing WaveSurfer analyser chain');
+            } else if (wavesurfer.backend && wavesurfer.backend.gainNode) {
+                // Connect via gain node
+                try {
+                    const gain = wavesurfer.backend.gainNode;
+                    gain.connect(analyser);
+                    analyser.connect(audioContext.destination);
+                    console.log('✅ Connected via gain node');
+                } catch (e) {
+                    console.log('⚠️ Could not connect via gain node:', e.message);
+                }
             }
+
+            console.log('🎉 Audio reactivity ready! Context:', audioContext.state);
+
+            // Update current file display
+            updateCurrentFileDisplay();
+
+            // Log initial test
+            setTimeout(() => {
+                if (analyser) {
+                    analyser.getByteFrequencyData(audioDataArray);
+                    const sum = audioDataArray.reduce((a, b) => a + b, 0);
+                    console.log('📊 Audio data test - sum:', sum, 'max:', Math.max(...audioDataArray));
+                }
+            }, 1000);
+        } else {
+            console.warn('❌ Could not get audio context from WaveSurfer');
+            console.log('WaveSurfer structure:', {
+                hasBackend: !!wavesurfer.backend,
+                hasGetBackend: !!wavesurfer.getBackend,
+                backendType: wavesurfer.backend?.constructor?.name
+            });
         }
     } catch (e) {
-        console.warn('Could not connect to WaveSurfer:', e);
+        console.error('❌ Error connecting audio:', e);
+    }
+}
+
+/**
+ * Update the display to show which file is currently playing
+ */
+function updateCurrentFileDisplay() {
+    // Get current file ID from window
+    const currentFileId = window.currentFileId || window.currentFile;
+
+    if (currentFileId && window.audioFiles) {
+        const currentFile = window.audioFiles.find(f => f.id === currentFileId);
+        if (currentFile) {
+            console.log(`🎵 Currently playing: ${currentFile.display_name || currentFile.filename}`);
+            console.log(`📊 File ID: ${currentFile.id}`);
+            console.log(`🏷️ Tags: ${currentFile.tags || 'none'}`);
+            console.log(`🎹 Key: ${currentFile.key || 'unknown'}, BPM: ${currentFile.bpm || 'unknown'}`);
+
+            // Update any UI elements that show current file
+            const currentFileElements = document.querySelectorAll('.current-file-display');
+            currentFileElements.forEach(el => {
+                el.textContent = `Playing: ${currentFile.display_name || currentFile.filename}`;
+                el.style.color = '#0f0';
+            });
+
+            // Highlight the current file's cluster in the galaxy
+            if (particles) {
+                particles.forEach((cluster, index) => {
+                    if (cluster && cluster.fileData && cluster.fileData.id === currentFileId) {
+                        // This is the currently playing file
+                        cluster.isCurrentFile = true;
+                        console.log(`✨ File cluster ${index} is now the current file - audio reactivity active`);
+                    } else if (cluster) {
+                        cluster.isCurrentFile = false;
+                    }
+                });
+            }
+        }
+    } else {
+        console.log('📻 No file currently playing');
     }
 }
 
@@ -879,7 +1022,8 @@ function onClick(event) {
 
         if (clickedCluster && window.loadAudio) {
             // Use global loadAudio function to play file
-            window.loadAudio(clickedCluster.file);
+            console.log('🎵 Particle clicked, loading file:', clickedCluster.file.id, clickedCluster.file.name);
+            window.loadAudio(clickedCluster.file.id);
         }
     }
 }
@@ -1059,11 +1203,52 @@ function loadOptionsMenu() {
 }
 
 function updateFileCount() {
-    const fileCountEl = document.getElementById('galaxyFileCount');
-    if (fileCountEl && window.audioFiles) {
-        fileCountEl.textContent = `${window.audioFiles.length} files loaded`;
+    // Use querySelectorAll to find ALL elements with this ID (in case of duplicates)
+    const fileCountElements = document.querySelectorAll('#galaxyFileCount');
+    const count = window.audioFiles ? window.audioFiles.length : 0;
+
+    if (fileCountElements.length > 0) {
+        fileCountElements.forEach((el, index) => {
+            el.textContent = `${count} files loaded`;
+            if (index > 0) {
+                console.warn('⚠️ Found duplicate galaxyFileCount element!');
+            }
+        });
+        console.log(`📊 Updated file count display: ${count} (found ${fileCountElements.length} element(s))`);
+    } else {
+        console.warn('⚠️ galaxyFileCount element not found yet');
     }
+
+    // Also update via a delayed call to catch any late-rendering elements
+    setTimeout(() => {
+        const delayedElements = document.querySelectorAll('#galaxyFileCount');
+        delayedElements.forEach(el => {
+            el.textContent = `${count} files loaded`;
+        });
+    }, 100);
 }
+
+// === CROSSHAIR TOGGLE FUNCTION ===
+window.toggleCrosshair = () => {
+    crosshairEnabled = !crosshairEnabled;
+    const crosshair = document.querySelector('.crosshair');
+    if (crosshair) {
+        crosshair.style.display = crosshairEnabled ? 'block' : 'none';
+    }
+
+    // Update button text if exists
+    const btn = document.getElementById('crosshairToggleBtn');
+    if (btn) btn.textContent = `Crosshair: ${crosshairEnabled ? 'ON' : 'OFF'}`;
+
+    const galaxyBtn = document.getElementById('galaxyCrosshairToggle');
+    if (galaxyBtn) galaxyBtn.textContent = `Crosshair: ${crosshairEnabled ? 'ON' : 'OFF'}`;
+
+    console.log(`🎯 Crosshair: ${crosshairEnabled ? 'ON' : 'OFF'}`);
+    return crosshairEnabled;
+};
+
+// Expose globally so it can be called from outside
+window.updateGalaxyFileCount = updateFileCount;
 
 /**
  * Clean up and destroy the galaxy view
@@ -1117,15 +1302,235 @@ if (typeof window !== 'undefined') {
     window.yAxisScale = yAxisScale;
     window.zAxisScale = zAxisScale;
     window.audioReactivityStrength = audioReactivityStrength;
+    window.globalAudioReactivity = globalAudioReactivity;
     window.audioFrequencyMode = audioFrequencyMode;
     window.bloomStrength = bloomStrength;
     window.rotationMode = rotationMode;
     window.rotationAxis = rotationAxis;
 
     // Expose functions that update these values and recreate particles
-    window.recreateParticles = () => createParticles(window.audioFiles);
-    window.updateBrightness = updateBrightness;
-    window.updateBloomStrength = updateBloomStrength;
+    // Update particle size - matches reference exactly
+    window.updateParticleSize = (value) => {
+        particleSize = parseFloat(value);
+        window.particleSize = particleSize;
+        const el = document.getElementById('galaxyParticleSizeValue');
+        if (el) el.textContent = value;
+        // Size is applied in the animation loop via instance matrix scaling
+        console.log('📏 Particle size set to:', particleSize);
+    };
+
+    window.recreateParticles = () => {
+        console.log('🔄 Recreating particles...');
+
+        // CRITICAL: Sync local variables from window before recreating
+        particleSize = window.particleSize !== undefined ? window.particleSize : particleSize;
+        particlesPerCluster = window.particlesPerCluster !== undefined ? window.particlesPerCluster : particlesPerCluster;
+        clusterRadius = window.clusterRadius !== undefined ? window.clusterRadius : clusterRadius;
+        particleShape = window.particleShape !== undefined ? window.particleShape : particleShape;
+        particleBrightness = window.particleBrightness !== undefined ? window.particleBrightness : particleBrightness;
+        orbitSpeed = window.orbitSpeed !== undefined ? window.orbitSpeed : orbitSpeed;
+        orbitRadius = window.orbitRadius !== undefined ? window.orbitRadius : orbitRadius;
+        visibilityDistance = window.visibilityDistance !== undefined ? window.visibilityDistance : visibilityDistance;
+        currentColorMode = window.currentColorMode !== undefined ? window.currentColorMode : currentColorMode;
+        currentXMode = window.currentXMode !== undefined ? window.currentXMode : currentXMode;
+        currentYMode = window.currentYMode !== undefined ? window.currentYMode : currentYMode;
+        currentZMode = window.currentZMode !== undefined ? window.currentZMode : currentZMode;
+        rotationMode = window.rotationMode !== undefined ? window.rotationMode : rotationMode;
+        rotationAxis = window.rotationAxis !== undefined ? window.rotationAxis : rotationAxis;
+
+        console.log('Synced values - Particle size:', particleSize, 'Particles per cluster:', particlesPerCluster);
+
+        createParticles(window.audioFiles);
+        updateFileCount();
+    };
+
+    // Update particle brightness - matches reference exactly
+    window.updateParticleBrightness = (value) => {
+        particleBrightness = parseFloat(value);
+        window.particleBrightness = particleBrightness;
+        const el = document.getElementById('galaxyBrightnessValue');
+        if (el) el.textContent = value;
+        if (particleSystem && particleSystem.material) {
+            particleSystem.material.opacity = particleBrightness;
+            particleSystem.material.needsUpdate = true;
+        }
+        console.log('✨ Brightness updated to:', particleBrightness);
+    };
+
+    // Update bloom strength - matches reference
+    window.updateBloomStrength = (value) => {
+        bloomStrength = parseFloat(value);
+        window.bloomStrength = bloomStrength;
+        const el = document.getElementById('bloomStrengthValue');
+        if (el) el.textContent = value;
+        // Bloom is applied in animation loop
+        if (bloomPass) {
+            bloomPass.strength = bloomStrength;
+        }
+        console.log('🌟 Bloom strength updated to:', value);
+    };
+
+    // Update audio reactivity strength (current file)
+    window.updateAudioStrength = (value) => {
+        audioReactivityStrength = parseFloat(value);
+        window.audioReactivityStrength = audioReactivityStrength;
+        const el = document.getElementById('audioStrengthValue');
+        if (el) el.textContent = value;
+        console.log('🔊 Audio strength updated to:', value);
+    };
+
+    // Update global audio reactivity (all particles)
+    window.updateGlobalReactivity = (value) => {
+        globalAudioReactivity = parseFloat(value);
+        window.globalAudioReactivity = globalAudioReactivity;
+        const el = document.getElementById('globalReactivityValue');
+        if (el) el.textContent = value;
+        console.log('🌍 Global audio reactivity updated to:', value);
+    };
+
+    // Add missing slider functions
+    window.updateMotionSpeed = (value) => {
+        window.orbitSpeed = parseFloat(value);
+        orbitSpeed = window.orbitSpeed;
+        const el = document.getElementById('speedValue');
+        if (el) el.textContent = value;
+        console.log('🔄 Motion speed updated to:', orbitSpeed);
+    };
+
+    window.updateMotionRadius = (value) => {
+        window.orbitRadius = parseInt(value);
+        orbitRadius = window.orbitRadius;
+        const el = document.getElementById('radiusValue');
+        if (el) el.textContent = value;
+        console.log('🔄 Motion radius updated to:', orbitRadius);
+    };
+
+    window.updateStemOffset = (value) => {
+        // This would offset stem particles if they exist
+        window.stemOffset = parseInt(value);
+        const el = document.getElementById('stemOffsetValue');
+        if (el) el.textContent = value;
+        console.log('🔄 Stem offset updated to:', value);
+    };
+
+    // Update visibility distance - matches reference
+    window.updateVisibility = (value) => {
+        visibilityDistance = parseFloat(value);
+        window.visibilityDistance = visibilityDistance;
+        const el = document.getElementById('galaxyVisibilityValue');
+        if (el) el.textContent = value;
+        console.log('👁️ Visibility distance updated to:', value);
+    };
+
+    // Update particle shape - requires recreation
+    window.updateParticleShape = (value) => {
+        particleShape = value;
+        window.particleShape = value;
+        if (particleSystem && particleSystem.material) {
+            particleSystem.material.map = createParticleTexture(value);
+            particleSystem.material.needsUpdate = true;
+        }
+        console.log('🔷 Particle shape updated to:', value);
+    };
+
+    // Update axis scales - matches reference
+    window.updateXAxisScale = (value) => {
+        xAxisScale = parseFloat(value);
+        window.xAxisScale = xAxisScale;
+        const el = document.getElementById('xAxisScaleValue');
+        if (el) el.textContent = value;
+        updateClusterPositions();
+        console.log('📏 X-axis scale updated to:', value);
+    };
+
+    window.updateYAxisScale = (value) => {
+        yAxisScale = parseFloat(value);
+        window.yAxisScale = yAxisScale;
+        const el = document.getElementById('yAxisScaleValue');
+        if (el) el.textContent = value;
+        updateClusterPositions();
+        console.log('📏 Y-axis scale updated to:', value);
+    };
+
+    window.updateZAxisScale = (value) => {
+        zAxisScale = parseFloat(value);
+        window.zAxisScale = zAxisScale;
+        const el = document.getElementById('zAxisScaleValue');
+        if (el) el.textContent = value;
+        updateClusterPositions();
+        console.log('📏 Z-axis scale updated to:', value);
+    };
+
+    // Update cluster positions after scale changes
+    function updateClusterPositions() {
+        if (particles.length > 0) {
+            particles.forEach((cluster, index) => {
+                const newPos = calculateFilePosition(cluster.file, index);
+                cluster.centerPosition.set(newPos.x, newPos.y, newPos.z);
+            });
+        }
+    }
+
+    // Update cluster spread - matches reference (modifies existing offsets)
+    window.updateClusterSpread = (value) => {
+        clusterRadius = parseFloat(value);
+        window.clusterRadius = clusterRadius;
+        const el = document.getElementById('clusterSpreadValue');
+        if (el) el.textContent = value;
+
+        // Update existing cluster sub-particle offsets using stored base radius
+        if (particles.length > 0 && particleSystem) {
+            particles.forEach(cluster => {
+                cluster.subParticles.forEach(subParticle => {
+                    // Skip center particles
+                    if (subParticle.isCenterParticle) {
+                        return;
+                    }
+                    // Recalculate offset with new radius using stored baseRadius
+                    const normalized = subParticle.offset.clone().normalize();
+                    subParticle.offset.copy(normalized.multiplyScalar(clusterRadius * (subParticle.baseRadius || 1)));
+                });
+            });
+        }
+        console.log('💫 Cluster spread updated to:', value);
+    };
+
+    // Update sub-particle size - applied in animation loop
+    window.updateSubParticleSize = (value) => {
+        subParticleScale = parseFloat(value);
+        window.subParticleScale = subParticleScale;
+        const el = document.getElementById('subParticleSizeValue');
+        if (el) el.textContent = value;
+        // Size is applied in animation loop
+        console.log('✨ Sub-particle size updated to:', value);
+    };
+
+    // Update main to sub ratio - applied in animation loop
+    window.updateMainToSubRatio = (value) => {
+        mainToSubSizeRatio = parseFloat(value);
+        window.mainToSubSizeRatio = mainToSubSizeRatio;
+        const el = document.getElementById('mainToSubRatioValue');
+        if (el) el.textContent = value;
+        // Size is applied in the animation loop via instance matrix scaling
+        console.log('📊 Main/Sub ratio updated to:', value);
+    };
+
+    // Update sub-particle count - MUST recreate (instance count changes)
+    window.updateSubParticleCount = (value) => {
+        const newCount = parseInt(value);
+        const oldCount = particlesPerCluster;
+        console.log(`Updating sub-particle count from ${oldCount} to ${newCount}`);
+        particlesPerCluster = newCount;
+        window.particlesPerCluster = newCount;
+        const el = document.getElementById('subParticleCountValue');
+        if (el) el.textContent = value;
+
+        // Must recreate because InstancedMesh requires fixed instance count
+        if (window.audioFiles && window.audioFiles.length > 0) {
+            console.log(`Recreating ${window.audioFiles.length} clusters with ${particlesPerCluster} particles each`);
+            createParticles(window.audioFiles);
+        }
+    };
 
     window.galaxyView = {
         render: renderGalaxyView,

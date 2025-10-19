@@ -1,0 +1,870 @@
+<!-- Galaxy View Options Menu - Complete V37 Feature Set -->
+<!-- Includes all advanced controls, presets, import/export, and cloud sync -->
+
+<style>
+/* Options Menu Styling */
+.mode-controls-left {
+    position: fixed;
+    top: 114px;  /* Header (47px) + Tabs (47px) + margin (20px) = 114px */
+    left: 20px;
+    background: rgba(10, 10, 10, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px;
+    z-index: 1002;  /* Above tabs (1001) */
+    min-width: 220px;
+    max-width: 280px;
+    max-height: calc(100vh - 134px);  /* Account for header + tabs + margins */
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    transition: all 0.3s ease;
+    cursor: default;
+}
+
+.mode-controls-left.dragging {
+    transition: none;
+    opacity: 0.9;
+}
+
+.mode-controls-left::-webkit-scrollbar {
+    width: 6px;
+}
+
+.mode-controls-left::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.mode-controls-left::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+/* Options Title Bar */
+.options-title-bar {
+    position: sticky;
+    top: -15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    margin: -15px -15px 15px -15px;
+    background: rgba(10, 10, 10, 0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: move;
+    cursor: grab;
+    user-select: none;
+    z-index: 10;
+}
+
+.options-title-bar:active {
+    cursor: grabbing;
+}
+
+.options-title-bar h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.options-collapse-icon {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.8);
+    transition: transform 0.2s;
+    cursor: pointer;
+}
+
+/* Collapsed State */
+.mode-controls-left.options-collapsed {
+    width: 60px;
+    height: 60px;
+    padding: 0;
+    overflow: hidden;
+}
+
+.mode-controls-left.options-collapsed .options-title-bar {
+    margin: 0;
+    padding: 12px;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+}
+
+.mode-controls-left.options-collapsed .options-title-bar h2 {
+    display: none;
+}
+
+.mode-controls-left.options-collapsed .options-collapse-icon {
+    font-size: 22px;
+}
+
+.mode-controls-left.options-collapsed > *:not(.options-title-bar) {
+    display: none !important;
+}
+
+/* Section Headers */
+.mode-controls-left h3 {
+    font-size: 11px;
+    color: #667eea !important;
+    margin-bottom: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mode-controls-left h3:hover {
+    color: #8899ff !important;
+}
+
+.mode-controls-left h3::after {
+    content: '▼';
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+.mode-controls-left h3.collapsed::after {
+    transform: rotate(-90deg);
+}
+
+/* Collapsible Content */
+.collapsible-content {
+    max-height: 2000px;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+    opacity: 1;
+}
+
+.collapsible-content.collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+}
+
+/* Mode Sections */
+.mode-section {
+    margin-bottom: 12px;
+}
+
+.mode-section label {
+    display: block;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 4px;
+}
+
+.mode-section input[type="range"] {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    cursor: pointer;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.mode-section input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    background: #667eea;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.mode-section select {
+    width: 100%;
+    padding: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.mode-section button, .mode-section .btn {
+    width: 100%;
+    padding: 8px;
+    background: rgba(102, 126, 234, 0.3);
+    border: 1px solid #667eea;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+}
+
+.mode-section button:hover {
+    background: rgba(102, 126, 234, 0.4);
+    border-color: #7788ff;
+}
+
+/* Search Container */
+.search-container {
+    position: relative;
+    margin-bottom: 12px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 6px 28px 6px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 11px;
+}
+
+.search-icon {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Resize Handle */
+.options-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    cursor: se-resize;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.mode-controls-left:hover .options-resize-handle {
+    opacity: 1;
+}
+
+.resize-grip {
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid rgba(255, 255, 255, 0.3);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+}
+</style>
+
+<div class="mode-controls mode-controls-left" id="optionsMenu2">
+    <!-- Options Title Bar -->
+    <div class="options-title-bar" onclick="toggleOptionsMenu2()">
+        <h2>Options</h2>
+        <span class="options-collapse-icon" id="optionsCollapseIcon2">−</span>
+    </div>
+
+    <!-- Toggle Controls Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed">Toggle Controls</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <button class="btn" onclick="toggleCrosshair()" id="galaxyCrosshairToggle">
+                Crosshair: ON
+            </button>
+        </div>
+        <div class="mode-section">
+            <button class="btn" onclick="toggleTooltips()" id="galaxyTooltipToggle">
+                Tooltips: ON
+            </button>
+        </div>
+        <div class="mode-section">
+            <button class="btn" onclick="toggleInfoWindow()" id="galaxyInfoToggle">
+                Info Window: OFF
+            </button>
+        </div>
+        <div class="mode-section">
+            <button class="btn" onclick="toggleFullscreen()">
+                Toggle Fullscreen
+            </button>
+        </div>
+        <div class="mode-section">
+            <button class="btn" onclick="toggleMoveJoystick()" id="galaxyMoveJoystickToggle">
+                Move Joystick: ON
+            </button>
+        </div>
+        <div class="mode-section">
+            <button class="btn" onclick="toggleLookJoystick()" id="galaxyLookJoystickToggle">
+                Look Joystick: ON
+            </button>
+        </div>
+        <div class="mode-section">
+            <button class="btn" onclick="togglePlayButton()" id="galaxyPlayButtonToggle">
+                Play Button: ON
+            </button>
+        </div>
+    </div>
+
+    <!-- File Browser Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">File Browser</h3>
+    <div class="collapsible-content collapsed">
+        <!-- Search Bar -->
+        <div class="search-container">
+            <input type="text"
+                   id="galaxySearchInput"
+                   class="search-input"
+                   placeholder="Search files..."
+                   oninput="handleSearch(this.value)"
+                   onkeydown="handleSearchKeyboard(event)">
+            <span class="search-icon">🔍</span>
+        </div>        <!-- Active Filters Display -->
+        <div id="galaxyActiveFiltersDisplay" style="margin-bottom: 12px; min-height: 20px; font-size: 10px;">
+            <div style="color: #666;">No active filters</div>
+
+
+        <!-- Clear Filters Button -->
+        <button onclick="window.clearGalaxyTagFilters()" style="
+            width: 100%;
+            padding: 6px;
+            background: rgba(234, 102, 102, 0.3);
+            border: 1px solid #ea6767;
+            border-radius: 4px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 10px;
+            margin-bottom: 15px;
+        ">Clear All Filters</button>
+        </div>
+
+        <!-- Database Selector -->
+        <div class="mode-section" style="margin-bottom: 15px;">
+            <label>Data Sources:</label>
+            <div style="margin-top: 8px;">
+                <div style="display: flex; align-items: center; padding: 6px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 4px; cursor: pointer;" onclick="toggleGalaxyDbSource('audioFiles', event)">
+                    <input type="checkbox" id="galaxySourceAudioFiles" checked style="margin-right: 8px; cursor: pointer;" onclick="toggleGalaxyDbSource('audioFiles', event)">
+                    <label style="cursor: pointer; user-select: none;">Audio Files</label>
+                </div>
+                <div style="display: flex; align-items: center; padding: 6px; background: rgba(255,255,255,0.05); border-radius: 4px; cursor: pointer;" onclick="toggleGalaxyDbSource('stems', event)">
+                    <input type="checkbox" id="galaxySourceAudioStems" style="margin-right: 8px; cursor: pointer;" onclick="toggleGalaxyDbSource('stems', event)">
+                    <label style="cursor: pointer; user-select: none;">Stems</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Category Filter Buttons -->
+        <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+            <button onclick="showAllCategories()" style="flex: 1; padding: 8px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #fff; cursor: pointer; font-size: 11px;">Show All</button>
+            <button onclick="hideAllCategories()" style="flex: 1; padding: 8px; background: rgba(234,102,102,0.3); border: 1px solid #ea6767; border-radius: 4px; color: #fff; cursor: pointer; font-size: 11px;">Hide All</button>
+        </div>
+
+        <!-- File Count -->
+        <div style="color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 10px;">
+            <span id="galaxyFileCount">0 files loaded</span>
+        </div>
+
+        <!-- Color Categories Legend -->
+        <h4 style="color: #667eea; font-size: 11px; margin-bottom: 8px;">Colors</h4>
+        <div style="max-height: 150px; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-bottom: 15px;">
+            <div id="galaxyTagLegend"></div>
+        </div>
+
+        <!-- Tags Section -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-bottom: 15px;">
+            <h4 style="color: #667eea; font-size: 11px; margin-bottom: 8px;">Tags</h4>
+
+
+        <!-- Tag Filter Mode Buttons -->
+        <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 10px; color: rgba(255,255,255,0.6); margin-bottom: 6px;">Filter Mode:</label>
+            <div style="display: flex; gap: 4px;">
+                <button id="galaxyCanHaveBtn" onclick="window.setGalaxyFilterMode('canHave')" style="
+                    flex: 1;
+                    background: rgba(100, 200, 100, 0.3);
+                    border: 2px solid rgba(100, 200, 100, 0.6);
+                    color: #fff;
+                    border-radius: 4px;
+                    padding: 6px;
+                    cursor: pointer;
+                    font-size: 9px;
+                    font-weight: bold;
+                    transition: all 0.2s;
+                ">Can Have</button>
+                <button id="galaxyMustHaveBtn" onclick="window.setGalaxyFilterMode('mustHave')" style="
+                    flex: 1;
+                    background: rgba(30, 30, 30, 0.3);
+                    border: 2px solid rgba(255, 255, 255, 0.2);
+                    color: #888;
+                    border-radius: 4px;
+                    padding: 6px;
+                    cursor: pointer;
+                    font-size: 9px;
+                    font-weight: bold;
+                    transition: all 0.2s;
+                ">Must Have</button>
+                <button id="galaxyExcludeBtn" onclick="window.setGalaxyFilterMode('exclude')" style="
+                    flex: 1;
+                    background: rgba(30, 30, 30, 0.3);
+                    border: 2px solid rgba(255, 255, 255, 0.2);
+                    color: #888;
+                    border-radius: 4px;
+                    padding: 6px;
+                    cursor: pointer;
+                    font-size: 9px;
+                    font-weight: bold;
+                    transition: all 0.2s;
+                ">Exclude</button>
+            </div>
+        </div>
+
+
+            <div id="galaxyTagsList" style="max-height: 100px; overflow-y: auto; -webkit-overflow-scrolling: touch;">
+                <!-- Tags will be populated here -->
+            </div>
+        </div>
+
+        <!-- File List -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <h4 style="color: #667eea; font-size: 11px; margin-bottom: 8px;">Files</h4>
+            <div id="galaxyFileList" style="max-height: 200px; overflow-y: auto; -webkit-overflow-scrolling: touch;">
+                <!-- File list will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Movement & Camera Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Movement & Camera</h3>
+    <div class="collapsible-content collapsed">
+        <!-- Stem Offset Distance -->
+        <div class="mode-section">
+            <label>Stem Galaxy Offset: <span id="stemOffsetValue">0</span></label>
+            <input type="range" min="0" max="1000" step="10" value="0"
+                   oninput="updateStemOffset(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">Distance between Audio Files and Stems galaxies (0 = same location)</div>
+        </div>
+
+        <!-- Movement Settings -->
+        <div class="mode-section">
+            <label>Movement Speed: <span id="galaxyMoveSpeedValue">3.0</span></label>
+            <input type="range" min="0.1" max="5" step="0.1" value="3.0"
+                   oninput="window.moveSpeed = parseFloat(this.value); document.getElementById('galaxyMoveSpeedValue').textContent = this.value;"
+                   style="width: 100%;">
+        </div>
+
+        <div class="mode-section">
+            <label>Look Sensitivity: <span id="galaxyLookSensValue">0.002</span></label>
+            <input type="range" min="0.0005" max="0.05" step="0.0005" value="0.002"
+                   oninput="window.lookSensitivity = parseFloat(this.value); document.getElementById('galaxyLookSensValue').textContent = this.value;"
+                   style="width: 100%;">
+        </div>
+    </div>
+
+    <!-- Visualization Modes Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Visualization Modes</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Color By:</label>
+            <select id="galaxyColorMode" onchange="window.currentColorMode = this.value; window.recreateParticles();">
+                <option value="tags">Tags (Category)</option>
+                <option value="key">Musical Key</option>
+                <option value="bpm">BPM Range</option>
+                <option value="length">Length (Duration)</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>X-Axis (Left/Right):</label>
+            <select id="galaxyXAxisMode" onchange="window.currentXMode = this.value; window.recreateParticles();">
+                <option value="bpm">BPM</option>
+                <option value="key">Musical Key</option>
+                <option value="tags">Tags (Hash)</option>
+                <option value="length">Length (Duration)</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>Y-Axis (Up/Down):</label>
+            <select id="galaxyYAxisMode" onchange="window.currentYMode = this.value; window.recreateParticles();">
+                <option value="key">Musical Key</option>
+                <option value="bpm">BPM</option>
+                <option value="tags">Tags (Hash)</option>
+                <option value="length">Length (Duration)</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>Z-Axis (Depth):</label>
+            <select id="galaxyZAxisMode" onchange="window.currentZMode = this.value; window.recreateParticles();">
+                <option value="tags">Tags (Hash)</option>
+                <option value="bpm">BPM</option>
+                <option value="key">Musical Key</option>
+                <option value="length">Length (Duration)</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>Particle Size: <span id="galaxyParticleSizeValue">5</span></label>
+            <input type="range" min="1" max="10" step="0.1" value="5"
+                   oninput="updateParticleSize(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+        <div class="mode-section">
+            <label>Brightness: <span id="galaxyBrightnessValue">0.8</span></label>
+            <input type="range" min="0.5" max="10" step="0.1" value="0.8"
+                   oninput="updateParticleBrightness(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+        <div class="mode-section">
+            <label>Visibility Distance: <span id="galaxyVisibilityValue">900</span></label>
+            <input type="range" min="100" max="2000" step="50" value="900"
+                   oninput="updateVisibility(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+    </div>
+
+    <!-- Galaxy Dynamics Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Galaxy Dynamics</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Rotation Mode:</label>
+            <select id="rotationMode" onchange="updateRotationMode(this.value)">
+                <option value="collective">Collective (Sphere)</option>
+                <option value="spiral">Spiral Galaxy</option>
+                <option value="individual">Individual Orbits</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>Rotation Axis:</label>
+            <select id="rotationAxis" onchange="updateRotationAxis(this.value)">
+                <option value="y">Y-Axis (Vertical)</option>
+                <option value="x">X-Axis (Horizontal)</option>
+                <option value="z">Z-Axis (Depth)</option>
+                <option value="all">All Axes</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>Motion Speed: <span id="galaxyMotionSpeedValue">50</span></label>
+            <input type="range" min="0" max="100" step="1" value="50"
+                   oninput="updateMotionSpeed(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">0=static, 50=default, 100=fast</div>
+        </div>
+
+        <div class="mode-section">
+            <label>Motion Radius: <span id="galaxyMotionRadiusValue">80</span></label>
+            <input type="range" min="0" max="200" step="1" value="80"
+                   oninput="updateMotionRadius(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <label>Particle Shape:</label>
+            <select id="particleShapeSelect" onchange="updateParticleShape(this.value)"
+                    style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                <option value="circle">Circle</option>
+                <option value="square">Square</option>
+                <option value="disc">Disc</option>
+                <option value="ring">Ring</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>X-Axis Scale: <span id="xAxisScaleValue">1.0</span></label>
+            <input type="range" min="0.1" max="3.0" step="0.1" value="1.0"
+                   oninput="updateXAxisScale(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <label>Y-Axis Scale: <span id="yAxisScaleValue">1.0</span></label>
+            <input type="range" min="0.1" max="3.0" step="0.1" value="1.0"
+                   oninput="updateYAxisScale(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <label>Z-Axis Scale: <span id="zAxisScaleValue">1.0</span></label>
+            <input type="range" min="0.1" max="3.0" step="0.1" value="1.0"
+                   oninput="updateZAxisScale(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <button class="toggle-btn" id="motionToggle" onclick="toggleMotion()" style="width: 100%; padding: 8px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #667eea; cursor: pointer;">
+                Motion: ON
+            </button>
+        </div>
+    </div>
+
+    <!-- Sub-Particle Dynamics Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Sub-Particle Dynamics</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Cluster Spread: <span id="clusterSpreadValue">10.0</span></label>
+            <input type="range" min="0.1" max="20" step="0.1" value="10.0"
+                   oninput="updateClusterSpread(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <label>Sub-Particle Size: <span id="subParticleSizeValue">0.3</span></label>
+            <input type="range" min="0.05" max="1.0" step="0.05" value="0.3"
+                   oninput="updateSubParticleSize(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <label>Main/Sub Size Ratio: <span id="mainToSubRatioValue">2.0</span></label>
+            <input type="range" min="1.0" max="10.0" step="0.5" value="2.0"
+                   oninput="updateMainToSubRatio(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <label>Sub-Particle Count: <span id="subParticleCountValue">48</span></label>
+            <input type="range" min="3" max="50" step="1" value="48"
+                   oninput="updateSubParticleCount(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <label>Sub-Particle Distance: <span id="subParticleMotionValue">3.6</span></label>
+            <input type="range" min="0" max="50" step="0.5" value="3.6"
+                   oninput="updateSubParticleMotion(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <label>Sub-Particle Speed: <span id="subParticleSpeedValue">0.5</span></label>
+            <input type="range" min="0.1" max="25.0" step="0.5" value="0.5"
+                   oninput="updateSubParticleSpeed(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+        </div>
+
+        <div class="mode-section">
+            <label>Motion Path:</label>
+            <select id="motionPathSelect" onchange="updateMotionPath(this.value)"
+                    style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                <option value="natural">Natural (Simple Orbit)</option>
+                <option value="ring">Ring (2D Orbit)</option>
+                <option value="sphere">Sphere (3D Orbit)</option>
+                <option value="figure8">Figure Eight</option>
+                <option value="random">Random (Chaotic Orbits)</option>
+                <option value="static">Static (No Motion)</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>Cluster Shape:</label>
+            <select id="subParticleShapeSelect" onchange="updateSubParticleShape(this.value)"
+                    style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                <option value="default">Default</option>
+                <option value="sphere">Sphere</option>
+                <option value="spiked">Spiked</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Visual Gradients Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Visual Gradients</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Size Gradient: <span id="sizeGradientValue">0.0</span></label>
+            <input type="range" min="0" max="2" step="0.1" value="0"
+                   oninput="updateSizeGradient(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">0 = uniform, 2 = extreme gradient (large center, tiny outer)</div>
+        </div>
+
+        <div class="mode-section">
+            <label>Density Gradient: <span id="densityGradientValue">0.0</span></label>
+            <input type="range" min="0" max="1" step="0.1" value="0"
+                   oninput="updateDensityGradient(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">0 = uniform, 1 = dense center, sparse outer</div>
+        </div>
+
+        <div class="mode-section">
+            <label>Bloom/Glow: <span id="bloomStrengthValue">0.0</span></label>
+            <input type="range" min="0" max="10" step="0.5" value="0"
+                   oninput="updateBloomStrength(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">0 = no glow, 10 = maximum bloom effect</div>
+        </div>
+    </div>
+
+    <!-- Audio Reactivity Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Audio Reactivity</h3>
+    <div class="collapsible-content collapsed">
+        <!-- Current file display -->
+        <div class="mode-section" style="margin-bottom: 12px;">
+            <div class="current-file-display" style="padding: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; text-align: center; font-size: 11px;">
+                <span style="color: #f00;">No file playing</span>
+            </div>
+        </div>
+
+        <div class="mode-section">
+            <label>Current Amplitude: <span id="audioAmplitudeDisplay" style="color: #667eea;">0.00</span></label>
+        </div>
+
+        <div class="mode-section" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px;">
+            <div style="text-align: center;">
+                <div style="color: rgba(255,255,255,0.5);">Bass</div>
+                <div id="bassAmplitudeDisplay" style="color: #f87171;">0.00</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: rgba(255,255,255,0.5);">Mids</div>
+                <div id="midsAmplitudeDisplay" style="color: #fbbf24;">0.00</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: rgba(255,255,255,0.5);">Highs</div>
+                <div id="highsAmplitudeDisplay" style="color: #60a5fa;">0.00</div>
+            </div>
+        </div>
+
+        <div class="mode-section">
+            <label>Frequency Range:</label>
+            <select id="frequencyModeSelect" onchange="updateFrequencyMode(this.value)"
+                    style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                <option value="all">All Frequencies</option>
+                <option value="bass">Bass (20-250 Hz)</option>
+                <option value="mids">Mids (250-2000 Hz)</option>
+                <option value="highs">Highs (2000+ Hz)</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>Pulse Strength (Playing): <span id="audioStrengthValue">40</span></label>
+            <input type="range" min="0" max="1000" step="1" value="40"
+                   oninput="updateAudioStrength(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">How strongly the current playing file reacts (0-1000)</div>
+        </div>
+
+        <div class="mode-section">
+            <label>Global Reactivity (All): <span id="globalReactivityValue">4.4</span></label>
+            <input type="range" min="0" max="10" step="0.1" value="4.4"
+                   oninput="updateGlobalReactivity(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">How much all other (non-playing) particles react to audio (0-10)</div>
+        </div>
+
+        <div class="mode-section">
+            <button class="toggle-btn" id="audioReactivityToggle" onclick="toggleAudioReactivity()" style="width: 100%; padding: 8px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #667eea; cursor: pointer;">
+                Audio Reactivity: ON
+            </button>
+        </div>
+    </div>
+
+    <!-- Crosshair Hover Effects Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Crosshair Hover Effects</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Hover Speed: <span id="hoverSpeedValue">10</span>%</label>
+            <input type="range" min="0" max="100" step="5" value="10"
+                   oninput="updateHoverSpeed(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">Speed % when hovered (10% = very slow)</div>
+        </div>
+
+        <div class="mode-section">
+            <label>Hover Scale: <span id="hoverScaleValue">1.0</span>x</label>
+            <input type="range" min="1" max="5" step="0.1" value="1.0"
+                   oninput="updateHoverScale(this.value)"
+                   style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">Size multiplier when hovered (1.0 = no change)</div>
+        </div>
+
+        <div class="mode-section">
+            <button class="toggle-btn" id="mouseInteractionToggle" onclick="toggleMouseInteraction()" style="width: 100%; padding: 8px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #667eea; cursor: pointer;">
+                Crosshair Hover: ON
+            </button>
+        </div>
+    </div>
+
+    <!-- Presets Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Presets</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Preset Name:</label>
+            <input type="text" id="presetNameInput" placeholder="My Preset"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();savePreset();this.blur();}"
+                   style="width: 100%; padding: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px; margin-bottom: 8px;">
+            <div style="margin-bottom: 8px;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer;">
+                    <input type="checkbox" id="saveCameraCheckbox" checked style="cursor: pointer;">
+                    <span>Save Camera Position</span>
+                </label>
+            </div>
+            <button onclick="savePreset()" style="width: 100%; padding: 8px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #667eea; cursor: pointer; margin-bottom: 8px;">
+                Save Preset
+            </button>
+        </div>
+
+        <div class="mode-section">
+            <label>Load Preset:</label>
+            <select id="presetSelect" onchange="loadPreset(this.value)"
+                    style="width: 100%; padding: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px; margin-bottom: 8px;">
+                <option value="">-- Select Preset --</option>
+            </select>
+            <button onclick="deletePreset()" style="width: 100%; padding: 8px; background: rgba(255,50,50,0.3); border: 1px solid #ff3333; border-radius: 4px; color: #ff6666; cursor: pointer; margin-bottom: 8px;">
+                Delete Selected Preset
+            </button>
+            <button onclick="setDefaultPreset()" style="width: 100%; padding: 8px; background: rgba(102,200,50,0.3); border: 1px solid #66cc33; border-radius: 4px; color: #88ee66; cursor: pointer; margin-bottom: 8px;">
+                Set as Default Preset
+            </button>
+        </div>
+
+        <div class="mode-section" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px; margin-top: 8px;">
+            <label style="font-size: 10px; color: rgba(255,255,255,0.6);">Import/Export Presets:</label>
+            <button onclick="exportPresetsAsJSON()" style="width: 100%; padding: 8px; background: rgba(66,153,225,0.3); border: 1px solid #4299e1; border-radius: 4px; color: #63b3ed; cursor: pointer; margin-bottom: 6px; font-size: 10px;">
+                📥 Export All to JSON
+            </button>
+            <input type="file" id="presetImportFile" accept=".json" style="display: none;" onchange="importPresetsFromJSON(event)">
+            <button onclick="document.getElementById('presetImportFile').click()" style="width: 100%; padding: 8px; background: rgba(66,153,225,0.3); border: 1px solid #4299e1; border-radius: 4px; color: #63b3ed; cursor: pointer; font-size: 10px;">
+                📤 Import from JSON
+            </button>
+        </div>
+
+        <div class="mode-section" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px; margin-top: 8px;">
+            <label style="font-size: 10px; color: rgba(255,255,255,0.6);">Cloud Sync (Supabase):</label>
+            <button onclick="syncPresetsToCloud()" style="width: 100%; padding: 8px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #667eea; cursor: pointer; margin-bottom: 6px; font-size: 10px;">
+                ☁️ Upload Presets to Cloud
+            </button>
+            <button onclick="loadPresetsFromCloud()" style="width: 100%; padding: 8px; background: rgba(102,200,234,0.3); border: 1px solid #66c8ea; border-radius: 4px; color: #66c8ea; cursor: pointer; font-size: 10px;">
+                ⬇️ Download Presets from Cloud
+            </button>
+            <div id="cloudSyncStatus" style="font-size: 9px; color: #888; margin-top: 6px; text-align: center;"></div>
+        </div>
+    </div>
+
+    <!-- Resize Handle -->
+    <div class="options-resize-handle" id="optionsResizeHandle">
+        <div class="resize-grip"></div>
+    </div>
+</div>
+
+<script>
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof window.initOptionsMenu2Drag === 'function') {
+            window.initOptionsMenu2Drag();
+        }
+        if (typeof window.initOptionsMenu2Resize === 'function') {
+            window.initOptionsMenu2Resize();
+        }
+    });
+} else {
+    if (typeof window.initOptionsMenu2Drag === 'function') {
+        window.initOptionsMenu2Drag();
+    }
+    if (typeof window.initOptionsMenu2Resize === 'function') {
+        window.initOptionsMenu2Resize();
+    }
+}
+</script>

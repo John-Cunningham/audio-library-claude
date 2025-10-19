@@ -759,42 +759,6 @@
             background: rgba(74, 158, 255, 0.08);
         }
 
-        /* Crosshair for Galaxy View aiming */
-        .crosshair {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 20px;
-            height: 20px;
-            z-index: 500;
-            pointer-events: none;
-            display: none; /* Hidden by default, toggled by Galaxy View */
-        }
-
-        .crosshair::before,
-        .crosshair::after {
-            content: '';
-            position: absolute;
-            background: rgba(255, 255, 255, 0.6);
-        }
-
-        .crosshair::before {
-            top: 50%;
-            left: 0;
-            width: 100%;
-            height: 2px;
-            transform: translateY(-50%);
-        }
-
-        .crosshair::after {
-            left: 50%;
-            top: 0;
-            height: 100%;
-            width: 2px;
-            transform: translateX(-50%);
-        }
-
         /* Mobile responsiveness */
         @media (max-width: 768px) {
             .header {
@@ -980,9 +944,6 @@
     </style>
 </head>
 <body>
-    <!-- Crosshair for Galaxy View (hidden by default) -->
-    <div class="crosshair" id="crosshair"></div>
-
     <div class="container">
         <div class="header">
             <h1>🎵 Audio Library Manager</h1>
@@ -990,7 +951,7 @@
         </div>
 
         <!-- View Selector Tabs -->
-        <div style="display: flex; justify-content: center; gap: 0; background: #0f0f0f; border-bottom: 1px solid #2a2a2a; padding: 0;">
+        <div style="display: flex; justify-content: center; gap: 0; background: #0f0f0f; border-bottom: 1px solid #2a2a2a; padding: 0; position: fixed; top: 47px; left: 0; right: 0; z-index: 1001;">
             <button class="view-tab active" data-view="library">
                 📚 Library
             </button>
@@ -1003,7 +964,7 @@
         </div>
 
         <!-- Library View Container -->
-        <div id="libraryViewContainer">
+        <div id="libraryViewContainer" style="margin-top: 47px;">
         <div class="tag-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <div style="display: flex; gap: 12px; align-items: center;">
@@ -1064,7 +1025,7 @@
         <!-- End Library View Container -->
 
         <!-- Galaxy View Container -->
-        <div id="galaxyViewContainer" style="display: none; position: fixed; top: 47px; left: 0; right: 0; bottom: 180px; background: #000;">
+        <div id="galaxyViewContainer" style="display: none; position: fixed; top: 94px; left: 0; right: 0; bottom: 180px; background: #000;">
             <!-- Three.js canvas will be injected here by galaxyView.js -->
         </div>
 

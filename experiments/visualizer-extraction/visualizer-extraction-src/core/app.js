@@ -38,7 +38,7 @@
 
         import * as ViewManager from './viewManager.js';
         import * as LibraryView from '../views/libraryView.js';
-        import * as GalaxyView from '../views/galaxyView.js';
+        import * as GalaxyView from '../views/galaxyViewRefactored.js';
         import * as SphereView from '../views/sphereView.js';
 
 
@@ -53,6 +53,26 @@
         let selectedFiles = new Set();
         let processingFiles = new Set();
         let expandedStems = new Set();
+
+        // Generate mock data for testing Galaxy View
+        // This will be replaced with real data once files are loaded
+        const generateMockData = () => {
+            const tags = ['electronic', 'ambient', 'chill', 'upbeat', 'rock', 'jazz', 'classical', 'pop', 'hip-hop', 'house', 'techno', 'dubstep', 'drum-and-bass'];
+            const keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+            return Array.from({ length: 300 }, (_, i) => ({
+                id: i,
+                name: `Track ${i + 1}`,
+                bpm: 60 + Math.random() * 140,
+                key: keys[Math.floor(Math.random() * keys.length)] + (Math.random() > 0.5 ? 'maj' : 'min'),
+                duration: 120 + Math.random() * 180,
+                tags: [tags[Math.floor(Math.random() * tags.length)]]
+            }));
+        };
+
+        // Initialize with mock data for testing
+        audioFiles = generateMockData();
+        window.audioFiles = audioFiles;
 
         let stemWavesurfers = {};
         let stemFiles = {};
@@ -159,6 +179,7 @@
                 if (error) throw error;
 
                 audioFiles = data || [];
+                // window.audioFiles is already exposed via Object.defineProperty getter at line 1829
 
                 // Phase 4 Fix 1: Preload ALL stem files for instant access
                 await preloadAllStems();
@@ -480,6 +501,7 @@
         function syncCurrentFileIdToState(value) {
             currentFileId = value;
             PlayerState.setCurrentFileId(value);
+            // window.currentFileId is already exposed via Object.defineProperty getter at line 1824
         }
 
         function syncCurrentRateToState(value) {
@@ -1124,7 +1146,16 @@
         }
 
         function playPause() {
+            console.log('[playPause] ========== PLAY/PAUSE FUNCTION CALLED ==========');
+            console.log('[playPause] wavesurfer exists:', !!wavesurfer);
+            console.log('[playPause] window.wavesurfer exists:', !!window.wavesurfer);
+            console.log('[playPause] Are they the same?', wavesurfer === window.wavesurfer);
+            console.log('[playPause] currentFileId:', currentFileId);
+            console.log('[playPause] Current view:', window.currentView);
+            console.log('[playPause] Pointer locked:', window.isPointerLocked);
+
             if (!wavesurfer || !currentFileId) {
+                console.log('[playPause] ⚠️ No wavesurfer or currentFileId, loading first file');
                 const filteredFiles = FileListRenderer.filterFiles();
                 const sortedFiles = FileListRenderer.sortFiles(filteredFiles);
                 if (sortedFiles.length > 0) {
@@ -1133,13 +1164,30 @@
                 return;
             }
 
+            const wasPlaying = wavesurfer.isPlaying();
+            console.log('[playPause] Current playing state:', wasPlaying);
+            console.log('[playPause] Calling wavesurfer.playPause()...');
+
             wavesurfer.playPause();
+
+            const nowPlaying = wavesurfer.isPlaying();
+            console.log('[playPause] New playing state:', nowPlaying);
+            console.log('[playPause] State changed:', wasPlaying !== nowPlaying);
+
             const icon = document.getElementById('playPauseIcon');
-            icon.textContent = wavesurfer.isPlaying() ? '⏸' : '▶';
+            if (icon) {
+                icon.textContent = nowPlaying ? '⏸' : '▶';
+                console.log('[playPause] ✅ Updated play/pause icon to:', icon.textContent);
+            } else {
+                console.warn('[playPause] ⚠️ playPauseIcon element not found');
+            }
 
-            syncUserPausedToState(!wavesurfer.isPlaying());
+            syncUserPausedToState(!nowPlaying);
+            console.log('[playPause] Synced userPaused state to:', !nowPlaying);
 
-            recordAction(wavesurfer.isPlaying() ? 'play' : 'pause', {});
+            recordAction(nowPlaying ? 'play' : 'pause', {});
+            console.log('[playPause] Recorded action:', nowPlaying ? 'play' : 'pause');
+            console.log('[playPause] ==========================================');
         }
 
         function updatePlayerTime() {

@@ -619,12 +619,12 @@ export async function init(data = {}) {
 
     // Auto-load default preset if set
     const defaultPresetName = localStorage.getItem('galaxyDefaultPreset');
-    if (defaultPresetName && window.loadPreset) {
+    if (defaultPresetName && window.loadGalaxyPreset) {
         console.log('🎨 Auto-loading default preset:', defaultPresetName);
         // Delay slightly to ensure menu is fully loaded
         setTimeout(() => {
-            window.loadPreset(defaultPresetName);
-        }, 1000); // Increased delay to ensure everything is initialized
+            window.loadGalaxyPreset(defaultPresetName);
+        }, 500);
     }
 
     // Start animation loop
@@ -2100,21 +2100,6 @@ function populateTags() {
     tagsContainer.innerHTML = '';
 
     sortedTags.forEach(([tag, count]) => {
-        // Determine tag filter state and color
-        let bgColor = 'rgba(255,255,255,0.05)';
-        let borderLeft = 'none';
-        
-        if (canHaveTags.has(tag)) {
-            bgColor = 'rgba(100, 200, 100, 0.15)';
-            borderLeft = '3px solid rgba(100, 200, 100, 0.8)';
-        } else if (mustHaveTags.has(tag)) {
-            bgColor = 'rgba(100, 100, 200, 0.15)';
-            borderLeft = '3px solid rgba(100, 100, 200, 0.8)';
-        } else if (excludeTags.has(tag)) {
-            bgColor = 'rgba(200, 100, 100, 0.15)';
-            borderLeft = '3px solid rgba(200, 100, 100, 0.8)';
-        }
-
         const item = document.createElement('div');
         item.style.cssText = `
             display: flex;
@@ -2122,24 +2107,12 @@ function populateTags() {
             align-items: center;
             padding: 4px 8px;
             margin-bottom: 2px;
-            background: ${bgColor};
-            border-left: ${borderLeft};
+            background: rgba(255,255,255,0.05);
             border-radius: 4px;
             font-size: 11px;
             color: #ccc;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
         `;
-
-        // Hover effect
-        item.addEventListener('mouseenter', () => {
-            item.style.background = item.style.background.replace(/0\.15/, '0.25').replace(/0\.05/, '0.1');
-            item.style.transform = 'translateX(2px)';
-        });
-        item.addEventListener('mouseleave', () => {
-            item.style.background = bgColor;
-            item.style.transform = 'translateX(0)';
-        });
 
         const tagName = document.createElement('span');
         tagName.textContent = tag;
@@ -2156,13 +2129,9 @@ function populateTags() {
         item.appendChild(tagName);
         item.appendChild(tagCount);
 
-        // Click handler to add/remove tag from filter
+        // TODO: Add click handler to filter by tag
         item.addEventListener('click', () => {
-            if (window.handleGalaxyTagFilterClick) {
-                window.handleGalaxyTagFilterClick(tag);
-            } else {
-                console.error('❌ handleGalaxyTagFilterClick not found');
-            }
+            console.log('Tag clicked:', tag);
         });
 
         tagsContainer.appendChild(item);
@@ -2171,39 +2140,19 @@ function populateTags() {
     console.log('✅ Populated tags list with', sortedTags.length, 'tags');
 }
 
-
 /**
  * Populates the file list
  */
 function populateFileList() {
-    console.log('📋 populateFileList() called');
-
     const fileListContainer = document.getElementById('galaxyFileList');
     if (!fileListContainer) {
         console.warn('⚠️ galaxyFileList element not found');
         return;
     }
 
-    console.log('📋 File list container found, clearing...');
     fileListContainer.innerHTML = '';
 
-    if (!audioFilesData || audioFilesData.length === 0) {
-        console.warn('⚠️ No audioFilesData available for file list');
-        return;
-    }
-
-    console.log(`📋 Total files in audioFilesData: ${audioFilesData.length}`);
-
-    // Filter files based on visibility
-    const visibleFiles = audioFilesData.filter(f =>
-        !f._hiddenFromParticles &&
-        !f._hiddenByTagFilter &&
-        !f._hiddenBySearch
-    );
-
-    console.log(`📋 Visible files after filtering: ${visibleFiles.length}`);
-
-    visibleFiles.forEach(file => {
+    audioFilesData.forEach(file => {
         const category = getCategoryForFile(file);
         const colorData = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
         const color = `hsl(${colorData.hue}, ${colorData.sat * 100}%, 60%)`;
@@ -2243,26 +2192,23 @@ function populateFileList() {
             white-space: nowrap;
         `;
 
-        // Metadata (BPM, Key)
-        const metadata = document.createElement('div');
-        const bpm = file.bpm || '?';
-        const key = file.key || '?';
-        metadata.textContent = `${bpm} | ${key}`;
-        metadata.style.cssText = `
-            font-size: 10px;
+        // BPM and Key
+        const info = document.createElement('div');
+        info.textContent = `${file.bpm || '?'}/${file.key || '?'}`;
+        info.style.cssText = `
             color: #888;
-            white-space: nowrap;
+            font-size: 10px;
+            flex-shrink: 0;
         `;
 
         item.appendChild(colorIndicator);
         item.appendChild(fileName);
-        item.appendChild(metadata);
+        item.appendChild(info);
 
         // Hover effect
         item.addEventListener('mouseenter', () => {
             item.style.background = 'rgba(255,255,255,0.1)';
         });
-
         item.addEventListener('mouseleave', () => {
             item.style.background = 'rgba(255,255,255,0.05)';
         });
@@ -2279,7 +2225,7 @@ function populateFileList() {
         fileListContainer.appendChild(item);
     });
 
-    console.log('✅ Populated file list with', visibleFiles.length, 'visible files (', audioFilesData.length, 'total)');
+    console.log('✅ Populated file list with', audioFilesData.length, 'files');
 }
 
 // ============================================================================
@@ -2310,55 +2256,42 @@ function toggleTagFilterPanel() {
 function setFilterMode(mode) {
     currentFilterMode = mode;
 
-    // Update button styles for BOTH standalone panel AND options menu
+    // Update button styles
     const buttons = {
-        canHave: [
-            document.getElementById('canHaveBtn'),        // Standalone panel
-            document.getElementById('galaxyCanHaveBtn')   // Options menu
-        ],
-        mustHave: [
-            document.getElementById('mustHaveBtn'),       // Standalone panel
-            document.getElementById('galaxyMustHaveBtn')  // Options menu
-        ],
-        exclude: [
-            document.getElementById('excludeBtn'),        // Standalone panel
-            document.getElementById('galaxyExcludeBtn')   // Options menu
-        ]
+        canHave: document.getElementById('canHaveBtn'),
+        mustHave: document.getElementById('mustHaveBtn'),
+        exclude: document.getElementById('excludeBtn')
     };
 
     Object.keys(buttons).forEach(key => {
-        const btns = buttons[key];
+        const btn = buttons[key];
+        if (!btn) return;
 
-        btns.forEach(btn => {
-            if (!btn) return;
-
-            if (key === mode) {
-                // Active state
-                if (key === 'canHave') {
-                    btn.style.background = 'rgba(100, 200, 100, 0.3)';
-                    btn.style.borderColor = 'rgba(100, 200, 100, 0.6)';
-                    btn.style.color = '#fff';
-                } else if (key === 'mustHave') {
-                    btn.style.background = 'rgba(100, 100, 200, 0.3)';
-                    btn.style.borderColor = 'rgba(100, 100, 200, 0.6)';
-                    btn.style.color = '#fff';
-                } else if (key === 'exclude') {
-                    btn.style.background = 'rgba(200, 100, 100, 0.3)';
-                    btn.style.borderColor = 'rgba(200, 100, 100, 0.6)';
-                    btn.style.color = '#fff';
-                }
-            } else {
-                // Inactive state
-                btn.style.background = 'rgba(30, 30, 30, 0.3)';
-                btn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                btn.style.color = '#888';
+        if (key === mode) {
+            // Active state
+            if (key === 'canHave') {
+                btn.style.background = 'rgba(100, 200, 100, 0.3)';
+                btn.style.borderColor = 'rgba(100, 200, 100, 0.6)';
+                btn.style.color = '#fff';
+            } else if (key === 'mustHave') {
+                btn.style.background = 'rgba(100, 100, 200, 0.3)';
+                btn.style.borderColor = 'rgba(100, 100, 200, 0.6)';
+                btn.style.color = '#fff';
+            } else if (key === 'exclude') {
+                btn.style.background = 'rgba(200, 100, 100, 0.3)';
+                btn.style.borderColor = 'rgba(200, 100, 100, 0.6)';
+                btn.style.color = '#fff';
             }
-        });
+        } else {
+            // Inactive state
+            btn.style.background = 'rgba(30, 30, 30, 0.3)';
+            btn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+            btn.style.color = '#888';
+        }
     });
 
     console.log('🏷️ Filter mode set to:', mode);
 }
-
 
 /**
  * Populate tag filter buttons from all available tags
@@ -2445,101 +2378,76 @@ function populateTagFilterButtons(searchQuery = '') {
  * Handle clicking a tag in the filter panel
  */
 function handleTagFilterClick(tag) {
-    // Check if tag is already in current mode set
-    let tagWasInCurrentMode = false;
-    
-    if (currentFilterMode === 'canHave' && canHaveTags.has(tag)) {
-        tagWasInCurrentMode = true;
-    } else if (currentFilterMode === 'mustHave' && mustHaveTags.has(tag)) {
-        tagWasInCurrentMode = true;
-    } else if (currentFilterMode === 'exclude' && excludeTags.has(tag)) {
-        tagWasInCurrentMode = true;
-    }
-
     // Remove from all sets first
     canHaveTags.delete(tag);
     mustHaveTags.delete(tag);
     excludeTags.delete(tag);
 
-    // If tag was NOT already in current mode, add it
-    // If it WAS in current mode, leave it removed (toggle off)
-    if (!tagWasInCurrentMode) {
-        if (currentFilterMode === 'canHave') {
-            canHaveTags.add(tag);
-        } else if (currentFilterMode === 'mustHave') {
-            mustHaveTags.add(tag);
-        } else if (currentFilterMode === 'exclude') {
-            excludeTags.add(tag);
-        }
+    // Add to current mode set
+    if (currentFilterMode === 'canHave') {
+        canHaveTags.add(tag);
+    } else if (currentFilterMode === 'mustHave') {
+        mustHaveTags.add(tag);
+    } else if (currentFilterMode === 'exclude') {
+        excludeTags.add(tag);
     }
 
     // Update UI
     populateTagFilterButtons();
-    populateTags();  // Update options menu tags list
     updateActiveFiltersDisplay();
     applyTagFilters();
 
-    const action = tagWasInCurrentMode ? 'removed from' : 'added to';
-    console.log(`🏷️ Tag "${tag}" ${action} ${currentFilterMode} filter`);
+    console.log('🏷️ Tag clicked:', tag, 'in mode:', currentFilterMode);
 }
-
 
 /**
  * Update the active filters display
  */
 function updateActiveFiltersDisplay() {
-    // Update BOTH standalone panel AND options menu displays
-    const containers = [
-        document.getElementById('activeFiltersDisplay'),       // Standalone panel
-        document.getElementById('galaxyActiveFiltersDisplay')  // Options menu
-    ];
+    const container = document.getElementById('activeFiltersDisplay');
+    if (!container) return;
 
     const hasFilters = canHaveTags.size > 0 || mustHaveTags.size > 0 || excludeTags.size > 0;
 
-    let html = '';
-
     if (!hasFilters) {
-        html = '<div style="font-size: 11px; color: #666;">No active filters</div>';
-    } else {
-        if (canHaveTags.size > 0) {
-            html += `<div style="margin-bottom: 6px;">
-                <span style="color: rgba(100, 200, 100, 1); font-size: 10px; font-weight: bold;">CAN HAVE:</span>
-                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">`;
-            canHaveTags.forEach(tag => {
-                html += `<span style="background: rgba(100, 200, 100, 0.2); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`;
-            });
-            html += `</div></div>`;
-        }
-
-        if (mustHaveTags.size > 0) {
-            html += `<div style="margin-bottom: 6px;">
-                <span style="color: rgba(100, 100, 200, 1); font-size: 10px; font-weight: bold;">MUST HAVE:</span>
-                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">`;
-            mustHaveTags.forEach(tag => {
-                html += `<span style="background: rgba(100, 100, 200, 0.2); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`;
-            });
-            html += `</div></div>`;
-        }
-
-        if (excludeTags.size > 0) {
-            html += `<div style="margin-bottom: 6px;">
-                <span style="color: rgba(200, 100, 100, 1); font-size: 10px; font-weight: bold;">EXCLUDE:</span>
-                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">`;
-            excludeTags.forEach(tag => {
-                html += `<span style="background: rgba(200, 100, 100, 0.2); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`;
-            });
-            html += `</div></div>`;
-        }
+        container.innerHTML = '<div style="font-size: 11px; color: #666;">No active filters</div>';
+        return;
     }
 
-    // Update both containers
-    containers.forEach(container => {
-        if (container) {
-            container.innerHTML = html;
-        }
-    });
-}
+    let html = '';
 
+    if (canHaveTags.size > 0) {
+        html += `<div style="margin-bottom: 6px;">
+            <span style="color: rgba(100, 200, 100, 1); font-size: 10px; font-weight: bold;">CAN HAVE:</span>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">`;
+        canHaveTags.forEach(tag => {
+            html += `<span style="background: rgba(100, 200, 100, 0.2); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`;
+        });
+        html += `</div></div>`;
+    }
+
+    if (mustHaveTags.size > 0) {
+        html += `<div style="margin-bottom: 6px;">
+            <span style="color: rgba(100, 100, 200, 1); font-size: 10px; font-weight: bold;">MUST HAVE:</span>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">`;
+        mustHaveTags.forEach(tag => {
+            html += `<span style="background: rgba(100, 100, 200, 0.2); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`;
+        });
+        html += `</div></div>`;
+    }
+
+    if (excludeTags.size > 0) {
+        html += `<div style="margin-bottom: 6px;">
+            <span style="color: rgba(200, 100, 100, 1); font-size: 10px; font-weight: bold;">EXCLUDE:</span>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">`;
+        excludeTags.forEach(tag => {
+            html += `<span style="background: rgba(200, 100, 100, 0.2); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`;
+        });
+        html += `</div></div>`;
+    }
+
+    container.innerHTML = html;
+}
 
 /**
  * Apply tag filters to particles
@@ -2580,11 +2488,6 @@ function applyTagFilters() {
     // Recreate particles with new visibility
     recreateParticles();
 
-    // Update options menu UI elements to reflect filter results
-    populateFileList();     // Update file list
-    populateTags();         // Update tags list (to show filter state)
-    populateColorLegend();  // Update color legend
-
     const visibleCount = audioFilesData.filter(f => !f._hiddenByTagFilter).length;
     console.log(`🏷️ Tag filters applied: ${visibleCount}/${audioFilesData.length} files visible`);
 }
@@ -2620,12 +2523,8 @@ function handleTagFilterSearch(value) {
  */
 function handleSearch(query) {
     searchQuery = query.toLowerCase().trim();
-    console.log(`🔍 Search called with query: "${query}"`);
 
-    if (!audioFilesData || audioFilesData.length === 0) {
-        console.warn('⚠️ No audio files data available for search');
-        return;
-    }
+    if (!audioFilesData || audioFilesData.length === 0) return;
 
     // Apply search filter to all files
     audioFilesData.forEach(file => {
@@ -2647,22 +2546,11 @@ function handleSearch(query) {
         file._hiddenBySearch = !(nameMatch || tagsMatch);
     });
 
-    const visibleCount = audioFilesData.filter(f => !f._hiddenBySearch).length;
-    console.log(`🔍 After filtering: ${visibleCount}/${audioFilesData.length} files match search`);
-
-    // Update options menu UI elements FIRST (before recreateParticles)
-    console.log('🔍 Updating file list...');
-    populateFileList();     // Update file list
-    console.log('🔍 Updating tags list...');
-    populateTags();         // Update tags list
-    console.log('🔍 Updating color legend...');
-    populateColorLegend();  // Update color legend
-
-    // Recreate particles with new visibility LAST
-    console.log('🔍 Recreating particles...');
+    // Recreate particles with new visibility
     recreateParticles();
 
-    console.log(`✅ Search complete: "${searchQuery}" - ${visibleCount}/${audioFilesData.length} files visible`);
+    const visibleCount = audioFilesData.filter(f => !f._hiddenBySearch).length;
+    console.log(`🔍 Search applied: "${searchQuery}" - ${visibleCount}/${audioFilesData.length} files visible`);
 }
 
 /**

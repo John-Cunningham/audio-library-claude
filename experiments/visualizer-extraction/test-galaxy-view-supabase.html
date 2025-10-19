@@ -98,6 +98,54 @@
             background: rgba(0, 255, 0, 0.2);
             border-left: 3px solid #0f0;
         }
+
+        /* Crosshair for aiming */
+        .crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 9999;
+            display: block;
+        }
+
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .crosshair::before {
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            transform: translateY(-50%);
+        }
+
+        .crosshair::after {
+            left: 50%;
+            top: 0;
+            height: 100%;
+            width: 2px;
+            transform: translateX(-50%);
+        }
+
+        /* Make crosshair more visible on mobile */
+        @media (pointer: coarse) {
+            .crosshair {
+                width: 30px;
+                height: 30px;
+            }
+            .crosshair::before,
+            .crosshair::after {
+                background: rgba(255, 255, 255, 0.8);
+            }
+        }
     </style>
 
     <!-- Three.js core -->
@@ -120,6 +168,9 @@
 <body>
     <div id="container">
         <div id="galaxyViewContainer"></div>
+
+        <!-- Crosshair -->
+        <div class="crosshair"></div>
 
         <div id="controls">
             <h2>🌌 Galaxy View + Supabase</h2>
@@ -214,6 +265,11 @@
                 updateGalaxyView();
                 updateStatus(`Loaded ${window.audioFiles.length} files from Supabase`);
 
+                // Update file count in options menu (if it's loaded)
+                if (window.updateGalaxyFileCount) {
+                    window.updateGalaxyFileCount();
+                }
+
                 console.log('Loaded files:', window.audioFiles);
             } catch (error) {
                 console.error('Supabase error:', error);
@@ -270,6 +326,11 @@
             updateFileList();
             updateGalaxyView();
             updateStatus(`Loaded ${window.audioFiles.length} demo files`);
+
+            // Update file count in options menu (if it's loaded)
+            if (window.updateGalaxyFileCount) {
+                window.updateGalaxyFileCount();
+            }
         };
 
         // Clear all files
@@ -281,6 +342,11 @@
             updateFileList();
             updateGalaxyView();
             updateStatus('All files cleared');
+
+            // Update file count in options menu (if it's loaded)
+            if (window.updateGalaxyFileCount) {
+                window.updateGalaxyFileCount();
+            }
         };
 
         // Update file list UI
@@ -365,48 +431,15 @@
         window.updateStemOffset = (value) => console.log('Stem offset:', value);
         window.updateRotationMode = (value) => console.log('Rotation mode:', value);
         window.updateRotationAxis = (value) => console.log('Rotation axis:', value);
-        window.updateMotionSpeed = (value) => {
-            document.getElementById('speedValue').textContent = value;
-            window.orbitSpeed = parseFloat(value);
-        };
-        window.updateMotionSpeedDirect = (value) => {
-            document.getElementById('speedValue').textContent = value;
-            document.getElementById('speedSlider').value = value;
-            window.orbitSpeed = parseFloat(value);
-        };
-        window.updateMotionRadius = (value) => {
-            document.getElementById('radiusValue').textContent = value;
-            window.orbitRadius = parseFloat(value);
-        };
-        window.updateParticleSize = (value) => {
-            document.getElementById('sizeValue').textContent = value;
-            window.particleSize = parseFloat(value);
-            if (window.galaxyView && window.galaxyView.updateParticleSize) {
-                window.galaxyView.updateParticleSize(value);
-            }
-        };
-        window.updateParticleBrightness = (value) => {
-            document.getElementById('brightnessValue').textContent = value;
-            window.particleBrightness = parseFloat(value);
-        };
-        window.updateVisibility = (value) => {
-            document.getElementById('visibilityValue').textContent = value;
-            window.visibilityDistance = parseInt(value);
-        };
-        window.updateBloomStrength = (value) => {
-            window.bloomStrength = parseFloat(value);
-            console.log('Bloom strength:', value);
-        };
-        window.recreateParticles = () => {
-            if (window.galaxyView && window.audioFiles.length > 0) {
-                window.galaxyView.updateFiles(window.audioFiles);
-            }
-        };
-        window.updateBrightness = () => {
-            if (window.galaxyView && window.galaxyView.updateBrightness) {
-                window.galaxyView.updateBrightness();
-            }
-        };
+        // IMPORTANT: All update functions are now provided by galaxyViewReplacement.js
+        // DO NOT define them here as they would override the correct implementations
+        // The following functions are provided:
+        // - updateParticleSize, updateParticleBrightness, updateVisibility
+        // - updateClusterSpread, updateSubParticleCount, updateBloomStrength
+        // - updateAudioStrength, updateGlobalReactivity
+        // - updateMotionSpeed, updateMotionRadius
+        // - updateXAxisScale, updateYAxisScale, updateZAxisScale
+        // - updateBrightness (deprecated, use updateParticleBrightness)
         window.savePreset = () => console.log('Save preset');
         window.loadPreset = (value) => console.log('Load preset:', value);
 

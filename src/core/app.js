@@ -275,6 +275,9 @@
 
             wavesurfer = parentWaveform.create(WaveSurfer);
 
+            // Expose wavesurfer globally for Galaxy View audio analyzer
+            window.wavesurfer = wavesurfer;
+
             if (!parentPlayerComponent) {
                 parentPlayerComponent = new PlayerBarComponent({
                     playerType: 'parent',

@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galaxy Visualizer - Integration Example</title>
+
+    <!-- Three.js Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+
+    <!-- WaveSurfer (optional, for audio) -->
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Info Panel */
+        .info-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+
+        .info-panel h3 {
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .info-panel div {
+            margin: 5px 0;
+            opacity: 0.8;
+        }
+
+        /* Controls */
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .controls button {
+            padding: 10px 20px;
+            background: rgba(102, 126, 234, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .controls button:hover {
+            background: rgba(102, 126, 234, 1);
+            transform: translateY(-2px);
+        }
+
+        /* Simple Options */
+        .quick-options {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            font-size: 12px;
+            z-index: 1000;
+        }
+
+        .quick-options h4 {
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .option-row {
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .option-row label {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .option-row input[type="range"] {
+            flex: 2;
+            min-width: 100px;
+        }
+
+        .option-row span {
+            min-width: 40px;
+            text-align: right;
+            color: #667eea;
+        }
+
+        select {
+            padding: 4px 8px;
+            background: rgba(102, 126, 234, 0.2);
+            color: white;
+            border: 1px solid rgba(102, 126, 234, 0.5);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <!-- Info Panel -->
+    <div class="info-panel">
+        <h3>Galaxy Visualizer Demo</h3>
+        <div>Files: <span id="fileCount">0</span></div>
+        <div>Particles: <span id="particleCount">0</span></div>
+        <div>FPS: <span id="fps">0</span></div>
+        <div>Audio: <span id="audioLevel">0.00</span></div>
+    </div>
+
+    <!-- Quick Options -->
+    <div class="quick-options">
+        <h4>Quick Controls</h4>
+
+        <div class="option-row">
+            <label>Motion:</label>
+            <select id="motionMode" onchange="changeMotionMode(this.value)">
+                <option value="none">None</option>
+                <option value="collective" selected>Collective</option>
+                <option value="individual">Individual</option>
+                <option value="random">Random</option>
+                <option value="audio">Audio</option>
+                <option value="wave">Wave</option>
+            </select>
+        </div>
+
+        <div class="option-row">
+            <label>Bloom:</label>
+            <input type="range" id="bloomSlider" min="0" max="2" step="0.1" value="0.8">
+            <span id="bloomValue">0.8</span>
+        </div>
+
+        <div class="option-row">
+            <label>Speed:</label>
+            <input type="range" id="speedSlider" min="0" max="10" step="0.1" value="1.5">
+            <span id="speedValue">1.5</span>
+        </div>
+
+        <div class="option-row">
+            <label>Reactivity:</label>
+            <input type="range" id="reactivitySlider" min="0" max="100" step="1" value="40">
+            <span id="reactivityValue">40</span>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+        <button onclick="generateDemoData()">Generate Demo Files</button>
+        <button onclick="toggleMotion()">Toggle Motion</button>
+        <button onclick="toggleBloom()">Toggle Bloom</button>
+        <button onclick="resetCamera()">Reset Camera</button>
+    </div>
+
+    <!-- Load Extracted Modules (inline for demo) -->
+    <script>
+        // ========== UTILITIES ==========
+        function seededRandom(seed) {
+            const x = Math.sin(seed) * 10000;
+            return x - Math.floor(x);
+        }
+
+        function createParticleTexture(shape) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d', { alpha: true });
+            const centerX = 64;
+            const centerY = 64;
+
+            ctx.clearRect(0, 0, 128, 128);
+
+            if (shape === 'circle') {
+                const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 60);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
+                gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function mapRange(value, inMin, inMax, outMin, outMax) {
+            return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+        }
+
+        function clamp(value, min, max) {
+            return Math.max(min, Math.min(max, value));
+        }
+
+        function hashString(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash) / 2147483647;
+        }
+
+        // ========== GLOBALS ==========
+        let scene, camera, renderer, composer;
+        let particleSystem = null;
+        let particles = [];
+        let audioFiles = [];
+
+        // Particle settings
+        let particlesPerCluster = 32;
+        let particleSize = 5;
+        let subParticleScale = 0.3;
+        let clusterRadius = 10;
+        let particleShape = 'circle';
+        let particleBrightness = 0.8;
+
+        // Animation settings
+        let animationTime = 0;
+        let motionEnabled = true;
+        let motionMode = 'collective';
+        let orbitSpeed = 0.0000015;
+        let orbitRadius = 80;
+        let audioReactivityEnabled = true;
+        let audioReactivityStrength = 40;
+
+        // Audio (simulated for demo)
+        let currentAudioAmplitude = 0;
+        let bassAmplitude = 0;
+        let midsAmplitude = 0;
+        let highsAmplitude = 0;
+
+        // Visual effects
+        let bloomPass = null;
+        let bloomStrength = 0.8;
+
+        // FPS counter
+        let fps = 0;
+        let frameCount = 0;
+        let lastFpsUpdate = 0;
+
+        // ========== INITIALIZATION ==========
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x000510, 100, 1000);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                75,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                2000
+            );
+            camera.position.set(0, 50, 150);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                alpha: true
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            // Lighting (subtle ambient)
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+
+            // Post-processing (bloom)
+            composer = new THREE.EffectComposer(renderer);
+            const renderPass = new THREE.RenderPass(scene, camera);
+            composer.addPass(renderPass);
+
+            bloomPass = new THREE.UnrealBloomPass(
+                new THREE.Vector2(window.innerWidth, window.innerHeight),
+                bloomStrength,
+                0.4,
+                0.6
+            );
+            composer.addPass(bloomPass);
+
+            // Add stars
+            addStars();
+
+            // Generate initial demo data
+            generateDemoData();
+
+            // Start animation
+            animate();
+
+            // Handle resize
+            window.addEventListener('resize', onWindowResize);
+
+            // Setup controls
+            setupControls();
+        }
+
+        // ========== DEMO DATA GENERATION ==========
+        function generateDemoData() {
+            audioFiles = [];
+            const categories = ['drums', 'bass', 'synth', 'vox', 'pad', 'lead'];
+            const keys = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+
+            // Generate 50 demo files
+            for (let i = 0; i < 50; i++) {
+                audioFiles.push({
+                    id: `file_${i}`,
+                    name: `Track ${i + 1}`,
+                    bpm: 60 + Math.random() * 120,
+                    key: keys[Math.floor(Math.random() * keys.length)],
+                    tags: [categories[Math.floor(Math.random() * categories.length)]],
+                    length: 120 + Math.random() * 180
+                });
+            }
+
+            // Update display
+            document.getElementById('fileCount').textContent = audioFiles.length;
+
+            // Create particles
+            createGalaxyParticles();
+        }
+
+        // ========== PARTICLE CREATION ==========
+        function createGalaxyParticles() {
+            // Remove old system
+            if (particleSystem) {
+                scene.remove(particleSystem);
+                if (particleSystem.geometry) particleSystem.geometry.dispose();
+                if (particleSystem.material) particleSystem.material.dispose();
+            }
+
+            particles = [];
+
+            // Calculate total particles
+            const totalParticles = audioFiles.length * particlesPerCluster;
+
+            // Create geometry and material
+            const geometry = new THREE.PlaneGeometry(1, 1);
+            const material = new THREE.MeshBasicMaterial({
+                map: createParticleTexture(particleShape),
+                transparent: true,
+                opacity: particleBrightness,
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+
+            // Create instanced mesh
+            particleSystem = new THREE.InstancedMesh(geometry, material, totalParticles);
+            particleSystem.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+            const dummy = new THREE.Object3D();
+            const color = new THREE.Color();
+            let instanceIndex = 0;
+
+            // Create clusters
+            audioFiles.forEach((file, fileIndex) => {
+                // Position based on properties
+                const x = mapRange(file.bpm, 60, 180, -100, 100);
+                const y = mapRange(fileIndex % 7, 0, 6, -50, 50);
+                const z = (seededRandom(fileIndex * 3) - 0.5) * 100;
+
+                // Color based on category
+                const hue = hashString(file.tags[0] || 'default');
+                const baseColor = new THREE.Color().setHSL(hue, 0.7, 0.6);
+
+                const cluster = {
+                    file,
+                    centerPosition: new THREE.Vector3(x, y, z),
+                    color: baseColor,
+                    subParticles: []
+                };
+
+                // Create sub-particles
+                for (let i = 0; i < particlesPerCluster; i++) {
+                    let offsetX = 0, offsetY = 0, offsetZ = 0;
+
+                    if (i > 1) { // Keep first 2 at center
+                        const theta = seededRandom(fileIndex * 100 + i) * Math.PI * 2;
+                        const phi = Math.acos(2 * seededRandom(fileIndex * 100 + i + 1) - 1);
+                        const radius = clusterRadius * (0.5 + seededRandom(fileIndex * 100 + i + 2) * 0.5);
+
+                        offsetX = radius * Math.sin(phi) * Math.cos(theta);
+                        offsetY = radius * Math.sin(phi) * Math.sin(theta);
+                        offsetZ = radius * Math.cos(phi);
+                    }
+
+                    const subParticle = {
+                        offset: new THREE.Vector3(offsetX, offsetY, offsetZ),
+                        instanceIndex: instanceIndex,
+                        orbitPhase: seededRandom(fileIndex * 200 + i) * Math.PI * 2
+                    };
+
+                    cluster.subParticles.push(subParticle);
+
+                    // Set initial position
+                    dummy.position.set(x + offsetX, y + offsetY, z + offsetZ);
+                    dummy.scale.setScalar(particleSize * subParticleScale);
+                    dummy.updateMatrix();
+                    particleSystem.setMatrixAt(instanceIndex, dummy.matrix);
+
+                    // Set color with variation
+                    const lightness = 0.6 + (seededRandom(fileIndex * 300 + i) - 0.5) * 0.2;
+                    color.setHSL(hue, 0.7, lightness);
+                    particleSystem.setColorAt(instanceIndex, color);
+
+                    instanceIndex++;
+                }
+
+                particles.push(cluster);
+            });
+
+            particleSystem.instanceMatrix.needsUpdate = true;
+            particleSystem.instanceColor.needsUpdate = true;
+
+            scene.add(particleSystem);
+
+            // Update display
+            document.getElementById('particleCount').textContent = totalParticles;
+        }
+
+        // ========== ANIMATION ==========
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // FPS counter
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFpsUpdate > 1000) {
+                fps = frameCount;
+                frameCount = 0;
+                lastFpsUpdate = now;
+                document.getElementById('fps').textContent = fps;
+            }
+
+            // Simulate audio (sine wave for demo)
+            const audioTime = Date.now() * 0.001;
+            currentAudioAmplitude = Math.abs(Math.sin(audioTime)) * 2;
+            bassAmplitude = Math.abs(Math.sin(audioTime * 0.5)) * 3;
+            midsAmplitude = Math.abs(Math.sin(audioTime * 1.5)) * 2;
+            highsAmplitude = Math.abs(Math.sin(audioTime * 3)) * 1.5;
+
+            document.getElementById('audioLevel').textContent = currentAudioAmplitude.toFixed(2);
+
+            // Update animation
+            animationTime += 0.016; // ~60fps
+            updateAnimation();
+
+            // Render
+            if (bloomPass && bloomPass.strength > 0) {
+                composer.render();
+            } else {
+                renderer.render(scene, camera);
+            }
+        }
+
+        function updateAnimation() {
+            if (!particleSystem || particles.length === 0) return;
+
+            const dummy = new THREE.Object3D();
+
+            particles.forEach((cluster, clusterIndex) => {
+                // Calculate cluster motion
+                let clusterOffsetX = 0, clusterOffsetY = 0, clusterOffsetZ = 0;
+
+                if (motionEnabled) {
+                    switch (motionMode) {
+                        case 'collective':
+                            clusterOffsetX = Math.sin(animationTime * orbitSpeed * 1000) * orbitRadius;
+                            clusterOffsetY = Math.sin(animationTime * orbitSpeed * 1500) * orbitRadius * 0.5;
+                            clusterOffsetZ = Math.cos(animationTime * orbitSpeed * 1000) * orbitRadius;
+                            break;
+                        case 'individual':
+                            const seed = clusterIndex * 1000;
+                            clusterOffsetX = Math.sin(animationTime * orbitSpeed * 1000 + seed) * orbitRadius;
+                            clusterOffsetY = Math.cos(animationTime * orbitSpeed * 800 + seed * 1.5) * orbitRadius * 0.7;
+                            clusterOffsetZ = Math.sin(animationTime * orbitSpeed * 1200 + seed * 0.5) * orbitRadius;
+                            break;
+                        case 'random':
+                            const t = animationTime * orbitSpeed * 500;
+                            clusterOffsetX = Math.sin(t + clusterIndex) * Math.cos(t * 1.3 + clusterIndex * 2) * orbitRadius;
+                            clusterOffsetY = Math.sin(t * 0.7 + clusterIndex * 3) * Math.cos(t * 1.1) * orbitRadius;
+                            clusterOffsetZ = Math.cos(t * 0.9 + clusterIndex * 1.5) * Math.sin(t * 1.2) * orbitRadius;
+                            break;
+                        case 'audio':
+                            clusterOffsetY = currentAudioAmplitude * 10;
+                            break;
+                        case 'wave':
+                            const wavePhase = cluster.centerPosition.x * 0.05;
+                            clusterOffsetY = Math.sin(animationTime + wavePhase) * 30;
+                            break;
+                    }
+                }
+
+                // Update sub-particles
+                cluster.subParticles.forEach(subParticle => {
+                    let x = cluster.centerPosition.x + clusterOffsetX + subParticle.offset.x;
+                    let y = cluster.centerPosition.y + clusterOffsetY + subParticle.offset.y;
+                    let z = cluster.centerPosition.z + clusterOffsetZ + subParticle.offset.z;
+
+                    // Audio reactivity
+                    if (audioReactivityEnabled) {
+                        const expansion = 1.0 + currentAudioAmplitude * audioReactivityStrength * 0.01;
+                        x = cluster.centerPosition.x + clusterOffsetX + subParticle.offset.x * expansion;
+                        y = cluster.centerPosition.y + clusterOffsetY + subParticle.offset.y * expansion;
+                        z = cluster.centerPosition.z + clusterOffsetZ + subParticle.offset.z * expansion;
+                    }
+
+                    dummy.position.set(x, y, z);
+
+                    let scale = particleSize * subParticleScale;
+                    if (audioReactivityEnabled) {
+                        scale *= (1.0 + currentAudioAmplitude * 0.1);
+                    }
+
+                    dummy.scale.setScalar(scale);
+                    dummy.lookAt(camera.position);
+                    dummy.updateMatrix();
+
+                    particleSystem.setMatrixAt(subParticle.instanceIndex, dummy.matrix);
+                });
+            });
+
+            particleSystem.instanceMatrix.needsUpdate = true;
+        }
+
+        // ========== UTILITIES ==========
+        function addStars() {
+            const starsGeometry = new THREE.BufferGeometry();
+            const starsVertices = [];
+
+            for (let i = 0; i < 2000; i++) {
+                const x = (Math.random() - 0.5) * 2000;
+                const y = (Math.random() - 0.5) * 2000;
+                const z = (Math.random() - 0.5) * 2000;
+                starsVertices.push(x, y, z);
+            }
+
+            starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+
+            const starsMaterial = new THREE.PointsMaterial({
+                size: 1,
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.6
+            });
+
+            const stars = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(stars);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            if (composer) {
+                composer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            if (bloomPass) {
+                bloomPass.resolution.set(window.innerWidth, window.innerHeight);
+            }
+        }
+
+        // ========== CONTROLS ==========
+        function setupControls() {
+            // Bloom slider
+            document.getElementById('bloomSlider').addEventListener('input', (e) => {
+                bloomStrength = parseFloat(e.target.value);
+                document.getElementById('bloomValue').textContent = bloomStrength;
+                if (bloomPass) bloomPass.strength = bloomStrength;
+            });
+
+            // Speed slider
+            document.getElementById('speedSlider').addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                orbitSpeed = value * 0.000001;
+                document.getElementById('speedValue').textContent = value;
+            });
+
+            // Reactivity slider
+            document.getElementById('reactivitySlider').addEventListener('input', (e) => {
+                audioReactivityStrength = parseFloat(e.target.value);
+                document.getElementById('reactivityValue').textContent = audioReactivityStrength;
+            });
+
+            // Mouse controls
+            let mouseX = 0, mouseY = 0;
+            document.addEventListener('mousemove', (e) => {
+                mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+                mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+            });
+
+            // Simple camera orbit
+            setInterval(() => {
+                if (!motionEnabled) return;
+                camera.position.x += mouseX * 0.5;
+                camera.position.y += mouseY * 0.5;
+                camera.lookAt(0, 0, 0);
+            }, 16);
+        }
+
+        function changeMotionMode(mode) {
+            motionMode = mode;
+        }
+
+        function toggleMotion() {
+            motionEnabled = !motionEnabled;
+        }
+
+        function toggleBloom() {
+            if (bloomPass) {
+                bloomPass.strength = bloomPass.strength > 0 ? 0 : bloomStrength;
+            }
+        }
+
+        function resetCamera() {
+            camera.position.set(0, 50, 150);
+            camera.lookAt(0, 0, 0);
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

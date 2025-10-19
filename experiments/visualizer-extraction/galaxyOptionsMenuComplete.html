@@ -1,0 +1,803 @@
+<!-- Complete Galaxy View Options Menu with all features -->
+<!-- This is the full mobile-optimized, draggable, resizable menu -->
+
+<style>
+/* Options Menu 2 - LEFT SIDE with drag and resize */
+.mode-controls-left {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: rgba(10, 10, 10, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px;
+    z-index: 1000;
+    min-width: 220px;
+    max-width: 280px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    transition: all 0.3s ease;
+    resize: both;
+    cursor: default;
+}
+
+.mode-controls-left.dragging {
+    transition: none;
+    opacity: 0.9;
+}
+
+.mode-controls-left::-webkit-scrollbar {
+    width: 6px;
+}
+
+.mode-controls-left::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.mode-controls-left::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.mode-controls-left::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Options Title Bar - Draggable */
+.options-title-bar {
+    position: sticky;
+    top: -15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    margin: -15px -15px 15px -15px;
+    background: rgba(10, 10, 10, 0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: move;
+    cursor: grab;
+    user-select: none;
+    z-index: 10;
+}
+
+.options-title-bar:active {
+    cursor: grabbing;
+}
+
+.options-title-bar h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.options-collapse-icon {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.8);
+    transition: transform 0.2s;
+    cursor: pointer;
+}
+
+/* Collapsed State */
+.mode-controls-left.options-collapsed {
+    min-width: auto;
+    max-width: auto;
+    width: 60px;
+    height: 60px;
+    padding: 0;
+    overflow: hidden;
+}
+
+.mode-controls-left.options-collapsed .options-title-bar {
+    margin: 0;
+    padding: 12px;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px;
+    cursor: grab;
+    width: 60px;
+    height: 60px;
+}
+
+.mode-controls-left.options-collapsed .options-title-bar h2 {
+    display: none;
+}
+
+.mode-controls-left.options-collapsed .options-collapse-icon {
+    transform: rotate(0deg);
+    font-size: 22px;
+    margin: 0;
+}
+
+.mode-controls-left.options-collapsed > *:not(.options-title-bar) {
+    display: none !important;
+}
+
+/* Section Headers */
+.mode-controls-left h3 {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 12px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.mode-controls-left h3::after {
+    content: '▼';
+    font-size: 10px;
+    opacity: 0.6;
+    transition: transform 0.2s;
+}
+
+.mode-controls-left h3.collapsed::after {
+    transform: rotate(-90deg);
+}
+
+/* Collapsible Content */
+.collapsible-content {
+    max-height: 2000px;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+    opacity: 1;
+}
+
+.collapsible-content.collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+}
+
+/* Sections */
+.mode-section {
+    margin-bottom: 12px;
+}
+
+.mode-section label {
+    display: block;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 4px;
+}
+
+.mode-section input[type="range"] {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    cursor: pointer;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.mode-section input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    background: #667eea;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.mode-section select {
+    width: 100%;
+    padding: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.mode-section button {
+    width: 100%;
+    padding: 8px;
+    background: rgba(102, 126, 234, 0.3);
+    border: 1px solid #667eea;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+}
+
+.mode-section button:hover {
+    background: rgba(102, 126, 234, 0.4);
+    border-color: #7788ff;
+}
+
+/* Search Container */
+.search-container {
+    position: relative;
+    margin-bottom: 12px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 6px 28px 6px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 11px;
+}
+
+.search-icon {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* File List */
+#galaxyFileList, #galaxyTagsList {
+    max-height: 200px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.file-item {
+    padding: 6px 8px;
+    margin: 2px 0;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    transition: all 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.file-item:hover {
+    background: rgba(102, 126, 234, 0.2);
+    color: #fff;
+}
+
+.file-item.playing {
+    background: rgba(102, 200, 234, 0.3);
+    color: #66c8ea;
+}
+
+/* Tag Legend */
+.tag-item {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    margin: 2px 0;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+}
+
+.tag-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.tag-color {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+/* Resize Handle */
+.options-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    cursor: se-resize;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.mode-controls-left:hover .options-resize-handle {
+    opacity: 1;
+}
+
+.resize-grip {
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid rgba(255, 255, 255, 0.3);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .mode-controls-left {
+        max-width: calc(100vw - 40px);
+        max-height: calc(100vh - 140px);
+    }
+}
+
+@media (max-height: 600px) {
+    .mode-controls-left {
+        max-height: calc(100vh - 160px);
+    }
+}
+</style>
+
+<!-- Options Menu HTML Structure -->
+<div class="mode-controls mode-controls-left" id="optionsMenu2">
+    <!-- Options Title Bar (Draggable) -->
+    <div class="options-title-bar" onclick="toggleOptionsMenu2()">
+        <h2>Options</h2>
+        <span class="options-collapse-icon" id="optionsCollapseIcon2">−</span>
+    </div>
+
+    <!-- Toggle Controls Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed">Toggle Controls</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <button onclick="toggleCrosshair()" id="galaxyCrosshairToggle">
+                Crosshair: ON
+            </button>
+        </div>
+        <div class="mode-section">
+            <button onclick="toggleTooltips()" id="galaxyTooltipToggle">
+                Tooltips: ON
+            </button>
+        </div>
+        <div class="mode-section">
+            <button onclick="toggleInfoWindow()" id="galaxyInfoToggle">
+                Info Window: OFF
+            </button>
+        </div>
+        <div class="mode-section">
+            <button onclick="toggleFullscreen()">
+                Toggle Fullscreen
+            </button>
+        </div>
+        <div class="mode-section">
+            <button onclick="toggleMoveJoystick()" id="galaxyMoveJoystickToggle">
+                Move Joystick: ON
+            </button>
+        </div>
+        <div class="mode-section">
+            <button onclick="toggleLookJoystick()" id="galaxyLookJoystickToggle">
+                Look Joystick: ON
+            </button>
+        </div>
+        <div class="mode-section">
+            <button onclick="togglePlayButton()" id="galaxyPlayButtonToggle">
+                Play Button: ON
+            </button>
+        </div>
+    </div>
+
+    <!-- File Browser Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">File Browser</h3>
+    <div class="collapsible-content collapsed">
+
+        <!-- Search Bar -->
+        <div class="search-container">
+            <input type="text"
+                   id="galaxySearchInput"
+                   class="search-input"
+                   placeholder="Search files..."
+                   oninput="handleSearch(this.value)"
+                   onkeydown="handleSearchKeyboard(event)">
+            <span class="search-icon">🔍</span>
+        </div>
+
+        <!-- Database Selector -->
+        <div class="mode-section" style="margin-bottom: 15px;">
+            <label>Data Sources:</label>
+            <div style="margin-top: 8px;">
+                <div style="display: flex; align-items: center; padding: 6px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 4px; cursor: pointer;" onclick="toggleGalaxyDbSource('audioFiles', event)">
+                    <input type="checkbox" id="galaxySourceAudioFiles" checked style="margin-right: 8px; cursor: pointer;">
+                    <label style="cursor: pointer; user-select: none;">Audio Files</label>
+                </div>
+                <div style="display: flex; align-items: center; padding: 6px; background: rgba(255,255,255,0.05); border-radius: 4px; cursor: pointer;" onclick="toggleGalaxyDbSource('stems', event)">
+                    <input type="checkbox" id="galaxySourceAudioStems" style="margin-right: 8px; cursor: pointer;">
+                    <label style="cursor: pointer; user-select: none;">Stems</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Category Filter Buttons -->
+        <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+            <button onclick="showAllCategories()" style="flex: 1; padding: 8px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #fff; cursor: pointer; font-size: 11px;">Show All</button>
+            <button onclick="hideAllCategories()" style="flex: 1; padding: 8px; background: rgba(234,102,102,0.3); border: 1px solid #ea6767; border-radius: 4px; color: #fff; cursor: pointer; font-size: 11px;">Hide All</button>
+        </div>
+
+        <!-- File Count -->
+        <div style="color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 10px;">
+            <span id="galaxyFileCount">0 files loaded</span>
+        </div>
+
+        <!-- Color Categories Legend -->
+        <h4 style="color: #667eea; font-size: 11px; margin-bottom: 8px;">Colors</h4>
+        <div style="max-height: 150px; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-bottom: 15px;">
+            <div id="galaxyTagLegend"></div>
+        </div>
+
+        <!-- Tags Section -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-bottom: 15px;">
+            <h4 style="color: #667eea; font-size: 11px; margin-bottom: 8px;">Tags</h4>
+            <div id="galaxyTagsList" style="max-height: 100px; overflow-y: auto; -webkit-overflow-scrolling: touch;">
+                <!-- Tags will be populated here -->
+            </div>
+        </div>
+
+        <!-- File List (scrollable) -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <h4 style="color: #667eea; font-size: 11px; margin-bottom: 8px;">Files</h4>
+            <div id="galaxyFileList" style="max-height: 200px; overflow-y: auto; -webkit-overflow-scrolling: touch;">
+                <!-- File list will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Movement & Camera Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Movement & Camera</h3>
+    <div class="collapsible-content collapsed">
+
+        <!-- Stem Offset Distance -->
+        <div class="mode-section">
+            <label>Stem Galaxy Offset: <span id="stemOffsetValue">0</span></label>
+            <input type="range" min="0" max="1000" step="10" value="0"
+                   oninput="updateStemOffset(this.value)">
+            <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">Distance between Audio Files and Stems galaxies</div>
+        </div>
+
+        <!-- Movement Settings -->
+        <div class="mode-section">
+            <label>Movement Speed: <span id="galaxyMoveSpeedValue">3.0</span></label>
+            <input type="range" min="0.1" max="5" step="0.1" value="3.0"
+                   oninput="window.moveSpeed = parseFloat(this.value); document.getElementById('galaxyMoveSpeedValue').textContent = this.value;">
+        </div>
+
+        <div class="mode-section">
+            <label>Look Sensitivity: <span id="galaxyLookSensValue">0.002</span></label>
+            <input type="range" min="0.0005" max="0.05" step="0.0005" value="0.002"
+                   oninput="window.lookSensitivity = parseFloat(this.value); document.getElementById('galaxyLookSensValue').textContent = this.value;">
+        </div>
+    </div>
+
+    <!-- Visualization Modes Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Visualization Modes</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Color By:</label>
+            <select id="galaxyColorMode" onchange="window.currentColorMode = this.value; window.recreateParticles();">
+                <option value="tags">Tags (Category)</option>
+                <option value="key">Musical Key</option>
+                <option value="bpm">BPM Range</option>
+                <option value="length">Length (Duration)</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>X-Axis (Left/Right):</label>
+            <select id="galaxyXAxisMode" onchange="window.currentXMode = this.value; window.recreateParticles();">
+                <option value="bpm">BPM</option>
+                <option value="key">Musical Key</option>
+                <option value="tags">Tags (Hash)</option>
+                <option value="length">Length (Duration)</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>Y-Axis (Up/Down):</label>
+            <select id="galaxyYAxisMode" onchange="window.currentYMode = this.value; window.recreateParticles();">
+                <option value="key">Musical Key</option>
+                <option value="bpm">BPM</option>
+                <option value="tags">Tags (Hash)</option>
+                <option value="length">Length (Duration)</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>Z-Axis (Depth):</label>
+            <select id="galaxyZAxisMode" onchange="window.currentZMode = this.value; window.recreateParticles();">
+                <option value="tags">Tags (Hash)</option>
+                <option value="bpm">BPM</option>
+                <option value="key">Musical Key</option>
+                <option value="length">Length (Duration)</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>Particle Size: <span id="galaxyParticleSizeValue">17.5</span></label>
+            <input type="range" min="1" max="100" step="0.5" value="17.5"
+                   oninput="window.particleSize = parseFloat(this.value); document.getElementById('galaxyParticleSizeValue').textContent = this.value; window.recreateParticles();">
+        </div>
+        <div class="mode-section">
+            <label>Brightness: <span id="galaxyBrightnessValue">0.8</span></label>
+            <input type="range" min="0.1" max="10" step="0.1" value="0.8"
+                   oninput="window.particleBrightness = parseFloat(this.value); document.getElementById('galaxyBrightnessValue').textContent = this.value; window.updateBrightness();">
+        </div>
+        <div class="mode-section">
+            <label>Visibility Distance: <span id="galaxyVisibilityValue">900</span></label>
+            <input type="range" min="100" max="2000" step="50" value="900"
+                   oninput="window.visibilityDistance = parseInt(this.value); document.getElementById('galaxyVisibilityValue').textContent = this.value;">
+        </div>
+    </div>
+
+    <!-- Galaxy Dynamics Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Galaxy Dynamics</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Rotation Mode:</label>
+            <select id="rotationMode" onchange="updateRotationMode(this.value)">
+                <option value="collective">Collective (Sphere)</option>
+                <option value="spiral">Spiral Galaxy</option>
+                <option value="individual">Individual Orbits</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>Rotation Axis:</label>
+            <select id="rotationAxis" onchange="updateRotationAxis(this.value)">
+                <option value="y">Y-Axis (Vertical)</option>
+                <option value="x">X-Axis (Horizontal)</option>
+                <option value="z">Z-Axis (Depth)</option>
+                <option value="all">All Axes</option>
+            </select>
+        </div>
+        <div class="mode-section">
+            <label>Speed: <span id="speedValue">0.0000015</span></label>
+            <input type="range" id="speedSlider" min="0" max="0.00003" step="0.0000001" value="0.0000015"
+                   oninput="updateMotionSpeed(this.value)">
+        </div>
+        <div class="mode-section">
+            <label>Amplitude: <span id="radiusValue">80</span></label>
+            <input type="range" id="radiusSlider" min="0" max="100" step="1" value="80"
+                   oninput="updateMotionRadius(this.value)">
+        </div>
+    </div>
+
+    <!-- Sub-Particle Dynamics Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Sub-Particle Dynamics</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Particles per Cluster: <span id="subParticleCountValue">48</span></label>
+            <input type="range" min="3" max="100" step="1" value="48"
+                   oninput="window.particlesPerCluster = parseInt(this.value); document.getElementById('subParticleCountValue').textContent = this.value; window.recreateParticles();">
+        </div>
+        <div class="mode-section">
+            <label>Cluster Spread: <span id="clusterSpreadValue">10.0</span></label>
+            <input type="range" min="0.1" max="50" step="0.5" value="10.0"
+                   oninput="window.clusterRadius = parseFloat(this.value); document.getElementById('clusterSpreadValue').textContent = this.value; window.recreateParticles();">
+        </div>
+    </div>
+
+    <!-- Audio Reactivity Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Audio Reactivity</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Current Amplitude: <span id="audioAmplitudeDisplay" style="color: #667eea;">0.00</span></label>
+        </div>
+        <div class="mode-section">
+            <label>Pulse Strength: <span id="audioStrengthValue">40</span></label>
+            <input type="range" min="0" max="100" step="1" value="40"
+                   oninput="window.audioReactivityStrength = parseInt(this.value); document.getElementById('audioStrengthValue').textContent = this.value;">
+        </div>
+        <div class="mode-section">
+            <label>Frequency Range:</label>
+            <select onchange="window.audioFrequencyMode = this.value;">
+                <option value="all">All Frequencies</option>
+                <option value="bass">Bass (20-250 Hz)</option>
+                <option value="mids">Mids (250-2000 Hz)</option>
+                <option value="highs">Highs (2000+ Hz)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Visual Effects Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Visual Effects</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Bloom/Glow: <span id="bloomStrengthValue">0.8</span></label>
+            <input type="range" min="0" max="10" step="0.1" value="0.8"
+                   oninput="window.bloomStrength = parseFloat(this.value); document.getElementById('bloomStrengthValue').textContent = this.value; window.updateBloomStrength();">
+        </div>
+        <div class="mode-section">
+            <label>Particle Shape:</label>
+            <select onchange="window.particleShape = this.value; window.recreateParticles();">
+                <option value="circle">Circle</option>
+                <option value="square">Square</option>
+                <option value="disc">Disc</option>
+                <option value="ring">Ring</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Presets Section -->
+    <h3 onclick="toggleSection(this)" class="collapsed" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">Presets</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Preset Name:</label>
+            <input type="text" id="presetNameInput" placeholder="My Preset"
+                   style="width: 100%; padding: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px; margin-bottom: 8px;">
+            <button onclick="savePreset()">Save Preset</button>
+        </div>
+        <div class="mode-section">
+            <label>Load Preset:</label>
+            <select id="presetSelect" onchange="loadPreset(this.value)">
+                <option value="">-- Select Preset --</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Resize Handle -->
+    <div class="options-resize-handle" id="optionsResizeHandle">
+        <div class="resize-grip"></div>
+    </div>
+</div>
+
+<script>
+// Options menu functions
+window.toggleOptionsMenu2 = function() {
+    const menu = document.getElementById('optionsMenu2');
+    const icon = document.getElementById('optionsCollapseIcon2');
+
+    menu.classList.toggle('options-collapsed');
+    icon.textContent = menu.classList.contains('options-collapsed') ? '☰' : '−';
+}
+
+window.toggleSection = function(header) {
+    header.classList.toggle('collapsed');
+    const content = header.nextElementSibling;
+    if (content) {
+        content.classList.toggle('collapsed');
+    }
+}
+
+// Initialize drag functionality
+window.initOptionsMenu2Drag = function() {
+    const menu = document.getElementById('optionsMenu2');
+    const titleBar = menu.querySelector('.options-title-bar');
+
+    let isDragging = false;
+    let startX, startY;
+    let startMenuX, startMenuY;
+
+    // Mouse events
+    titleBar.addEventListener('mousedown', (e) => {
+        if (e.target === titleBar || e.target.tagName === 'H2') {
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+
+            const rect = menu.getBoundingClientRect();
+            startMenuX = rect.left;
+            startMenuY = rect.top;
+
+            menu.classList.add('dragging');
+            e.preventDefault();
+        }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+
+        const newX = Math.max(0, Math.min(window.innerWidth - menu.offsetWidth, startMenuX + deltaX));
+        const newY = Math.max(0, Math.min(window.innerHeight - menu.offsetHeight, startMenuY + deltaY));
+
+        menu.style.left = newX + 'px';
+        menu.style.top = newY + 'px';
+        menu.style.right = 'auto';
+        menu.style.bottom = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            menu.classList.remove('dragging');
+        }
+    });
+
+    // Touch events
+    titleBar.addEventListener('touchstart', (e) => {
+        const touch = e.touches[0];
+        isDragging = true;
+        startX = touch.clientX;
+        startY = touch.clientY;
+
+        const rect = menu.getBoundingClientRect();
+        startMenuX = rect.left;
+        startMenuY = rect.top;
+
+        menu.classList.add('dragging');
+        e.preventDefault();
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - startX;
+        const deltaY = touch.clientY - startY;
+
+        const newX = Math.max(0, Math.min(window.innerWidth - menu.offsetWidth, startMenuX + deltaX));
+        const newY = Math.max(0, Math.min(window.innerHeight - menu.offsetHeight, startMenuY + deltaY));
+
+        menu.style.left = newX + 'px';
+        menu.style.top = newY + 'px';
+        menu.style.right = 'auto';
+        menu.style.bottom = 'auto';
+
+        e.preventDefault();
+    });
+
+    document.addEventListener('touchend', () => {
+        if (isDragging) {
+            isDragging = false;
+            menu.classList.remove('dragging');
+        }
+    });
+}
+
+// Initialize resize functionality
+window.initOptionsMenu2Resize = function() {
+    const menu = document.getElementById('optionsMenu2');
+    const resizeHandle = document.getElementById('optionsResizeHandle');
+
+    if (!resizeHandle) return;
+
+    let isResizing = false;
+    let startWidth, startHeight;
+    let startX, startY;
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startWidth = menu.offsetWidth;
+        startHeight = menu.offsetHeight;
+
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        const newWidth = Math.max(220, Math.min(400, startWidth + e.clientX - startX));
+        const newHeight = Math.max(300, Math.min(window.innerHeight - 40, startHeight + e.clientY - startY));
+
+        menu.style.width = newWidth + 'px';
+        menu.style.maxHeight = newHeight + 'px';
+        menu.style.maxWidth = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        isResizing = false;
+    });
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.initOptionsMenu2Drag();
+        window.initOptionsMenu2Resize();
+    });
+} else {
+    window.initOptionsMenu2Drag();
+    window.initOptionsMenu2Resize();
+}
+</script>

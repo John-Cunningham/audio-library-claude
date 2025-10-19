@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galaxy View Test - Isolated</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+            overflow: hidden;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        #galaxyViewContainer {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            z-index: 1000;
+            max-width: 400px;
+        }
+
+        button {
+            background: #2a2a2a;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #3a3a3a;
+            border-color: #666;
+        }
+
+        button:active {
+            background: #1a1a1a;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-label {
+            display: inline-block;
+            background: #2a2a2a;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+
+        .file-label:hover {
+            background: #3a3a3a;
+            border-color: #666;
+        }
+
+        .file-list {
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .file-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .file-item.playing {
+            background: rgba(0, 255, 0, 0.2);
+            border-left: 3px solid #0f0;
+        }
+
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0, 255, 0, 0.1);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .error {
+            background: rgba(255, 0, 0, 0.1) !important;
+            color: #ff6666;
+        }
+    </style>
+
+    <!-- Three.js core -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- Three.js post-processing for bloom effect -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+
+    <!-- WaveSurfer for audio playback -->
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+</head>
+<body>
+    <div id="container">
+        <div id="galaxyViewContainer"></div>
+
+        <div id="controls">
+            <h2>🌌 Galaxy View Test</h2>
+            <p style="margin: 10px 0; font-size: 14px; opacity: 0.8;">
+                Isolated test environment - your main app is untouched
+            </p>
+
+            <div>
+                <label for="fileInput" class="file-label">
+                    📁 Load Audio Files
+                </label>
+                <input type="file" id="fileInput" multiple accept="audio/*">
+
+                <button onclick="loadDemoFiles()">🎵 Load Demo Files</button>
+                <button onclick="clearFiles()">🗑️ Clear All</button>
+            </div>
+
+            <div id="status">Ready to load files...</div>
+
+            <div class="file-list" id="fileList"></div>
+
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
+                <h3>Controls:</h3>
+                <ul style="list-style: none; font-size: 14px; line-height: 1.6;">
+                    <li>🖱️ Click anywhere in space to lock pointer</li>
+                    <li>⌨️ WASD to move, Mouse to look</li>
+                    <li>⇧ Shift to sprint</li>
+                    <li>🎯 Click particles to play files</li>
+                    <li>ESC to unlock pointer</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import the Galaxy View replacement
+        import { renderGalaxyView } from './galaxyViewReplacement.js';
+
+        // Global state
+        window.audioFiles = [];
+        window.wavesurfer = null;
+        window.currentFileId = null;
+        window.galaxyView = null;
+
+        // Initialize WaveSurfer (hidden - just for audio analysis)
+        function initWaveSurfer() {
+            const waveformContainer = document.createElement('div');
+            waveformContainer.style.display = 'none';
+            document.body.appendChild(waveformContainer);
+
+            window.wavesurfer = WaveSurfer.create({
+                container: waveformContainer,
+                waveColor: '#4F4A85',
+                progressColor: '#383351',
+                height: 1,
+                barWidth: 3,
+                responsive: true
+            });
+
+            console.log('WaveSurfer initialized');
+        }
+
+        // Load audio file for playback
+        window.loadAudio = async function(fileId, autoplay = true) {
+            const file = window.audioFiles.find(f => f.id === fileId);
+            if (!file) {
+                console.error('File not found:', fileId);
+                return;
+            }
+
+            console.log('Loading audio:', file.name);
+            window.currentFileId = fileId;
+
+            // Update UI
+            document.querySelectorAll('.file-item').forEach(el => {
+                el.classList.toggle('playing', el.dataset.id === fileId);
+            });
+
+            // Load into WaveSurfer
+            if (file.url) {
+                await window.wavesurfer.load(file.url);
+                if (autoplay) {
+                    window.wavesurfer.play();
+                }
+            }
+
+            updateStatus(`Playing: ${file.name}`);
+        };
+
+        // File handling
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            window.audioFiles = files.map((file, index) => ({
+                id: `file_${index}`,
+                name: file.name,
+                url: URL.createObjectURL(file),
+                bpm: 120 + Math.random() * 60,  // Random BPM for testing
+                key: ['C', 'D', 'E', 'F', 'G', 'A', 'B'][Math.floor(Math.random() * 7)],
+                tags: ['audio', file.name.split('.')[1]],
+                length: 180 + Math.random() * 120,
+                file: file
+            }));
+
+            updateFileList();
+            updateGalaxyView();
+            updateStatus(`Loaded ${files.length} files`);
+        });
+
+        // Load demo files
+        window.loadDemoFiles = function() {
+            // Create fake demo files for testing
+            window.audioFiles = [
+                { id: 'demo_1', name: 'Drums Loop 120bpm.wav', bpm: 120, key: 'C', tags: ['drums', 'loop'], length: 240 },
+                { id: 'demo_2', name: 'Bass Line Gm.wav', bpm: 128, key: 'G', tags: ['bass', 'electronic'], length: 180 },
+                { id: 'demo_3', name: 'Synth Pad Am.wav', bpm: 90, key: 'A', tags: ['synth', 'pad'], length: 360 },
+                { id: 'demo_4', name: 'Guitar Riff E.wav', bpm: 140, key: 'E', tags: ['guitar', 'rock'], length: 120 },
+                { id: 'demo_5', name: 'Vocals Chorus.wav', bpm: 100, key: 'F', tags: ['vocals', 'chorus'], length: 300 },
+                { id: 'demo_6', name: 'Piano Melody.wav', bpm: 75, key: 'D', tags: ['piano', 'classical'], length: 420 },
+                { id: 'demo_7', name: 'Percussion Loop.wav', bpm: 130, key: 'C', tags: ['percussion', 'latin'], length: 160 },
+                { id: 'demo_8', name: 'String Section.wav', bpm: 60, key: 'B', tags: ['strings', 'orchestral'], length: 480 }
+            ];
+
+            updateFileList();
+            updateGalaxyView();
+            updateStatus(`Loaded ${window.audioFiles.length} demo files`);
+        };
+
+        // Clear all files
+        window.clearFiles = function() {
+            window.audioFiles = [];
+            updateFileList();
+            updateGalaxyView();
+            updateStatus('All files cleared');
+        };
+
+        // Update file list UI
+        function updateFileList() {
+            const listEl = document.getElementById('fileList');
+            if (window.audioFiles.length === 0) {
+                listEl.innerHTML = '<div style="opacity: 0.5; text-align: center;">No files loaded</div>';
+                return;
+            }
+
+            listEl.innerHTML = window.audioFiles.map(file => `
+                <div class="file-item" data-id="${file.id}" onclick="window.loadAudio('${file.id}')">
+                    🎵 ${file.name}
+                    ${file.bpm ? `<span style="opacity: 0.5; font-size: 12px;"> • ${Math.round(file.bpm)} BPM</span>` : ''}
+                    ${file.key ? `<span style="opacity: 0.5; font-size: 12px;"> • ${file.key}</span>` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Update Galaxy View with new files
+        function updateGalaxyView() {
+            if (window.galaxyView && window.audioFiles.length > 0) {
+                window.galaxyView.updateFiles(window.audioFiles);
+
+                // Connect audio if WaveSurfer is ready
+                if (window.wavesurfer) {
+                    window.galaxyView.connectAudio(window.wavesurfer);
+                }
+            }
+        }
+
+        // Update status message
+        function updateStatus(message, isError = false) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.classList.toggle('error', isError);
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('Initializing Galaxy View test environment...');
+
+            // Initialize WaveSurfer
+            initWaveSurfer();
+
+            // Initialize Galaxy View
+            const container = document.getElementById('galaxyViewContainer');
+            try {
+                window.galaxyView = renderGalaxyView(container);
+                updateStatus('Galaxy View initialized! Load some audio files to see particles.');
+
+                // Load complete options menu HTML
+                fetch('./galaxyOptionsMenuComplete.html')
+                    .then(response => response.text())
+                    .then(html => {
+                        const menuContainer = document.createElement('div');
+                        menuContainer.id = 'galaxyMenuContainer';
+                        menuContainer.innerHTML = html;
+                        document.body.appendChild(menuContainer);
+
+                        // Initialize drag and resize functionality
+                        if (window.initOptionsMenu2Drag) {
+                            window.initOptionsMenu2Drag();
+                        }
+                        if (window.initOptionsMenu2Resize) {
+                            window.initOptionsMenu2Resize();
+                        }
+
+                        console.log('Complete options menu loaded with all features');
+                    })
+                    .catch(err => {
+                        console.warn('Could not load complete options menu:', err);
+                        // Try fallback to simple menu
+                        fetch('./galaxyOptionsMenu.html')
+                            .then(response => response.text())
+                            .then(html => {
+                                const menuContainer = document.createElement('div');
+                                menuContainer.innerHTML = html;
+                                document.body.appendChild(menuContainer);
+                                console.log('Simple options menu loaded as fallback');
+                            })
+                            .catch(err => console.error('Could not load any options menu:', err));
+                    });
+
+            } catch (error) {
+                console.error('Failed to initialize Galaxy View:', error);
+                updateStatus('Error: ' + error.message, true);
+            }
+        });
+    </script>
+</body>
+</html>

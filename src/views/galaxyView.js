@@ -379,6 +379,9 @@ export async function init(data = {}) {
     // Setup audio analysis connection to global wavesurfer
     setupAudioConnection();
 
+    // Load options menu
+    loadOptionsMenu();
+
     // Start animation loop
     startAnimation();
 
@@ -1414,6 +1417,261 @@ function toggleCategoryVisibility(category) {
         hiddenCategories.add(category);
         console.log(`👁️ Hiding category: ${category}`);
     }
+}
+
+// ============================================================================
+// OPTIONS MENU
+// ============================================================================
+
+/**
+ * Loads and integrates the Galaxy View options menu
+ */
+function loadOptionsMenu() {
+    console.log('📋 Loading Galaxy View options menu...');
+
+    // Fetch the complete options menu HTML
+    fetch('experiments/visualizer-extraction/galaxyOptionsMenuComplete.html')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Failed to load options menu: ${response.status}`);
+            }
+            return response.text();
+        })
+        .then(html => {
+            // Create container for the menu
+            const menuContainer = document.createElement('div');
+            menuContainer.id = 'galaxyMenuContainer';
+            menuContainer.innerHTML = html;
+            document.body.appendChild(menuContainer);
+
+            console.log('✅ Options menu HTML injected');
+
+            // Wire up controls to Galaxy View variables
+            wireUpMenuControls();
+
+            // Initialize drag and resize functionality (if defined in the HTML)
+            if (typeof window.initOptionsMenu2Drag === 'function') {
+                window.initOptionsMenu2Drag();
+                console.log('✅ Menu drag functionality initialized');
+            }
+            if (typeof window.initOptionsMenu2Resize === 'function') {
+                window.initOptionsMenu2Resize();
+                console.log('✅ Menu resize functionality initialized');
+            }
+
+            console.log('✅ Galaxy View options menu loaded successfully');
+        })
+        .catch(error => {
+            console.error('❌ Failed to load options menu:', error);
+            console.warn('Galaxy View will work without options menu (controls via console)');
+        });
+}
+
+/**
+ * Wires up options menu controls to Galaxy View variables and functions
+ */
+function wireUpMenuControls() {
+    // Expose variables directly to window (for inline event handlers in HTML)
+    window.audioReactivityStrength = audioReactivityStrength;
+    window.audioFrequencyMode = audioFrequencyMode;
+    window.moveSpeed = moveSpeed;
+    window.lookSensitivity = lookSensitivity;
+    window.particleSize = particleSize;
+    window.particleBrightness = particleBrightness;
+    window.particlesPerCluster = particlesPerCluster;
+    window.clusterRadius = clusterRadius;
+    window.particleShape = particleShape;
+
+    // Expose recreateParticles to window
+    window.recreateParticles = () => recreateParticles();
+
+    // Global functions expected by options menu HTML
+
+    // UI Toggle Functions (stubs - these features don't exist yet)
+    window.toggleCrosshair = function() {
+        console.log('🎯 Crosshair toggle not implemented yet');
+    };
+
+    window.toggleTooltips = function() {
+        console.log('💬 Tooltips toggle not implemented yet');
+    };
+
+    window.toggleInfoWindow = function() {
+        console.log('ℹ️ Info window toggle not implemented yet');
+    };
+
+    window.toggleFullscreen = function() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+            console.log('🖥️ Entered fullscreen');
+        } else {
+            document.exitFullscreen();
+            console.log('🖥️ Exited fullscreen');
+        }
+    };
+
+    window.toggleMoveJoystick = function() {
+        console.log('🕹️ Move joystick toggle not implemented yet');
+    };
+
+    window.toggleLookJoystick = function() {
+        console.log('🕹️ Look joystick toggle not implemented yet');
+    };
+
+    window.togglePlayButton = function() {
+        console.log('▶️ Play button toggle not implemented yet');
+    };
+
+    window.toggleOptionsMenu2 = function() {
+        const menu = document.getElementById('optionsMenu2');
+        if (menu) {
+            menu.classList.toggle('collapsed');
+        }
+    };
+
+    window.toggleSection = function(element) {
+        const section = element.parentElement;
+        if (section) {
+            section.classList.toggle('collapsed');
+        }
+    };
+
+    // Database source toggles (stub)
+    window.toggleGalaxyDbSource = function(source, event) {
+        console.log(`📊 Database source toggle for ${source} not implemented yet`);
+    };
+
+    // Category visibility
+    window.showAllCategories = function() {
+        hiddenCategories.clear();
+        console.log('👁️ Showing all categories');
+    };
+
+    window.hideAllCategories = function() {
+        const allCategories = ['drums', 'inst', 'vox', 'bass', 'gtr', 'pno', 'syn', 'perc', 'pad', 'lead', 'fx', 'arp', 'other'];
+        allCategories.forEach(cat => hiddenCategories.add(cat));
+        console.log('👁️ Hiding all categories');
+    };
+
+    // Motion mode control
+    window.updateRotationMode = function(mode) {
+        // Map menu values to our motion modes
+        const modeMap = {
+            'collective': 'collective',
+            'spiral': 'individual',  // Map spiral to individual for now
+            'individual': 'individual',
+            'random': 'random',
+            'audio': 'audio',
+            'wave': 'wave',
+            'none': 'none'
+        };
+        const mappedMode = modeMap[mode] || mode;
+        setMotionMode(mappedMode);
+    };
+
+    window.updateRotationAxis = function(axis) {
+        console.log(`🔄 Rotation axis: ${axis} (not fully implemented)`);
+        // This would control wave direction or other axis-specific behavior
+    };
+
+    // Motion speed/radius controls
+    window.updateMotionSpeed = function(value) {
+        orbitSpeed = parseFloat(value) * 0.000001;  // Convert slider value to orbit speed
+        const speedDisplay = document.getElementById('galaxyMotionSpeedValue');
+        if (speedDisplay) speedDisplay.textContent = value;
+        console.log(`🔄 Motion speed: ${value}`);
+    };
+
+    window.updateMotionRadius = function(value) {
+        orbitRadius = parseFloat(value);
+        const radiusDisplay = document.getElementById('galaxyMotionRadiusValue');
+        if (radiusDisplay) radiusDisplay.textContent = value;
+        console.log(`🔄 Motion radius: ${orbitRadius}`);
+    };
+
+    // Stem offset (stub - not applicable to Galaxy View)
+    window.updateStemOffset = function(value) {
+        console.log(`🎚️ Stem offset: ${value} (not applicable to Galaxy View)`);
+    };
+
+    // Search handler (stub)
+    window.handleSearch = function(query) {
+        console.log(`🔍 Search: "${query}" (not implemented yet)`);
+    };
+
+    // Brightness update
+    window.updateBrightness = function() {
+        particleBrightness = window.particleBrightness;
+        recreateParticles();
+    };
+
+    // Bloom strength (stub - Phase 2E will implement visual effects)
+    window.updateBloomStrength = function() {
+        console.log('✨ Bloom strength update (visual effects Phase 2E)');
+    };
+
+    // Preset save/load (stubs)
+    window.savePreset = function(name) {
+        const state = {
+            motionMode,
+            orbitSpeed,
+            orbitRadius,
+            audioReactivityStrength,
+            particlesPerCluster,
+            particleSize,
+            clusterRadius,
+            particleBrightness
+        };
+        localStorage.setItem(`galaxyPreset_${name}`, JSON.stringify(state));
+        console.log(`💾 Saved preset: ${name}`);
+    };
+
+    window.loadPreset = function(name) {
+        const saved = localStorage.getItem(`galaxyPreset_${name}`);
+        if (saved) {
+            const state = JSON.parse(saved);
+            // Apply saved state
+            motionMode = state.motionMode || motionMode;
+            orbitSpeed = state.orbitSpeed || orbitSpeed;
+            orbitRadius = state.orbitRadius || orbitRadius;
+            audioReactivityStrength = state.audioReactivityStrength || audioReactivityStrength;
+            particlesPerCluster = state.particlesPerCluster || particlesPerCluster;
+            particleSize = state.particleSize || particleSize;
+            clusterRadius = state.clusterRadius || clusterRadius;
+            particleBrightness = state.particleBrightness || particleBrightness;
+            recreateParticles();
+            console.log(`📂 Loaded preset: ${name}`);
+        } else {
+            console.log(`❌ Preset not found: ${name}`);
+        }
+    };
+
+    // Expose Galaxy View controls object
+    window.galaxyViewControls = {
+        setMotionMode: (mode) => setMotionMode(mode),
+        toggleMotion: () => toggleMotion(),
+        setAudioReactivity: (params) => setAudioReactivity(params),
+        toggleCategory: (category) => toggleCategoryVisibility(category),
+        getState: () => ({
+            motionMode,
+            motionEnabled,
+            orbitSpeed,
+            orbitRadius,
+            audioReactivityEnabled,
+            audioReactivityStrength,
+            globalAudioReactivity,
+            clusterSpreadOnAudio,
+            audioFrequencyMode,
+            particlesPerCluster,
+            particleSize,
+            clusterRadius,
+            particleBrightness,
+            moveSpeed,
+            lookSensitivity
+        })
+    };
+
+    console.log('✅ Galaxy View controls wired up for options menu');
 }
 
 // ============================================================================

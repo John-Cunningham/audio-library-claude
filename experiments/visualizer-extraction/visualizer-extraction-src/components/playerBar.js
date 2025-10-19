@@ -1,0 +1,1450 @@
+/**
+ * PlayerBarComponent - Reusable player control component
+ * Can be instantiated for parent player OR stem players
+ *
+ * Usage:
+ *   const parentPlayer = new PlayerBarComponent({
+ *     playerType: 'parent',
+ *     waveform: parentWaveform
+ *   });
+ *
+ *   const vocalsPlayer = new PlayerBarComponent({
+ *     playerType: 'stem',
+ *     stemType: 'vocals',
+ *     waveform: vocalsWaveform
+ *   });
+ */
+
+// Note: state.js doesn't export a 'state' object, it exports individual variables
+// We don't need to import state here since we manage our own instance state
+import { formatTime } from '../utils/formatting.js';
+
+export class PlayerBarComponent {
+    constructor(options = {}) {
+        // Configuration
+        this.playerType = options.playerType; // 'parent' or 'stem'
+        this.stemType = options.stemType;     // 'vocals', 'drums', 'bass', 'other' (required if stem)
+        this.waveform = options.waveform;     // WaveformComponent instance
+        this.container = options.container;   // Optional: container element for rendering HTML
+        this.currentFile = null;              // Current audio file object
+
+        // Validate configuration
+        if (this.playerType === 'stem' && !this.stemType) {
+            throw new Error('stemType is required for stem players');
+        }
+
+        // Loop/Cycle State
+        this.loopStart = null;
+        this.loopEnd = null;
+        this.cycleMode = false;
+        this.nextClickSets = 'start';
+        this.seekOnClick = false;
+        this.loopControlsExpanded = false;
+
+        // Marker State (per-instance)
+        // Note: HTML button starts with class="active", so markers are enabled by default
+        this.markersEnabled = true;   // Match HTML button's initial "active" state
+        this.markerFrequency = 'bar'; // 'bar8', 'bar4', 'bar2', 'bar', 'halfbar', 'beat'
+        this.barStartOffset = 0;      // Bar number shift (can be fractional: 2.75 = 2 bars + 3 beats)
+        this.currentMarkers = [];     // Array of marker times in seconds
+
+        // Metronome State
+        this.metronomeEnabled = false;
+        this.metronomeSound = 'click';
+
+        // Rate/Volume State
+        this.rate = 1.0;
+        this.volume = 1.0;
+        this.muted = false;
+
+        // Stem-specific rate control (only used for stems)
+        this.independentRate = 1.0;  // Independent rate multiplier for stems
+        this.rateLocked = true;      // For stems: locked to parent rate by default
+
+        // Future: BPM/Key Locking for Stem Browsing
+        // These enable stems to load files from different songs while auto-matching BPM/key
+        // TODO: Implement in future phase (Signalsmith time/pitch stretching)
+        this.bpmLocked = false;     // Lock to parent's global BPM?
+        this.keyLocked = false;     // Lock to parent's global key?
+        this.fileBPM = null;        // BPM of THIS player's file (could be from different song)
+        this.fileKey = null;        // Key of THIS player's file
+        this.timeStretch = 1.0;     // BPM-matching time stretch factor (independent of rate)
+        this.pitchShift = 0;        // Semitones to shift for key matching
+
+        console.log(`[PlayerBarComponent] Created ${this.playerType}${this.stemType ? ' (' + this.stemType + ')' : ''} player`);
+    }
+
+    /**
+     * Initialize the player component
+     * Binds all event handlers to DOM elements
+     */
+    init() {
+        console.log(`[PlayerBarComponent] Initializing ${this.playerType}${this.stemType ? ' (' + this.stemType + ')' : ''} player`);
+
+        // Bind all control event handlers
+        this.setupMarkerControls();
+        this.setupWaveformClickHandler(); // Install click handler for snap-to-marker and cycle mode
+        this.setupTransportControls();
+        this.setupRateControls();
+        this.setupVolumeControls();
+        this.setupLoopControls();
+        this.setupMetronomeControls();
+
+        // Listen for waveform events (if waveform exists)
+        if (this.waveform) {
+            // These would come from waveform component
+            // For now, placeholder
+        }
+
+        console.log(`[PlayerBarComponent] ${this.playerType}${this.stemType ? ' (' + this.stemType + ')' : ''} player initialized`);
+    }
+
+    // ============================================
+    // MARKER CONTROLS
+    // ============================================
+
+    setupMarkerControls() {
+        // Get element IDs based on player type
+        const markersBtnId = this.playerType === 'parent'
+            ? 'markersBtn'
+            : `stem-markers-btn-${this.stemType}`;
+
+        const markerFreqId = this.playerType === 'parent'
+            ? 'markerFrequencySelect'
+            : `stem-marker-freq-${this.stemType}`;
+
+        const shiftLeftBtnId = this.playerType === 'parent'
+            ? 'shiftBarStartLeftBtn'  // This might not exist yet, need to check template
+            : `stem-shift-left-${this.stemType}`;
+
+        const shiftRightBtnId = this.playerType === 'parent'
+            ? 'shiftBarStartRightBtn'
+            : `stem-shift-right-${this.stemType}`;
+
+        const barOffsetDisplayId = this.playerType === 'parent'
+            ? 'barStartOffsetDisplay'
+            : `stem-bar-offset-${this.stemType}`;
+
+        // Note: Don't bind markersBtn here - it already has onclick="toggleMarkers()" in HTML
+        // which calls the window wrapper that delegates to this.toggleMarkers()
+        // Adding another addEventListener would cause double-firing
+
+        // Note: Don't bind markerFreqSelect here - it already has onchange="setMarkerFrequency(this.value)" in HTML
+        // which calls the window wrapper that delegates to this.setMarkerFrequency()
+        // Adding another addEventListener would cause double-firing
+
+        // Note: Don't bind shift buttons here - they already have onclick="shiftBarStartLeft()" in HTML
+        // which calls the window wrapper that delegates to this.shiftBarStartLeft()
+        // Adding another addEventListener would cause double-firing
+    }
+
+    /**
+     * Setup waveform click handler for snap-to-marker and cycle mode
+     * This handler intercepts clicks on the waveform to provide:
+     * 1. Snap-to-marker functionality (when markers enabled)
+     * 2. Cycle mode loop point setting (when in cycle mode)
+     *
+     * Works for BOTH parent and stem players
+     */
+    setupWaveformClickHandler() {
+        // Get waveform container based on player type
+        const waveformContainerId = this.playerType === 'parent'
+            ? 'waveform'
+            : `multi-stem-waveform-${this.stemType}`;
+
+        const waveformContainer = document.getElementById(waveformContainerId);
+        if (!waveformContainer) {
+            console.warn(`[${this.getLogPrefix()}] Waveform container not found`);
+            return;
+        }
+
+        // Remove old click handler if it exists
+        if (waveformContainer._clickHandler) {
+            waveformContainer.removeEventListener('click', waveformContainer._clickHandler, true);
+        }
+
+        // Setup hover preview for cycle mode (do this once, not every time markers change)
+        this.setupHoverPreview(waveformContainer);
+
+        // Create click handler with closure over component instance
+        const clickHandler = (e) => {
+            // Get loop/cycle state (parent uses global window state, stems use instance state)
+            const cycleMode = this.playerType === 'parent'
+                ? (window.cycleMode || false)
+                : this.cycleMode;
+            const seekOnClick = this.playerType === 'parent'
+                ? (window.seekOnClick || false)
+                : this.seekOnClick;
+
+            // If markers are disabled AND not in cycle mode, let WaveSurfer handle click normally
+            if (!this.markersEnabled || this.currentMarkers.length === 0) {
+                // If cycle mode is ON, we still need to handle clicks even if markers are off
+                if (!cycleMode) {
+                    return; // Let WaveSurfer handle normal click (no snap, no loop setting)
+                }
+            }
+
+            if (!this.waveform) return;
+
+            // Get click position relative to waveform container
+            const rect = waveformContainer.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const relativeX = clickX / rect.width;
+
+            // Calculate time at click position
+            const duration = this.waveform.getDuration();
+            const clickTime = relativeX * duration;
+
+            // Find nearest marker to the left (or use exact click time if no markers)
+            const snapTime = this.currentMarkers.length > 0
+                ? this.findNearestMarkerToLeft(clickTime)
+                : clickTime;
+
+            // AUTO-SET LOOP POINTS (only if in cycle mode)
+            if (cycleMode) {
+                // CRITICAL: Stop event propagation BEFORE WaveSurfer handles it (unless seek mode is 'seek')
+                if (seekOnClick !== 'seek') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                }
+
+                // Get loop state (parent uses global window, stems use instance)
+                const loopStart = this.playerType === 'parent' ? window.loopStart : this.loopStart;
+                const loopEnd = this.playerType === 'parent' ? window.loopEnd : this.loopEnd;
+                const nextClickSets = this.playerType === 'parent' ? window.nextClickSets : this.nextClickSets;
+
+                // Check if clicking left of loop start (reset start) or right of loop end (reset end)
+                if (loopStart !== null && loopEnd !== null) {
+                    if (snapTime < loopStart) {
+                        // Clicking left of loop start: reset loop start
+                        if (this.playerType === 'parent') {
+                            window.loopStart = snapTime;
+                        } else {
+                            this.loopStart = snapTime;
+                            // Sync to global state for wavesurfer handlers
+                            this.syncLoopStateToGlobal();
+                        }
+                        console.log(`[${this.getLogPrefix()}] Loop start moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                        this.updateLoopVisuals();
+                        if (seekOnClick === 'seek') {
+                            this.waveform.seekTo(snapTime / duration);
+                        }
+                        return false;
+                    } else if (snapTime > loopEnd) {
+                        // Clicking right of loop end: reset loop end
+                        if (this.playerType === 'parent') {
+                            window.loopEnd = snapTime;
+                        } else {
+                            this.loopEnd = snapTime;
+                            // Sync to global state for wavesurfer handlers
+                            this.syncLoopStateToGlobal();
+                        }
+                        console.log(`[${this.getLogPrefix()}] Loop end moved to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                        this.updateLoopVisuals();
+                        if (seekOnClick === 'seek') {
+                            this.waveform.seekTo(snapTime / duration);
+                        }
+                        return false;
+                    }
+                }
+
+                // Normal loop setting flow
+                let justSetLoopEnd = false;
+
+                if (nextClickSets === 'start') {
+                    if (this.playerType === 'parent') {
+                        window.loopStart = snapTime;
+                        window.loopEnd = null;
+                        window.nextClickSets = 'end';
+                    } else {
+                        this.loopStart = snapTime;
+                        this.loopEnd = null;
+                        this.nextClickSets = 'end';
+                        // Sync to global state for wavesurfer handlers
+                        this.syncLoopStateToGlobal();
+                    }
+                    console.log(`[${this.getLogPrefix()}] Loop start set to ${snapTime.toFixed(2)}s ${seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                    if (this.playerType === 'parent' && window.recordAction) {
+                        window.recordAction('setLoopStart', { loopStart: snapTime });
+                    }
+                } else if (nextClickSets === 'end') {
+                    const currentLoopStart = this.playerType === 'parent' ? window.loopStart : this.loopStart;
+                    if (snapTime <= currentLoopStart) {
+                        console.log(`[${this.getLogPrefix()}] Loop end must be after loop start - ignoring click`);
+                        return;
+                    }
+                    if (this.playerType === 'parent') {
+                        window.loopEnd = snapTime;
+                        window.cycleMode = true;
+                    } else {
+                        this.loopEnd = snapTime;
+                        // Note: For stems, cycleMode stays true (was set by toggleCycleMode())
+                        // Sync to global state for wavesurfer handlers
+                        this.syncLoopStateToGlobal();
+                    }
+                    justSetLoopEnd = true;
+                    console.log(`[${this.getLogPrefix()}] Loop end set to ${snapTime.toFixed(2)}s - Loop active! ${seekOnClick === 'clock' ? '(seeking to loop start)' : seekOnClick === 'seek' ? '(seeking)' : '(NO PLAYBACK CHANGE)'}`);
+                    if (this.playerType === 'parent' && window.recordAction) {
+                        window.recordAction('setLoopEnd', {
+                            loopStart: currentLoopStart,
+                            loopEnd: snapTime,
+                            loopDuration: snapTime - currentLoopStart
+                        });
+                    }
+                }
+
+                this.updateLoopVisuals();
+
+                // Handle seeking based on mode
+                if (seekOnClick === 'seek') {
+                    // Seek mode: jump to clicked position
+                    this.waveform.seekTo(snapTime / duration);
+                } else if (seekOnClick === 'clock' && justSetLoopEnd) {
+                    // Clock mode: ONLY after setting loop end, jump to loop start
+                    const finalLoopStart = this.playerType === 'parent' ? window.loopStart : this.loopStart;
+                    this.waveform.seekTo(finalLoopStart / duration);
+                }
+
+                // Important: return early to prevent any seeking (if seekOnClick is off)
+                return false;
+            } else {
+                // Normal mode: Markers enabled, not in cycle mode
+                // Seek to the nearest marker and prevent WaveSurfer from handling
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                this.waveform.seekTo(snapTime / duration);
+                console.log(`Snapped to marker at ${snapTime.toFixed(2)}s`);
+                return false;
+            }
+        };
+
+        // Add listener in CAPTURE phase to intercept before WaveSurfer's handler
+        waveformContainer.addEventListener('click', clickHandler, true);
+        waveformContainer._clickHandler = clickHandler; // Store reference for cleanup
+
+        console.log(`[${this.getLogPrefix()}] Waveform click handler installed`);
+    }
+
+    /**
+     * Get shift left button from template-generated HTML
+     * The template uses onclick, so we need to find by looking for the button with that onclick
+     */
+    getShiftLeftButton() {
+        if (this.playerType === 'parent') {
+            // Find button with onclick="shiftBarStartLeft()"
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.getAttribute('onclick') === 'shiftBarStartLeft()') {
+                    return btn;
+                }
+            }
+        } else {
+            // Find button with onclick="shiftStemBarStartLeft('vocals')" etc
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.getAttribute('onclick') === `shiftStemBarStartLeft('${this.stemType}')`) {
+                    return btn;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get shift right button from template-generated HTML
+     */
+    getShiftRightButton() {
+        if (this.playerType === 'parent') {
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.getAttribute('onclick') === 'shiftBarStartRight()') {
+                    return btn;
+                }
+            }
+        } else {
+            const buttons = document.querySelectorAll('button');
+            for (let btn of buttons) {
+                if (btn.getAttribute('onclick') === `shiftStemBarStartRight('${this.stemType}')`) {
+                    return btn;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Toggle bar markers on/off
+     */
+    toggleMarkers() {
+        this.markersEnabled = !this.markersEnabled;
+        console.log(`[${this.getLogPrefix()}] Bar markers: ${this.markersEnabled ? 'ON' : 'OFF'}`);
+
+        // CRITICAL: Sync markersEnabled to global variable for waveform click handler
+        if (this.playerType === 'parent' && typeof window !== 'undefined' && window.updateMarkersEnabled) {
+            window.updateMarkersEnabled(this.markersEnabled);
+        }
+
+        // Update button state
+        const btnId = this.playerType === 'parent' ? 'markersBtn' : `stem-markers-btn-${this.stemType}`;
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            if (this.markersEnabled) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+
+        // Re-render markers (or clear them)
+        if (this.currentFile) {
+            this.addBarMarkers(this.currentFile);
+        }
+    }
+
+    /**
+     * Set marker frequency (bar8, bar4, bar2, bar, halfbar, beat)
+     */
+    setMarkerFrequency(freq) {
+        this.markerFrequency = freq;
+        console.log(`[${this.getLogPrefix()}] Marker frequency: ${freq}`);
+        console.log(`[${this.getLogPrefix()}] currentFile:`, this.currentFile ? 'exists' : 'NULL');
+
+        // Re-render current file's markers
+        if (this.currentFile) {
+            this.addBarMarkers(this.currentFile);
+        } else {
+            console.error(`[${this.getLogPrefix()}] Cannot add markers - currentFile is not set!`);
+        }
+
+        // If parent player, propagate to all stems
+        if (this.playerType === 'parent' && typeof window !== 'undefined' && window.stemPlayerComponents) {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            stemTypes.forEach(stemType => {
+                const stemComponent = window.stemPlayerComponents[stemType];
+                if (stemComponent) {
+                    console.log(`  → Propagating frequency change to ${stemType}`);
+                    stemComponent.setMarkerFrequency(freq);
+                }
+            });
+        }
+    }
+
+    /**
+     * Get shift increment based on marker frequency
+     */
+    getShiftIncrement() {
+        switch (this.markerFrequency) {
+            case 'bar8': return 8;
+            case 'bar4': return 4;
+            case 'bar2': return 2;
+            case 'bar': return 1;
+            case 'halfbar': return 0.5;
+            case 'beat': return 0.25;
+            default: return 1;
+        }
+    }
+
+    /**
+     * Shift bar start left
+     */
+    shiftBarStartLeft() {
+        const increment = this.getShiftIncrement();
+        this.barStartOffset -= increment;
+        console.log(`[${this.getLogPrefix()}] Bar start offset: ${this.barStartOffset} (shifted by -${increment})`);
+
+        // Update display
+        const displayId = this.playerType === 'parent'
+            ? 'barStartOffsetDisplay'
+            : `stem-bar-offset-${this.stemType}`;
+        const display = document.getElementById(displayId);
+        if (display) {
+            display.textContent = this.barStartOffset.toFixed(2).replace(/\.?0+$/, '');
+        }
+
+        // Re-render markers
+        if (this.currentFile) {
+            this.addBarMarkers(this.currentFile);
+        }
+
+        // If parent player, propagate to all stems
+        if (this.playerType === 'parent' && typeof window !== 'undefined' && window.stemPlayerComponents) {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            stemTypes.forEach(stemType => {
+                const stemComponent = window.stemPlayerComponents[stemType];
+                if (stemComponent) {
+                    console.log(`  → Propagating shift left to ${stemType}`);
+                    stemComponent.shiftBarStartLeft();
+                }
+            });
+        }
+    }
+
+    /**
+     * Shift bar start right
+     */
+    shiftBarStartRight() {
+        const increment = this.getShiftIncrement();
+        this.barStartOffset += increment;
+        console.log(`[${this.getLogPrefix()}] Bar start offset: ${this.barStartOffset} (shifted by +${increment})`);
+
+        // Update display
+        const displayId = this.playerType === 'parent'
+            ? 'barStartOffsetDisplay'
+            : `stem-bar-offset-${this.stemType}`;
+        const display = document.getElementById(displayId);
+        if (display) {
+            display.textContent = this.barStartOffset.toFixed(2).replace(/\.?0+$/, '');
+        }
+
+        // Re-render markers
+        if (this.currentFile) {
+            this.addBarMarkers(this.currentFile);
+        }
+
+        // If parent player, propagate to all stems
+        if (this.playerType === 'parent' && typeof window !== 'undefined' && window.stemPlayerComponents) {
+            const stemTypes = ['vocals', 'drums', 'bass', 'other'];
+            stemTypes.forEach(stemType => {
+                const stemComponent = window.stemPlayerComponents[stemType];
+                if (stemComponent) {
+                    console.log(`  → Propagating shift right to ${stemType}`);
+                    stemComponent.shiftBarStartRight();
+                }
+            });
+        }
+    }
+
+    /**
+     * Add bar markers to waveform
+     * Adapted from app.js addBarMarkers() and addStemBarMarkers()
+     */
+    addBarMarkers(file) {
+        // Get waveform container based on player type
+        const waveformContainerId = this.playerType === 'parent'
+            ? 'waveform'
+            : `multi-stem-waveform-${this.stemType}`;
+
+        const waveformContainer = document.getElementById(waveformContainerId);
+        if (!waveformContainer) {
+            console.warn(`[${this.getLogPrefix()}] Waveform container not found: ${waveformContainerId}`);
+            return;
+        }
+
+        // Get wavesurfer instance (parent or stem)
+        const ws = this.waveform; // This should be the wavesurfer instance
+        if (!ws) {
+            console.warn(`[${this.getLogPrefix()}] Waveform instance not found`);
+            return;
+        }
+
+        // Don't add markers if disabled or no beatmap data
+        if (!this.markersEnabled || !file.beatmap) {
+            // Clear any existing markers if disabled
+            const existingContainer = waveformContainer.querySelector('.marker-container');
+            if (existingContainer) existingContainer.remove();
+            this.currentMarkers = [];
+
+            // CRITICAL: Sync empty markers to global array
+            if (this.playerType === 'parent' && typeof window !== 'undefined' && window.updateCurrentMarkers) {
+                window.updateCurrentMarkers([]);
+            }
+            return;
+        }
+
+        // Get the duration to calculate marker positions
+        const duration = ws.getDuration();
+        if (!duration) return;
+
+        // Get or create marker container
+        let markerContainer = waveformContainer.querySelector('.marker-container');
+        if (!markerContainer) {
+            markerContainer = document.createElement('div');
+            markerContainer.className = 'marker-container';
+            waveformContainer.appendChild(markerContainer);
+        }
+
+        // Clear existing markers
+        const existingMarkers = markerContainer.querySelectorAll('.bar-marker, .beat-marker');
+        existingMarkers.forEach(marker => marker.remove());
+        this.currentMarkers = [];
+
+        // Marker container fills the full width
+        markerContainer.style.width = '100%';
+
+        // Debug: Log first few beats of original beatmap from Music.ai
+        console.log(`[BEATMAP DEBUG] ===== ORIGINAL Music.ai beatmap (first 10 beats) =====`);
+        file.beatmap.slice(0, 10).forEach((beat, idx) => {
+            console.log(`  [${idx}] time: ${beat.time.toFixed(3)}s, beatNum: ${beat.beatNum}, barNumber: ${beat.barNumber || 'N/A'}`);
+        });
+
+        // Normalize beatmap by shifting ALL beatNums so first beat becomes beat 1
+        // This fixes issues where Music.ai detects pickup beats (anacrusis)
+        // e.g., if first beat is beat 4, we shift all beats: 4→1, 1→2, 2→3, 3→4
+        const firstBeatNum = file.beatmap[0].beatNum;
+        const beatNumShift = firstBeatNum - 1; // How much to shift (e.g., if first is 4, shift by 3)
+
+        console.log(`[BEATMAP DEBUG] First beat is beatNum ${firstBeatNum}, shifting all beats by -${beatNumShift}`);
+
+        const normalizedBeatmap = file.beatmap.map((beat, index) => {
+            // Shift beat numbers so first beat becomes beat 1
+            let newBeatNum = beat.beatNum - beatNumShift;
+
+            // Wrap around (e.g., if beat was 1 and we shift by -3, it becomes 4)
+            while (newBeatNum < 1) newBeatNum += 4;
+            while (newBeatNum > 4) newBeatNum -= 4;
+
+            return { ...beat, beatNum: newBeatNum, originalIndex: index };
+        });
+
+        console.log(`[BEATMAP DEBUG] ===== AFTER normalization (first 10 beats) =====`);
+        normalizedBeatmap.slice(0, 10).forEach((beat, idx) => {
+            console.log(`  [${idx}] time: ${beat.time.toFixed(3)}s, beatNum: ${beat.beatNum}, originalIndex: ${beat.originalIndex}`);
+        });
+
+        // Split barStartOffset into integer bars and fractional beats
+        const barOffset = Math.floor(this.barStartOffset);
+        const fractionalBeats = Math.round((this.barStartOffset - barOffset) * 4);
+
+        console.log(`[SHIFT DEBUG] barStartOffset: ${this.barStartOffset}, barOffset: ${barOffset}, fractionalBeats: ${fractionalBeats}`);
+
+        // Calculate original bar numbers
+        let barNumber = 0;
+        const beatmapWithOriginalBars = normalizedBeatmap.map(beat => {
+            if (beat.beatNum === 1) barNumber++;
+            return { ...beat, originalBarNumber: barNumber };
+        });
+
+        // Rotate beatNum values for fractional beat shifts
+        const beatmapWithRotatedBeats = beatmapWithOriginalBars.map(beat => {
+            if (fractionalBeats === 0) {
+                return { ...beat };
+            } else {
+                let newBeatNum = beat.beatNum - fractionalBeats;
+                while (newBeatNum < 1) newBeatNum += 4;
+                while (newBeatNum > 4) newBeatNum -= 4;
+                return { ...beat, beatNum: newBeatNum };
+            }
+        });
+
+        // Recalculate bar numbers after beat rotation
+        barNumber = 0;
+        const beatmapWithNewBars = beatmapWithRotatedBeats.map(beat => {
+            if (beat.beatNum === 1) barNumber++;
+            return { ...beat, barNumber };
+        });
+
+        // Shift bar numbers by integer bar offset
+        const beatmapWithBars = beatmapWithNewBars.map(beat => {
+            return { ...beat, barNumber: beat.barNumber - barOffset };
+        });
+
+        // Debug: Log first 3 beats after all transformations
+        console.log(`[SHIFT DEBUG] First 3 beats after transformations:`, beatmapWithBars.slice(0, 3).map(b => ({
+            time: b.time.toFixed(2),
+            beatNum: b.beatNum,
+            barNumber: b.barNumber,
+            originalIndex: b.originalIndex
+        })));
+
+        // Filter based on frequency
+        let filteredBeats = [];
+        switch (this.markerFrequency) {
+            case 'bar8':
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 8 === 1);
+                break;
+            case 'bar4':
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 4 === 1);
+                break;
+            case 'bar2':
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 && b.barNumber % 2 === 1);
+                break;
+            case 'bar':
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1);
+                break;
+            case 'halfbar':
+                console.log(`[${this.getLogPrefix()}] HALFBAR: Checking ${beatmapWithBars.length} beats for beatNum === 1 or 3`);
+                console.log(`[${this.getLogPrefix()}] HALFBAR: First 10 beats beatNum values:`, beatmapWithBars.slice(0, 10).map(b => b.beatNum));
+                filteredBeats = beatmapWithBars.filter(b => b.beatNum === 1 || b.beatNum === 3);
+                console.log(`[${this.getLogPrefix()}] HALFBAR: Found ${filteredBeats.length} matching beats`);
+                break;
+            case 'beat':
+                filteredBeats = beatmapWithBars;
+                break;
+        }
+
+        console.log(`[${this.getLogPrefix()}] Adding ${filteredBeats.length} markers (frequency: ${this.markerFrequency}, barOffset: ${barOffset}, beatOffset: ${fractionalBeats})`);
+
+        // Debug: Show first 5 filtered beats that will be displayed
+        console.log(`[SHIFT DEBUG] First 5 FILTERED beats (frequency=${this.markerFrequency}):`, filteredBeats.slice(0, 5).map(b => ({
+            time: b.time.toFixed(2),
+            beatNum: b.beatNum,
+            barNumber: b.barNumber,
+            isBar: b.beatNum === 1,
+            isEmphasisBar: b.beatNum === 1 && b.barNumber % 4 === 1
+        })));
+
+        // Add a marker div for each filtered beat
+        filteredBeats.forEach((beat) => {
+            const marker = document.createElement('div');
+            const isBar = beat.beatNum === 1;
+            const isEmphasisBar = isBar && (beat.barNumber % 4 === 1);
+
+            if (isEmphasisBar) {
+                marker.className = 'bar-marker';
+                marker.title = `Bar ${beat.barNumber}`;
+            } else if (isBar) {
+                marker.className = 'beat-marker';
+                marker.title = `Bar ${beat.barNumber}`;
+            } else {
+                marker.className = 'beat-marker';
+                marker.title = `Beat ${beat.beatNum}`;
+            }
+
+            // Calculate position as percentage of duration
+            const position = (beat.time / duration) * 100;
+            marker.style.left = `${position}%`;
+
+            // Add bar number label at bottom for bars (beatNum === 1)
+            if (isBar) {
+                const barLabel = document.createElement('span');
+                barLabel.textContent = beat.barNumber;
+                barLabel.style.cssText = `
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    transform: translateX(-50%);
+                    font-size: 9px;
+                    color: rgba(255, 255, 255, 0.5);
+                    pointer-events: none;
+                    white-space: nowrap;
+                `;
+                marker.appendChild(barLabel);
+            }
+
+            markerContainer.appendChild(marker);
+
+            // Store marker time for snap-to-marker functionality
+            this.currentMarkers.push(beat.time);
+        });
+
+        // CRITICAL: Sync instance markers to global array for app.js waveform click handler
+        // This allows the cycle mode click handler in app.js to access marker data
+        // TODO: Remove this once waveform click handling is moved into component
+        if (this.playerType === 'parent' && typeof window !== 'undefined') {
+            // Access the global currentMarkers array from app.js module scope
+            // We'll expose a setter function to update it
+            if (window.updateCurrentMarkers) {
+                console.log(`[${this.getLogPrefix()}] Syncing ${this.currentMarkers.length} markers to global array`);
+                window.updateCurrentMarkers(this.currentMarkers);
+            } else {
+                console.error(`[${this.getLogPrefix()}] window.updateCurrentMarkers is not defined!`);
+            }
+        }
+    }
+
+    /**
+     * Setup hover preview handlers for cycle mode
+     * Shows blue preview of loop region as you move mouse (before clicking to set end)
+     * Works for BOTH parent and stem players
+     */
+    setupHoverPreview(waveformContainer) {
+        const mousemoveHandler = (e) => {
+            // Get cycle state (parent uses global window, stems use instance)
+            const cycleMode = this.playerType === 'parent' ? window.cycleMode : this.cycleMode;
+            const loopStart = this.playerType === 'parent' ? window.loopStart : this.loopStart;
+            const loopEnd = this.playerType === 'parent' ? window.loopEnd : this.loopEnd;
+
+            // Only show preview when in edit mode and start is set but end is not
+            if (!cycleMode || loopStart === null || loopEnd !== null) {
+                // Remove any existing preview
+                const existingPreview = waveformContainer.querySelector('.loop-preview');
+                if (existingPreview) existingPreview.remove();
+                return;
+            }
+
+            if (!this.waveform) return;
+
+            // Get mouse position
+            const rect = waveformContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const relativeX = mouseX / rect.width;
+            const duration = this.waveform.getDuration();
+            const mouseTime = relativeX * duration;
+
+            // Find nearest marker to the left (or use exact mouse position if no markers)
+            const hoverSnapTime = this.currentMarkers.length > 0
+                ? this.findNearestMarkerToLeft(mouseTime)
+                : mouseTime;
+
+            // Only show preview if hover position is after loop start
+            if (hoverSnapTime <= loopStart) {
+                const existingPreview = waveformContainer.querySelector('.loop-preview');
+                if (existingPreview) existingPreview.remove();
+                return;
+            }
+
+            // Remove existing preview
+            const existingPreview = waveformContainer.querySelector('.loop-preview');
+            if (existingPreview) existingPreview.remove();
+
+            // Create new preview
+            const startPercent = (loopStart / duration) * 100;
+            const hoverPercent = (hoverSnapTime / duration) * 100;
+            const widthPercent = hoverPercent - startPercent;
+
+            const preview = document.createElement('div');
+            preview.className = 'loop-preview';
+            preview.style.left = `${startPercent}%`;
+            preview.style.width = `${widthPercent}%`;
+            waveformContainer.appendChild(preview);
+        };
+
+        const mouseoutHandler = () => {
+            // Remove preview when mouse leaves waveform
+            const existingPreview = waveformContainer.querySelector('.loop-preview');
+            if (existingPreview) existingPreview.remove();
+        };
+
+        // Remove old handlers if they exist
+        if (waveformContainer._mousemoveHandler) {
+            waveformContainer.removeEventListener('mousemove', waveformContainer._mousemoveHandler);
+        }
+        if (waveformContainer._mouseoutHandler) {
+            waveformContainer.removeEventListener('mouseout', waveformContainer._mouseoutHandler);
+        }
+
+        waveformContainer.addEventListener('mousemove', mousemoveHandler);
+        waveformContainer.addEventListener('mouseout', mouseoutHandler);
+        waveformContainer._mousemoveHandler = mousemoveHandler;
+        waveformContainer._mouseoutHandler = mouseoutHandler;
+    }
+
+    /**
+     * Find nearest marker to the left of click time
+     */
+    findNearestMarkerToLeft(clickTime) {
+        if (this.currentMarkers.length === 0) return clickTime;
+
+        let nearestMarker = 0;
+        for (let markerTime of this.currentMarkers) {
+            if (markerTime <= clickTime && markerTime > nearestMarker) {
+                nearestMarker = markerTime;
+            }
+        }
+
+        return nearestMarker;
+    }
+
+    // ============================================
+    // LOOP/CYCLE CONTROLS
+    // ============================================
+
+    /**
+     * Toggle cycle mode on/off
+     */
+    toggleCycleMode() {
+        // For parent, delegate to global state
+        if (this.playerType === 'parent') {
+            if (window.toggleCycleMode) {
+                window.toggleCycleMode();
+            }
+            return;
+        }
+
+        // For stems, use instance state
+        this.cycleMode = !this.cycleMode;
+
+        if (this.cycleMode) {
+            // Entering cycle mode - enable loop editing
+            this.nextClickSets = 'start';
+            console.log(`[${this.getLogPrefix()}] CYCLE MODE ON - click waveform to set loop start/end`);
+        } else {
+            // Exiting cycle mode - disable loop editing and clear loop
+            this.loopStart = null;
+            this.loopEnd = null;
+            console.log(`[${this.getLogPrefix()}] CYCLE MODE OFF - loop disabled`);
+
+            // Sync to global state so wavesurfer handlers see the change
+            this.syncLoopStateToGlobal();
+        }
+
+        // Update visual indicators
+        this.updateLoopVisuals();
+    }
+
+    /**
+     * Sync component loop state to global stemLoopStates (for wavesurfer handlers)
+     * This is needed because wavesurfer event handlers in app.js check the global state
+     */
+    syncLoopStateToGlobal() {
+        // Only sync for stems
+        if (this.playerType !== 'stem' || !this.stemType) return;
+
+        // Access global stemLoopStates from app.js
+        if (typeof window !== 'undefined' && window.stemLoopStates && window.stemLoopStates[this.stemType]) {
+            const loopState = window.stemLoopStates[this.stemType];
+            loopState.start = this.loopStart;
+            loopState.end = this.loopEnd;
+            loopState.enabled = this.loopStart !== null && this.loopEnd !== null;
+
+            console.log(`[${this.getLogPrefix()}] Synced loop state to global: start=${this.loopStart?.toFixed(2)}, end=${this.loopEnd?.toFixed(2)}, enabled=${loopState.enabled}`);
+        }
+    }
+
+    /**
+     * Update loop visuals (button states, status text, loop region)
+     */
+    updateLoopVisuals() {
+        // For parent, delegate to global function
+        if (this.playerType === 'parent') {
+            if (window.updateLoopVisuals) {
+                window.updateLoopVisuals();
+            }
+            return;
+        }
+
+        // For stems, update stem-specific UI
+        const cycleBtn = document.getElementById(`stem-cycle-btn-${this.stemType}`);
+        const loopStatus = document.getElementById(`stem-loop-status-${this.stemType}`);
+
+        // Update cycle button state
+        if (cycleBtn) {
+            if (this.cycleMode) {
+                cycleBtn.classList.add('active');
+            } else {
+                cycleBtn.classList.remove('active');
+            }
+        }
+
+        // Update status text
+        if (loopStatus) {
+            const hasLoop = this.loopStart !== null && this.loopEnd !== null;
+            if (!this.cycleMode && !hasLoop) {
+                loopStatus.textContent = 'Off';
+                loopStatus.style.color = '#666';
+            } else if (this.cycleMode && this.loopStart === null) {
+                loopStatus.textContent = 'Click start';
+                loopStatus.style.color = '#f59e0b';
+            } else if (this.cycleMode && this.loopEnd === null) {
+                loopStatus.textContent = 'Click end →';
+                loopStatus.style.color = '#f59e0b';
+            } else if (hasLoop) {
+                const duration = this.loopEnd - this.loopStart;
+                loopStatus.textContent = `${duration.toFixed(1)}s`;
+                loopStatus.style.color = '#10b981';
+            }
+        }
+
+        // Update loop region visualization
+        this.updateLoopRegion();
+    }
+
+    /**
+     * Update loop region overlay on waveform
+     */
+    updateLoopRegion() {
+        // Get waveform container based on player type
+        const waveformContainerId = this.playerType === 'parent'
+            ? 'waveform'
+            : `multi-stem-waveform-${this.stemType}`;
+
+        const waveformContainer = document.getElementById(waveformContainerId);
+        if (!waveformContainer) return;
+
+        const ws = this.waveform;
+
+        // Remove existing loop region
+        const existingRegion = waveformContainer.querySelector('.loop-region');
+        if (existingRegion) existingRegion.remove();
+
+        // For parent, delegate to global function
+        if (this.playerType === 'parent') {
+            if (window.updateLoopRegion) {
+                window.updateLoopRegion();
+            }
+            return;
+        }
+
+        // Don't draw if cycle mode is off or loop not fully set
+        if (!this.cycleMode || this.loopStart === null || this.loopEnd === null || !ws) return;
+
+        const duration = ws.getDuration();
+        if (duration === 0) return;
+
+        const startPercent = (this.loopStart / duration) * 100;
+        const endPercent = (this.loopEnd / duration) * 100;
+        const widthPercent = endPercent - startPercent;
+
+        const loopRegion = document.createElement('div');
+        loopRegion.className = 'loop-region';
+        loopRegion.style.left = `${startPercent}%`;
+        loopRegion.style.width = `${widthPercent}%`;
+
+        waveformContainer.appendChild(loopRegion);
+    }
+
+    /**
+     * Load a file into this player
+     */
+    loadFile(file) {
+        this.currentFile = file;
+
+        // Always call addBarMarkers to clear old markers if needed
+        // (even if markers are disabled or file has no beatmap)
+        this.addBarMarkers(file);
+    }
+
+    // ============================================
+    // TRANSPORT CONTROLS
+    // ============================================
+
+    setupTransportControls() {
+        // Note: Transport controls have onclick handlers in HTML that call window wrappers
+        // Window wrappers delegate to these component methods
+        // No need to add addEventListener here to avoid double-firing
+    }
+
+    /**
+     * Play/Pause toggle
+     * Works for both parent and stem players
+     */
+    playPause() {
+        if (!this.waveform) {
+            console.warn(`[${this.getLogPrefix()}] No waveform instance`);
+            return;
+        }
+
+        // Get icon based on player type
+        const iconId = this.playerType === 'parent'
+            ? 'playPauseIcon'
+            : `stem-play-pause-icon-${this.stemType}`;
+        const icon = document.getElementById(iconId);
+
+        if (this.waveform.isPlaying()) {
+            this.waveform.pause();
+            if (icon) icon.textContent = '▶';
+
+            // For stems, mark as inactive
+            if (this.playerType === 'stem' && typeof window !== 'undefined' && window.stemPlaybackIndependent) {
+                window.stemPlaybackIndependent[this.stemType] = false;
+                console.log(`[${this.getLogPrefix()}] Paused - marked as inactive`);
+            }
+        } else {
+            this.waveform.play();
+            if (icon) icon.textContent = '||';
+
+            // For stems, mark as active
+            if (this.playerType === 'stem' && typeof window !== 'undefined' && window.stemPlaybackIndependent) {
+                window.stemPlaybackIndependent[this.stemType] = true;
+                console.log(`[${this.getLogPrefix()}] Playing - marked as active`);
+            }
+        }
+
+        console.log(`[${this.getLogPrefix()}] ${this.waveform.isPlaying() ? 'Playing' : 'Paused'}`);
+    }
+
+    // ============================================
+    // RATE CONTROLS
+    // ============================================
+
+    setupRateControls() {
+        // Note: Rate controls have onclick/oninput handlers in HTML that call window wrappers
+        // Window wrappers delegate to these component methods
+        // No need to add addEventListener here to avoid double-firing
+    }
+
+    /**
+     * Calculate final playback rate for stem players
+     * Formula:
+     *   - If locked: finalRate = parentRate
+     *   - If unlocked: finalRate = independentRate × parentRate
+     *
+     * For parent player, just returns this.rate
+     */
+    calculateFinalRate() {
+        if (this.playerType === 'parent') {
+            return this.rate;
+        }
+
+        // For stems, get parent rate from global state
+        const parentRate = (typeof window !== 'undefined' && window.currentRate) ? window.currentRate : 1.0;
+
+        if (this.rateLocked) {
+            // Locked: stem follows parent rate exactly
+            return parentRate;
+        } else {
+            // Unlocked: stem rate = independent multiplier × parent rate
+            return this.independentRate * parentRate;
+        }
+    }
+
+    /**
+     * Update rate display (shows rate and resulting BPM)
+     * @param {number} finalRate - The final playback rate to display
+     */
+    updateRateDisplay(finalRate) {
+        const displayId = this.playerType === 'parent'
+            ? 'rateDisplay'
+            : `stem-rate-display-${this.stemType}`;
+        const display = document.getElementById(displayId);
+
+        if (!display) return;
+
+        // Get current file BPM
+        const currentBPM = this.playerType === 'parent'
+            ? (typeof window !== 'undefined' && window.currentParentFileBPM) || null
+            : null;
+
+        // Calculate resulting BPM
+        const resultingBPM = currentBPM
+            ? (currentBPM * finalRate).toFixed(1)
+            : '---';
+
+        // Update display
+        display.textContent = `${finalRate.toFixed(2)}x @ ${resultingBPM} BPM`;
+    }
+
+    /**
+     * Update rate slider position (without triggering oninput)
+     * @param {number} sliderValue - Slider value (50-200)
+     */
+    updateRateSlider(sliderValue) {
+        const sliderId = this.playerType === 'parent'
+            ? 'rateSlider'
+            : `stem-rate-slider-${this.stemType}`;
+        const slider = document.getElementById(sliderId);
+
+        if (slider) {
+            slider.value = sliderValue;
+        }
+    }
+
+    /**
+     * Update lock button visual state (stems only)
+     * @param {boolean} isLocked - Whether the rate is locked to parent
+     */
+    updateLockButton(isLocked) {
+        if (this.playerType === 'parent') return; // Parent doesn't have lock button
+
+        const lockBtn = document.getElementById(`stem-lock-${this.stemType}`);
+        if (!lockBtn) return;
+
+        if (isLocked) {
+            lockBtn.classList.add('locked');
+            lockBtn.classList.remove('unlocked');
+            lockBtn.title = 'Locked to Parent Rate (click to unlock)';
+        } else {
+            lockBtn.classList.remove('locked');
+            lockBtn.classList.add('unlocked');
+            lockBtn.title = 'Independent Rate (click to lock to parent)';
+        }
+    }
+
+    /**
+     * Handle rate slider changes
+     * @param {number} sliderValue - Slider value (50-200 for 0.5x-2.0x)
+     */
+    setRate(sliderValue) {
+        if (!this.waveform) {
+            console.warn(`[${this.getLogPrefix()}] No waveform instance`);
+            return;
+        }
+
+        console.log(`[${this.getLogPrefix()}] setRate(${sliderValue})`);
+
+        // Convert slider value (50-200) to rate (0.5x-2.0x)
+        const rate = sliderValue / 100;
+
+        if (this.playerType === 'parent') {
+            // Parent player: just set the rate
+            this.rate = rate;
+            this.waveform.setPlaybackRate(rate, false);
+            this.updateRateDisplay(rate);
+            console.log(`[${this.getLogPrefix()}] Rate set to ${rate.toFixed(2)}x`);
+
+            // TODO: Update all locked stems to match parent rate
+            // This should be handled by the parent player syncing to stems
+        } else {
+            // Stem player: set independent rate
+            this.independentRate = rate;
+
+            // Unlock this stem (user is manually adjusting)
+            if (this.rateLocked) {
+                this.rateLocked = false;
+                this.updateLockButton(false);
+                console.log(`[${this.getLogPrefix()}] Unlocked (user adjusted rate manually)`);
+
+                // Sync to global state
+                if (typeof window !== 'undefined' && window.stemRateLocked) {
+                    window.stemRateLocked[this.stemType] = false;
+                }
+            }
+
+            // Calculate final rate (independent × parent)
+            const finalRate = this.calculateFinalRate();
+            this.waveform.setPlaybackRate(finalRate, false);
+            this.updateRateDisplay(finalRate);
+
+            const parentRate = (typeof window !== 'undefined' && window.currentRate) ? window.currentRate : 1.0;
+            console.log(`[${this.getLogPrefix()}] Rate set to ${finalRate.toFixed(2)}x (independent: ${rate.toFixed(2)}x × parent: ${parentRate.toFixed(2)}x)`);
+
+            // Sync to global state
+            if (typeof window !== 'undefined' && window.stemIndependentRates) {
+                window.stemIndependentRates[this.stemType] = rate;
+            }
+        }
+    }
+
+    /**
+     * Set rate to a preset value (0.5x, 1x, 2x)
+     * @param {number} presetRate - Preset rate (0.5, 1, or 2)
+     */
+    setRatePreset(presetRate) {
+        console.log(`[${this.getLogPrefix()}] setRatePreset(${presetRate}x)`);
+
+        if (this.playerType === 'parent') {
+            // Parent player: set rate directly
+            this.rate = presetRate;
+            this.updateRateSlider(presetRate * 100);
+
+            if (this.waveform) {
+                this.waveform.setPlaybackRate(presetRate, false);
+            }
+
+            this.updateRateDisplay(presetRate);
+            console.log(`[${this.getLogPrefix()}] Rate set to ${presetRate.toFixed(2)}x`);
+        } else {
+            // Stem player: set independent rate
+            this.independentRate = presetRate;
+
+            // Unlock if not already
+            if (this.rateLocked) {
+                this.rateLocked = false;
+                this.updateLockButton(false);
+                console.log(`[${this.getLogPrefix()}] Unlocked (preset button clicked)`);
+
+                // Sync to global state
+                if (typeof window !== 'undefined' && window.stemRateLocked) {
+                    window.stemRateLocked[this.stemType] = false;
+                }
+            }
+
+            // Update slider
+            this.updateRateSlider(presetRate * 100);
+
+            // Calculate and apply final rate
+            const finalRate = this.calculateFinalRate();
+            if (this.waveform) {
+                this.waveform.setPlaybackRate(finalRate, false);
+            }
+
+            this.updateRateDisplay(finalRate);
+            console.log(`[${this.getLogPrefix()}] Rate set to ${finalRate.toFixed(2)}x`);
+
+            // Sync to global state
+            if (typeof window !== 'undefined' && window.stemIndependentRates) {
+                window.stemIndependentRates[this.stemType] = presetRate;
+            }
+        }
+    }
+
+    /**
+     * Toggle lock/unlock state for stem's rate
+     * Only applicable for stem players
+     */
+    toggleRateLock() {
+        if (this.playerType === 'parent') {
+            console.warn(`[${this.getLogPrefix()}] Parent player doesn't have rate lock`);
+            return;
+        }
+
+        const wasLocked = this.rateLocked;
+        const newLockState = !wasLocked;
+
+        console.log(`[${this.getLogPrefix()}] toggleRateLock: ${wasLocked ? 'LOCKED' : 'UNLOCKED'} → ${newLockState ? 'LOCKED' : 'UNLOCKED'}`);
+
+        this.rateLocked = newLockState;
+
+        if (newLockState) {
+            // Locking: reset independent rate to 1.0
+            this.independentRate = 1.0;
+            this.updateRateSlider(100);
+            console.log(`[${this.getLogPrefix()}] Locked - reset to 1.0x multiplier`);
+        } else {
+            console.log(`[${this.getLogPrefix()}] Unlocked - can now set independent rate`);
+        }
+
+        // Update button appearance
+        this.updateLockButton(newLockState);
+
+        // Recalculate and apply final rate
+        const finalRate = this.calculateFinalRate();
+        if (this.waveform) {
+            this.waveform.setPlaybackRate(finalRate, false);
+        }
+
+        this.updateRateDisplay(finalRate);
+        console.log(`[${this.getLogPrefix()}] Rate updated to ${finalRate.toFixed(2)}x`);
+
+        // Sync to global state
+        if (typeof window !== 'undefined') {
+            if (window.stemRateLocked) {
+                window.stemRateLocked[this.stemType] = newLockState;
+            }
+            if (window.stemIndependentRates) {
+                window.stemIndependentRates[this.stemType] = this.independentRate;
+            }
+        }
+    }
+
+    // ============================================
+    // VOLUME CONTROLS
+    // ============================================
+
+    setupVolumeControls() {
+        // Note: Volume controls have onclick/oninput handlers in HTML that call window wrappers
+        // Window wrappers delegate to these component methods
+        // No need to add addEventListener here to avoid double-firing
+    }
+
+    /**
+     * Toggle mute/unmute
+     * Works for both parent and stem players
+     */
+    toggleMute() {
+        if (!this.waveform) {
+            console.warn(`[${this.getLogPrefix()}] No waveform instance`);
+            return;
+        }
+
+        const currentVolume = this.waveform.getVolume();
+
+        // Get UI elements based on player type
+        const muteBtnId = this.playerType === 'parent'
+            ? 'muteBtn'
+            : `stem-mute-${this.stemType}`;
+        const volumeSliderId = this.playerType === 'parent'
+            ? 'volumeSlider'
+            : `stem-volume-${this.stemType}`;
+        const percentDisplayId = this.playerType === 'parent'
+            ? 'volumePercent'
+            : `stem-volume-percent-${this.stemType}`;
+
+        const muteBtn = document.getElementById(muteBtnId);
+        const volumeSlider = document.getElementById(volumeSliderId);
+        const percentDisplay = document.getElementById(percentDisplayId);
+
+        if (currentVolume > 0) {
+            // Mute - save current volume first
+            this.volume = currentVolume; // Save to component state
+            this.muted = true;
+            this.waveform.setVolume(0);
+
+            if (muteBtn) {
+                muteBtn.classList.add('active');
+                const icon = muteBtn.querySelector('span');
+                if (icon) icon.textContent = '🔇';
+            }
+            if (volumeSlider) volumeSlider.value = 0;
+            if (percentDisplay) percentDisplay.textContent = '0%';
+
+            console.log(`[${this.getLogPrefix()}] Muted`);
+        } else {
+            // Unmute - restore previous volume
+            const restoredVolume = this.volume || 1.0;
+            this.muted = false;
+            this.waveform.setVolume(restoredVolume);
+
+            if (muteBtn) {
+                muteBtn.classList.remove('active');
+                const icon = muteBtn.querySelector('span');
+                if (icon) icon.textContent = '🔊';
+            }
+            if (volumeSlider) volumeSlider.value = restoredVolume * 100;
+            if (percentDisplay) percentDisplay.textContent = `${Math.round(restoredVolume * 100)}%`;
+
+            console.log(`[${this.getLogPrefix()}] Unmuted to ${Math.round(restoredVolume * 100)}%`);
+        }
+    }
+
+    /**
+     * Set volume level (0-100)
+     * @param {number} value - Volume level 0-100
+     */
+    setVolume(value) {
+        if (!this.waveform) {
+            console.warn(`[${this.getLogPrefix()}] No waveform instance`);
+            return;
+        }
+
+        const volume = value / 100;
+        this.volume = volume;
+        this.waveform.setVolume(volume);
+
+        // Get UI elements based on player type
+        const percentDisplayId = this.playerType === 'parent'
+            ? 'volumePercent'
+            : `stem-volume-percent-${this.stemType}`;
+        const muteBtnId = this.playerType === 'parent'
+            ? 'muteBtn'
+            : `stem-mute-${this.stemType}`;
+
+        const percentDisplay = document.getElementById(percentDisplayId);
+        const muteBtn = document.getElementById(muteBtnId);
+
+        // Update percentage display
+        if (percentDisplay) {
+            percentDisplay.textContent = `${value}%`;
+        }
+
+        // Update mute button icon based on volume
+        if (muteBtn) {
+            const icon = muteBtn.querySelector('span');
+            if (icon) {
+                icon.textContent = volume === 0 ? '🔇' : '🔊';
+            }
+            if (volume === 0) {
+                muteBtn.classList.add('active');
+                this.muted = true;
+            } else {
+                muteBtn.classList.remove('active');
+                this.muted = false;
+            }
+        }
+
+        console.log(`[${this.getLogPrefix()}] Volume set to ${value}%`);
+    }
+
+    // ============================================
+    // LOOP CONTROLS (PLACEHOLDER)
+    // ============================================
+
+    setupLoopControls() {
+        // TODO: Implement loop/cycle controls
+    }
+
+    // ============================================
+    // METRONOME CONTROLS (PLACEHOLDER)
+    // ============================================
+
+    setupMetronomeControls() {
+        // TODO: Implement metronome controls
+    }
+
+    // ============================================
+    // HELPER METHODS
+    // ============================================
+
+    /**
+     * Get logging prefix for console messages
+     */
+    getLogPrefix() {
+        if (this.playerType === 'parent') {
+            return 'Parent';
+        } else {
+            return this.stemType;
+        }
+    }
+}

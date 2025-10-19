@@ -1,0 +1,835 @@
+<!-- === GALAXY OPTIONS MENU === -->
+<!-- Exact options menu from visualizer, without player bar or Supabase controls -->
+<!-- To be injected into the page when Galaxy View is active -->
+
+<style>
+/* Options Menu Styles (exact from original) */
+.mode-controls {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(10, 10, 10, 0.9);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px;
+    z-index: 1000;
+    max-width: 260px;
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: all 0.3s ease;
+}
+
+.mode-controls h3 {
+    font-size: 11px;
+    color: #667eea;
+    margin-bottom: 6px;
+    margin-top: 12px;
+    padding: 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mode-controls h3:first-of-type {
+    margin-top: 0;
+}
+
+.mode-controls h3::after {
+    content: '▼';
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+.mode-controls h3.collapsed::after {
+    transform: rotate(-90deg);
+}
+
+.collapsible-content {
+    max-height: 2000px;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+    opacity: 1;
+}
+
+.collapsible-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+}
+
+.mode-section {
+    margin-bottom: 12px;
+}
+
+.mode-section label {
+    display: block;
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mode-section input[type="range"] {
+    width: 100%;
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.mode-section select {
+    width: 100%;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.toggle-btn {
+    width: 100%;
+    padding: 8px;
+    background: rgba(102, 126, 234, 0.3);
+    border: 1px solid #667eea;
+    border-radius: 4px;
+    color: #667eea;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+    background: rgba(102, 126, 234, 0.4);
+}
+
+/* Stats Overlay */
+.stats-overlay {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: rgba(10, 10, 10, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px 20px;
+    z-index: 1000;
+    min-width: 200px;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.stat-label {
+    color: #888;
+}
+
+.stat-value {
+    color: #fff;
+    font-weight: 600;
+}
+
+/* Tag Legend */
+.tag-legend {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(10, 10, 10, 0.9);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px;
+    z-index: 1000;
+    max-width: 280px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.tag-legend h3 {
+    font-size: 14px;
+    color: #667eea;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.legend-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.legend-item.hidden {
+    opacity: 0.3;
+}
+
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.legend-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+    flex: 1;
+}
+
+.legend-count {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* Crosshair */
+.crosshair {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    pointer-events: none;
+    z-index: 999;
+}
+
+.crosshair::before,
+.crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.crosshair::before {
+    width: 100%;
+    height: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.crosshair::after {
+    width: 2px;
+    height: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* Controls hint */
+.controls-hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(10, 10, 10, 0.9);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px 20px;
+    z-index: 1000;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.controls-hint h3 {
+    font-size: 13px;
+    color: #667eea;
+    margin-bottom: 8px;
+}
+
+.controls-hint div {
+    margin: 4px 0;
+}
+
+.controls-hint kbd {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-family: monospace;
+    font-size: 10px;
+}
+
+/* Options menu collapsed state */
+.mode-controls.options-collapsed {
+    width: 60px;
+    height: 60px;
+    padding: 0;
+    overflow: hidden;
+}
+
+.options-title-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: rgba(102, 126, 234, 0.1);
+    margin: -15px -15px 15px -15px;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.options-title-bar h2 {
+    font-size: 14px;
+    color: #667eea;
+    margin: 0;
+}
+
+.options-collapse-icon {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    transition: transform 0.2s;
+}
+
+.mode-controls.options-collapsed .options-title-bar {
+    margin: 0;
+    background: transparent;
+    padding: 20px;
+    border-radius: 0;
+}
+
+.mode-controls.options-collapsed .options-title-bar h2 {
+    display: none;
+}
+
+.mode-controls.options-collapsed .options-collapse-icon {
+    transform: rotate(0deg);
+    font-size: 22px;
+}
+
+.mode-controls.options-collapsed > *:not(.options-title-bar) {
+    display: none;
+}
+</style>
+
+<!-- Stats Overlay -->
+<div class="stats-overlay" id="galaxyStatsOverlay">
+    <div class="stat-row">
+        <span class="stat-label">Total Files:</span>
+        <span class="stat-value" id="totalFiles">0</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">BPM Range:</span>
+        <span class="stat-value" id="bpmRange">-</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Position:</span>
+        <span class="stat-value" id="cameraPos">0, 0, 0</span>
+    </div>
+    <div class="stat-row">
+        <span class="stat-label">Targeted:</span>
+        <span class="stat-value" id="targetedFile">None</span>
+    </div>
+</div>
+
+<!-- Options Menu -->
+<div class="mode-controls" id="galaxyOptionsMenu">
+    <!-- Title Bar -->
+    <div class="options-title-bar" onclick="toggleOptionsMenu()">
+        <h2>Options</h2>
+        <div class="options-collapse-icon">▼</div>
+    </div>
+
+    <!-- Visual Settings -->
+    <h3 onclick="toggleSection(this)">Visual Settings</h3>
+    <div class="collapsible-content">
+        <div class="mode-section">
+            <label>Color Mode:</label>
+            <select id="colorModeSelect" onchange="updateColorMode(this.value)">
+                <option value="tags" selected>Tags</option>
+                <option value="key">Musical Key</option>
+                <option value="bpm">BPM</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>X-Axis:</label>
+            <select id="xAxisSelect" onchange="updateAxisMode('x', this.value)">
+                <option value="bpm" selected>BPM</option>
+                <option value="key">Key</option>
+                <option value="tags">Tags</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>Y-Axis:</label>
+            <select id="yAxisSelect" onchange="updateAxisMode('y', this.value)">
+                <option value="key" selected>Key</option>
+                <option value="bpm">BPM</option>
+                <option value="tags">Tags</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>Z-Axis:</label>
+            <select id="zAxisSelect" onchange="updateAxisMode('z', this.value)">
+                <option value="tags" selected>Tags</option>
+                <option value="bpm">BPM</option>
+                <option value="key">Key</option>
+                <option value="random">Random</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Particle Settings -->
+    <h3 onclick="toggleSection(this)" class="collapsed">Particle Settings</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Particle Size: <span id="particleSizeValue">17.5</span></label>
+            <input type="range" id="particleSizeSlider" min="1" max="50" step="0.5" value="17.5"
+                   oninput="updateParticleSize(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <label>Particles Per File: <span id="particlesPerClusterValue">48</span></label>
+            <input type="range" id="particlesPerClusterSlider" min="1" max="100" step="1" value="48"
+                   oninput="updateParticlesPerCluster(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <label>Cluster Radius: <span id="clusterRadiusValue">10</span></label>
+            <input type="range" id="clusterRadiusSlider" min="1" max="50" step="1" value="10"
+                   oninput="updateClusterRadius(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <label>Brightness: <span id="brightnessValue">0.8</span></label>
+            <input type="range" id="brightnessSlider" min="0.1" max="1" step="0.1" value="0.8"
+                   oninput="updateBrightness(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <label>Particle Shape:</label>
+            <select id="particleShapeSelect" onchange="updateParticleShape(this.value)">
+                <option value="circle" selected>Circle</option>
+                <option value="square">Square</option>
+                <option value="disc">Disc</option>
+                <option value="ring">Ring</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Motion Settings -->
+    <h3 onclick="toggleSection(this)" class="collapsed">Motion Settings</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Rotation Mode:</label>
+            <select id="rotationModeSelect" onchange="updateRotationMode(this.value)">
+                <option value="collective" selected>Collective</option>
+                <option value="spiral">Spiral</option>
+                <option value="individual">Individual</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>Orbit Speed: <span id="orbitSpeedValue">1.5</span></label>
+            <input type="range" id="orbitSpeedSlider" min="0" max="10" step="0.1" value="1.5"
+                   oninput="updateOrbitSpeed(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <label>Orbit Radius: <span id="orbitRadiusValue">80</span></label>
+            <input type="range" id="orbitRadiusSlider" min="0" max="200" step="5" value="80"
+                   oninput="updateOrbitRadius(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <button class="toggle-btn" id="motionToggle" onclick="toggleMotion()">
+                Motion: ON
+            </button>
+        </div>
+    </div>
+
+    <!-- Audio Reactivity -->
+    <h3 onclick="toggleSection(this)" class="collapsed">Audio Reactivity</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Current Amplitude: <span id="audioAmplitudeDisplay">0.00</span></label>
+        </div>
+
+        <div class="mode-section">
+            <label>Frequency Range:</label>
+            <select id="frequencyModeSelect" onchange="updateFrequencyMode(this.value)">
+                <option value="all">All Frequencies</option>
+                <option value="bass">Bass (20-250 Hz)</option>
+                <option value="mids">Mids (250-2000 Hz)</option>
+                <option value="highs">Highs (2000+ Hz)</option>
+            </select>
+        </div>
+
+        <div class="mode-section">
+            <label>Pulse Strength: <span id="audioStrengthValue">40</span></label>
+            <input type="range" id="audioStrengthSlider" min="0" max="100" step="1" value="40"
+                   oninput="updateAudioStrength(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <label>Global Reactivity: <span id="globalReactivityValue">4.4</span></label>
+            <input type="range" id="globalReactivitySlider" min="0" max="10" step="0.1" value="4.4"
+                   oninput="updateGlobalReactivity(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <button class="toggle-btn" id="audioReactivityToggle" onclick="toggleAudioReactivity()">
+                Audio Reactivity: ON
+            </button>
+        </div>
+    </div>
+
+    <!-- Visual Effects -->
+    <h3 onclick="toggleSection(this)" class="collapsed">Visual Effects</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Bloom Strength: <span id="bloomValue">0</span></label>
+            <input type="range" id="bloomSlider" min="0" max="10" step="0.1" value="0"
+                   oninput="updateBloom(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <label>Move Speed: <span id="moveSpeedValue">3</span></label>
+            <input type="range" id="moveSpeedSlider" min="0.1" max="10" step="0.1" value="3"
+                   oninput="updateMoveSpeed(this.value)">
+        </div>
+    </div>
+
+    <!-- Hover Effects -->
+    <h3 onclick="toggleSection(this)" class="collapsed">Crosshair Hover</h3>
+    <div class="collapsible-content collapsed">
+        <div class="mode-section">
+            <label>Hover Speed: <span id="hoverSpeedValue">10</span>%</label>
+            <input type="range" id="hoverSpeedSlider" min="0" max="100" step="5" value="10"
+                   oninput="updateHoverSpeed(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <label>Hover Scale: <span id="hoverScaleValue">1.0</span>x</label>
+            <input type="range" id="hoverScaleSlider" min="1" max="5" step="0.1" value="1.0"
+                   oninput="updateHoverScale(this.value)">
+        </div>
+
+        <div class="mode-section">
+            <button class="toggle-btn" id="mouseInteractionToggle" onclick="toggleMouseInteraction()">
+                Crosshair Hover: ON
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Tag Legend -->
+<div class="tag-legend" id="tagLegend">
+    <h3>
+        <span>Color Legend</span>
+        <button onclick="toggleLegend()" style="background: none; border: none; color: #667eea; cursor: pointer;">▼</button>
+    </h3>
+    <div id="tagLegendContent">
+        <!-- Will be populated dynamically -->
+    </div>
+</div>
+
+<!-- Controls Hint -->
+<div class="controls-hint" id="controlsHint">
+    <h3>Controls</h3>
+    <div><kbd>W/S</kbd> Move forward/backward</div>
+    <div><kbd>A/D</kbd> Move left/right</div>
+    <div><kbd>Mouse</kbd> Look around</div>
+    <div><kbd>Click</kbd> Play file</div>
+    <div><kbd>Shift</kbd> Sprint (3x speed)</div>
+    <div><kbd>H</kbd> Hide all UI</div>
+</div>
+
+<!-- Crosshair -->
+<div class="crosshair" id="crosshair"></div>
+
+<script>
+// === GALAXY OPTIONS MENU FUNCTIONS ===
+
+// Toggle main options menu collapse
+function toggleOptionsMenu() {
+    const menu = document.getElementById('galaxyOptionsMenu');
+    const icon = menu.querySelector('.options-collapse-icon');
+
+    if (menu.classList.contains('options-collapsed')) {
+        menu.classList.remove('options-collapsed');
+        icon.textContent = '▼';
+    } else {
+        menu.classList.add('options-collapsed');
+        icon.textContent = '◀';
+    }
+}
+
+// Toggle section collapse
+function toggleSection(header) {
+    const content = header.nextElementSibling;
+
+    if (header.classList.contains('collapsed')) {
+        header.classList.remove('collapsed');
+        content.classList.remove('collapsed');
+    } else {
+        header.classList.add('collapsed');
+        content.classList.add('collapsed');
+    }
+}
+
+// Update functions that connect to the galaxy view
+function updateColorMode(value) {
+    if (window.galaxyView) {
+        window.galaxyView.settings.currentColorMode = value;
+        window.galaxyView.updateFiles(window.audioFiles);
+    }
+}
+
+function updateAxisMode(axis, value) {
+    if (window.galaxyView) {
+        switch(axis) {
+            case 'x': window.galaxyView.settings.currentXMode = value; break;
+            case 'y': window.galaxyView.settings.currentYMode = value; break;
+            case 'z': window.galaxyView.settings.currentZMode = value; break;
+        }
+        window.galaxyView.updateFiles(window.audioFiles);
+    }
+}
+
+function updateParticleSize(value) {
+    document.getElementById('particleSizeValue').textContent = value;
+    if (window.galaxyView) {
+        window.galaxyView.settings.particleSize = parseFloat(value);
+    }
+}
+
+function updateParticlesPerCluster(value) {
+    document.getElementById('particlesPerClusterValue').textContent = value;
+    if (window.galaxyView) {
+        window.particlesPerCluster = parseInt(value);
+        window.galaxyView.updateFiles(window.audioFiles);
+    }
+}
+
+function updateClusterRadius(value) {
+    document.getElementById('clusterRadiusValue').textContent = value;
+    if (window.galaxyView) {
+        window.clusterRadius = parseFloat(value);
+    }
+}
+
+function updateBrightness(value) {
+    document.getElementById('brightnessValue').textContent = value;
+    if (window.galaxyView) {
+        window.galaxyView.settings.particleBrightness = parseFloat(value);
+        // Update material opacity
+        if (window.particleSystem && window.particleSystem.material) {
+            window.particleSystem.material.opacity = parseFloat(value);
+            window.particleSystem.material.needsUpdate = true;
+        }
+    }
+}
+
+function updateParticleShape(value) {
+    if (window.galaxyView) {
+        window.galaxyView.settings.particleShape = value;
+        window.galaxyView.updateFiles(window.audioFiles);
+    }
+}
+
+function updateRotationMode(value) {
+    if (window.galaxyView) {
+        window.rotationMode = value;
+    }
+}
+
+function updateOrbitSpeed(value) {
+    document.getElementById('orbitSpeedValue').textContent = value;
+    if (window.galaxyView) {
+        window.orbitSpeed = parseFloat(value) * 0.000001;
+    }
+}
+
+function updateOrbitRadius(value) {
+    document.getElementById('orbitRadiusValue').textContent = value;
+    if (window.galaxyView) {
+        window.orbitRadius = parseFloat(value);
+    }
+}
+
+function toggleMotion() {
+    const btn = document.getElementById('motionToggle');
+    if (window.galaxyView) {
+        window.motionEnabled = !window.motionEnabled;
+        btn.textContent = window.motionEnabled ? 'Motion: ON' : 'Motion: OFF';
+    }
+}
+
+function updateFrequencyMode(value) {
+    if (window.galaxyView) {
+        window.audioFrequencyMode = value;
+    }
+}
+
+function updateAudioStrength(value) {
+    document.getElementById('audioStrengthValue').textContent = value;
+    if (window.galaxyView) {
+        window.audioReactivityStrength = parseFloat(value);
+    }
+}
+
+function updateGlobalReactivity(value) {
+    document.getElementById('globalReactivityValue').textContent = value;
+    if (window.galaxyView) {
+        window.globalAudioReactivity = parseFloat(value);
+    }
+}
+
+function toggleAudioReactivity() {
+    const btn = document.getElementById('audioReactivityToggle');
+    if (window.galaxyView) {
+        window.audioReactivityEnabled = !window.audioReactivityEnabled;
+        btn.textContent = window.audioReactivityEnabled ? 'Audio Reactivity: ON' : 'Audio Reactivity: OFF';
+    }
+}
+
+function updateBloom(value) {
+    document.getElementById('bloomValue').textContent = value;
+    if (window.galaxyView) {
+        window.bloomStrength = parseFloat(value);
+    }
+}
+
+function updateMoveSpeed(value) {
+    document.getElementById('moveSpeedValue').textContent = value;
+    if (window.galaxyView) {
+        window.moveSpeed = parseFloat(value);
+    }
+}
+
+function updateHoverSpeed(value) {
+    document.getElementById('hoverSpeedValue').textContent = value;
+    if (window.galaxyView) {
+        window.hoverSlowdown = parseFloat(value) / 100;
+    }
+}
+
+function updateHoverScale(value) {
+    document.getElementById('hoverScaleValue').textContent = value;
+    if (window.galaxyView) {
+        window.hoverScale = parseFloat(value);
+    }
+}
+
+function toggleMouseInteraction() {
+    const btn = document.getElementById('mouseInteractionToggle');
+    if (window.galaxyView) {
+        window.mouseInteractionEnabled = !window.mouseInteractionEnabled;
+        btn.textContent = window.mouseInteractionEnabled ? 'Crosshair Hover: ON' : 'Crosshair Hover: OFF';
+    }
+}
+
+// Update audio amplitude display
+setInterval(() => {
+    if (window.currentAudioAmplitude !== undefined) {
+        document.getElementById('audioAmplitudeDisplay').textContent = window.currentAudioAmplitude.toFixed(2);
+    }
+}, 100);
+
+// Initialize tag legend
+function initializeTagLegend() {
+    const legendContent = document.getElementById('tagLegendContent');
+    if (!legendContent || !window.audioFiles) return;
+
+    // Count files per category
+    const categoryCounts = new Map();
+    window.audioFiles.forEach(file => {
+        const category = getCategoryForFile(file);
+        categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+    });
+
+    // Create legend items
+    legendContent.innerHTML = '';
+    const categories = Array.from(categoryCounts.keys()).sort();
+
+    categories.forEach(category => {
+        const count = categoryCounts.get(category);
+        const colorData = window.mainCategoryColors ? window.mainCategoryColors[category] : { hue: 0, sat: 0.5 };
+
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.onclick = () => toggleCategoryVisibility(category);
+
+        const color = document.createElement('div');
+        color.className = 'legend-color';
+        color.style.background = `hsl(${colorData.hue}, ${colorData.sat * 100}%, 60%)`;
+
+        const label = document.createElement('div');
+        label.className = 'legend-label';
+        label.textContent = category;
+
+        const countSpan = document.createElement('div');
+        countSpan.className = 'legend-count';
+        countSpan.textContent = count;
+
+        item.appendChild(color);
+        item.appendChild(label);
+        item.appendChild(countSpan);
+
+        legendContent.appendChild(item);
+    });
+}
+
+function getCategoryForFile(file) {
+    if (!file.tags || file.tags.length === 0) return 'other';
+    const tag = file.tags[0].toLowerCase();
+
+    // Map common variations
+    if (tag.includes('drum')) return 'drums';
+    if (tag.includes('vox') || tag.includes('vocal')) return 'vox';
+    if (tag.includes('bass')) return 'bass';
+    if (tag.includes('gtr')) return 'gtr';
+    if (tag.includes('piano') || tag.includes('pno')) return 'piano';
+
+    return tag;
+}
+
+function toggleCategoryVisibility(category) {
+    if (window.hiddenCategories) {
+        if (window.hiddenCategories.has(category)) {
+            window.hiddenCategories.delete(category);
+        } else {
+            window.hiddenCategories.add(category);
+        }
+
+        // Update legend item visual
+        const items = document.querySelectorAll('.legend-item');
+        items.forEach(item => {
+            const label = item.querySelector('.legend-label').textContent;
+            if (label === category) {
+                item.classList.toggle('hidden', window.hiddenCategories.has(category));
+            }
+        });
+    }
+}
+
+// Initialize when loaded
+setTimeout(initializeTagLegend, 1000);
+</script>

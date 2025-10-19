@@ -438,22 +438,38 @@ function onKeyUp(event) {
 }
 
 function onClick(event) {
-    if (isPointerLocked) return; // Don't click particles when pointer is locked
+    console.log('🖱️ Canvas clicked, pointer locked:', isPointerLocked);
+
+    if (isPointerLocked) {
+        console.log('  ⚠️ Pointer is locked, ignoring click');
+        return; // Don't click particles when pointer is locked
+    }
+
+    console.log('  📍 Mouse position:', mouse.x, mouse.y);
 
     // Raycast to find clicked particle
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObjects(particles);
 
+    console.log('  🎯 Raycast found', intersects.length, 'intersections');
+
     if (intersects.length > 0) {
         const clickedParticle = intersects[0].object;
         const file = clickedParticle.userData.file;
 
-        console.log('Clicked particle:', file.name);
+        console.log('  ✅ Clicked particle:', file.name, 'ID:', file.id);
+        console.log('  🔍 window.loadAudio exists?', !!window.loadAudio);
 
         // Load file using global function
         if (window.loadAudio) {
+            console.log('  📞 Calling window.loadAudio with ID:', file.id);
             window.loadAudio(file.id, true);
+            console.log('  ✅ window.loadAudio called');
+        } else {
+            console.error('  ❌ window.loadAudio not found!');
         }
+    } else {
+        console.log('  ⚠️ No particles hit by raycast');
     }
 }
 
@@ -479,17 +495,21 @@ function updateMovement(delta) {
     // Reset velocity
     velocity.set(0, 0, 0);
 
-    // WASD movement
+    // Check if Shift is held (sprint mode)
+    const isSprinting = keys['ShiftLeft'] || keys['ShiftRight'];
+    const currentSpeed = isSprinting ? moveSpeed * 2.5 : moveSpeed;
+
+    // WASD movement (Space bar NOT used - reserved for pause/play)
     if (keys['KeyW']) velocity.add(forward);
     if (keys['KeyS']) velocity.sub(forward);
     if (keys['KeyA']) velocity.sub(right);
     if (keys['KeyD']) velocity.add(right);
-    if (keys['Space']) velocity.add(up);
-    if (keys['ShiftLeft'] || keys['ShiftRight']) velocity.sub(up);
+    // NOTE: Space bar removed from movement - it's used for play/pause
+    // Shift is now sprint modifier instead of move down
 
-    // Normalize and apply speed
+    // Normalize and apply speed (with sprint modifier)
     if (velocity.length() > 0) {
-        velocity.normalize().multiplyScalar(moveSpeed);
+        velocity.normalize().multiplyScalar(currentSpeed);
         camera.position.add(velocity);
     }
 }

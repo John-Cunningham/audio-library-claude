@@ -1,3176 +1,802 @@
-// Galaxy View - 3D particle visualization with advanced instanced mesh rendering
-// Phase 2A: Integrated utilities + advanced particle system with subparticle clusters
-
-import { wireUpMenuControls as wireUpMenuControlsImpl, wireUpAdditionalControls as wireUpAdditionalControlsImpl } from './galaxyView-controls.js';
-
-// ============================================================================
-// CORE UTILITIES
-// ============================================================================
-
 /**
- * Generates a deterministic pseudo-random number from a seed
- * Used to ensure consistent particle positions across renders
+ * Galaxy View - 3D Audio File Visualizer
+ *
+ * Clean extraction from reference visualizer following modular architecture.
+ *
+ * Displays audio files as clusters of particles in 3D space with:
+ * - FPS-style camera controls (WASD + mouse look)
+ * - Real-time audio reactivity (particles pulse to music)
+ * - Multiple visualization modes (tags, BPM, key, length)
+ * - Particle clustering and orbital motion
+ * - Click-to-play interaction
+ *
+ * @module GalaxyView
  */
-function seededRandom(seed) {
-    const x = Math.sin(seed) * 10000;
-    return x - Math.floor(x);
-}
 
-/**
- * Creates a texture for particle sprites using HTML Canvas
- * Supports multiple shapes with smooth alpha gradients
- */
-function createParticleTexture(shape) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d', { alpha: true });
-    const centerX = 64;
-    const centerY = 64;
+export class GalaxyView {
+    constructor(containerId, options = {}) {
+        // Container
+        this.container = document.getElementById(containerId);
+        if (!this.container) {
+            throw new Error(`Galaxy View container '#${containerId}' not found`);
+        }
 
-    ctx.clearRect(0, 0, 128, 128);
+        // Dependencies (injected)
+        this.playerStateManager = options.playerStateManager;
+        this.onFileClick = options.onFileClick || (() => {});
 
-    switch(shape) {
-        case 'circle':
-            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 60);
-            gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-            gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
-            gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
-            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-
-        case 'square':
-            const sqGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 50);
-            sqGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-            sqGradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.5)');
-            sqGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            ctx.fillStyle = sqGradient;
-            ctx.fillRect(14, 14, 100, 100);
-            break;
-
-        case 'disc':
-            const discGradient = ctx.createRadialGradient(centerX, centerY, 45, centerX, centerY, 58);
-            discGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-            discGradient.addColorStop(0.8, 'rgba(255, 255, 255, 1)');
-            discGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            ctx.fillStyle = discGradient;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 58, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-
-        case 'ring':
-            const ringGradient = ctx.createRadialGradient(centerX, centerY, 30, centerX, centerY, 58);
-            ringGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
-            ringGradient.addColorStop(0.3, 'rgba(255, 255, 255, 1)');
-            ringGradient.addColorStop(0.7, 'rgba(255, 255, 255, 1)');
-            ringGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            ctx.fillStyle = ringGradient;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 58, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 30, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = 'source-over';
-            break;
-
-        default:
-            const defaultGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 60);
-            defaultGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-            defaultGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            ctx.fillStyle = defaultGradient;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
-            ctx.fill();
-    }
-
-    if (typeof THREE !== 'undefined') {
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-        return texture;
-    } else {
-        console.warn('THREE.js not loaded, returning canvas element instead');
-        return canvas;
-    }
-}
-
-/**
- * Maps a value from one range to another (linear interpolation)
- */
-function mapRange(value, inMin, inMax, outMin, outMax) {
-    return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
-}
-
-/**
- * Clamps a value between min and max bounds
- */
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-}
-
-/**
- * Simple hash function for strings (for consistent tag-based positioning)
- */
-function hashString(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-    }
-    return Math.abs(hash) / 2147483647;
-}
-
-/**
- * Gets a key value from musical key notation
- */
-function getKeyValue(key) {
-    if (!key) return 0;
-    const keyMap = {
-        'C': 0, 'C#': 1, 'Db': 1,
-        'D': 2, 'D#': 3, 'Eb': 3,
-        'E': 4, 'Fb': 4,
-        'F': 5, 'F#': 6, 'Gb': 6,
-        'G': 7, 'G#': 8, 'Ab': 8,
-        'A': 9, 'A#': 10, 'Bb': 10,
-        'B': 11, 'Cb': 11
-    };
-    const keyName = key.split('/')[0]
-        .replace('maj', '')
-        .replace('min', '')
-        .replace('m', '')
-        .trim();
-    return keyMap[keyName] || 0;
-}
-
-// ============================================================================
-// PARTICLE SYSTEM CONSTANTS
-// ============================================================================
-
-const KEY_COLORS = {
-    'C': { hue: 0, sat: 0.7 },
-    'G': { hue: 30, sat: 0.7 },
-    'D': { hue: 60, sat: 0.7 },
-    'A': { hue: 90, sat: 0.7 },
-    'E': { hue: 120, sat: 0.7 },
-    'B': { hue: 150, sat: 0.7 },
-    'F#': { hue: 180, sat: 0.7 },
-    'C#': { hue: 210, sat: 0.7 },
-    'G#': { hue: 240, sat: 0.7 },
-    'D#': { hue: 270, sat: 0.7 },
-    'A#': { hue: 300, sat: 0.7 },
-    'F': { hue: 330, sat: 0.7 }
-};
-
-const BPM_COLORS = [
-    { min: 0, max: 90, hue: 240, sat: 0.7 },
-    { min: 90, max: 110, hue: 180, sat: 0.7 },
-    { min: 110, max: 128, hue: 120, sat: 0.7 },
-    { min: 128, max: 140, hue: 60, sat: 0.7 },
-    { min: 140, max: 160, hue: 30, sat: 0.7 },
-    { min: 160, max: 180, hue: 0, sat: 0.7 },
-    { min: 180, max: 999, hue: 300, sat: 0.7 }
-];
-
-const CATEGORY_COLORS = {
-    'drums': { hue: 0, sat: 0.8 },
-    'inst': { hue: 30, sat: 0.7 },
-    'vox': { hue: 60, sat: 0.7 },
-    'bass': { hue: 120, sat: 0.8 },
-    'gtr': { hue: 180, sat: 0.7 },
-    'pno': { hue: 240, sat: 0.7 },
-    'piano': { hue: 240, sat: 0.7 },
-    'syn': { hue: 270, sat: 0.8 },
-    'perc': { hue: 90, sat: 0.6 },
-    'pad': { hue: 200, sat: 0.6 },
-    'lead': { hue: 300, sat: 0.8 },
-    'fx': { hue: 150, sat: 0.6 },
-    'arp': { hue: 210, sat: 0.7 },
-    'other': { hue: 0, sat: 0.3 }
-};
-
-// ============================================================================
-// SCENE VARIABLES
-// ============================================================================
-
-let scene = null;
-let camera = null;
-let renderer = null;
-let raycaster = null;
-let mouse = null;
-let animationFrameId = null;
-let isPointerLocked = false;
-
-// ============================================================================
-// PARTICLE SYSTEM VARIABLES (Exposed to window for menu controls)
-// ============================================================================
-
-let particleSystem = null;               // THREE.InstancedMesh (internal)
-let particles = [];                      // Array of cluster objects (internal)
-window.particlesPerCluster = 48;         // Number of sub-particles per file
-window.particleSize = 5;                 // Base size of particles
-let subParticleScale = 0.3;             // Sub-particles are smaller (internal)
-window.clusterRadius = 10;               // Spread radius for sub-particles
-window.particleShape = 'circle';         // Shape: 'circle', 'square', 'disc', 'ring'
-window.particleBrightness = 0.8;         // Base particle brightness/opacity
-let subParticleShape = 'default';       // Cluster shape (internal)
-let densityGradient = 0;                // 0-1, adds more particles near center (internal)
-let maxParticleCount = 0;               // Maximum particles limit (internal)
-
-// ============================================================================
-// AUDIO ANALYZER VARIABLES (Exposed to window for menu controls)
-// ============================================================================
-
-let audioContext = null;              // Web Audio API context (internal)
-let analyser = null;                  // AnalyserNode for frequency analysis (internal)
-let audioDataArray = null;            // Uint8Array for frequency data (internal)
-let currentAudioAmplitude = 0;        // Overall amplitude (0-5 range) (internal)
-let bassAmplitude = 0;                // Bass frequencies (20-250 Hz) (internal)
-let midsAmplitude = 0;                // Mid frequencies (250-2000 Hz) (internal)
-let highsAmplitude = 0;               // High frequencies (2000+ Hz) (internal)
-window.audioFrequencyMode = 'all';    // 'all', 'bass', 'mids', 'highs'
-const AUDIO_DEBUG = false;            // Debug logging (internal)
-
-// ============================================================================
-// ANIMATION & MOTION VARIABLES (Exposed to window for menu controls)
-// ============================================================================
-
-let animationTime = 0;                          // Global animation timer (internal)
-let motionEnabled = true;                       // Toggle all motion on/off (internal)
-window.motionMode = 'collective';               // Current motion mode
-window.orbitSpeed = 0.0015;                     // Base rotation speed (50 * 0.00003 = moderate motion)
-window.orbitRadius = 80;                        // Motion amplitude
-let audioReactivityEnabled = true;              // Toggle audio reactivity (internal)
-window.audioReactivityStrength = 40;            // Audio effect strength (0-100 range, default 40)
-let globalAudioReactivity = 4.4;                // Global audio pulse strength (internal, 0-10 range)
-window.globalAudioReactivity = 4.4;             // Expose to window for menu control (default 4.4)
-window.clusterSpreadOnAudio = 20;               // How much clusters expand with audio
-let hoveredCluster = null;                      // Currently hovered cluster (internal)
-let hoverScale = 1.5;                           // Scale multiplier on hover (internal)
-let hoverSlowdown = 10;                         // Time slowdown factor (internal)
-let mouseInteractionEnabled = true;             // Enable mouse effects (internal)
-let hiddenCategories = new Set();               // Hidden file categories (internal)
-
-// Wave motion parameters (internal)
-let waveAmplitude = 50;                         // Wave height
-let waveFrequency = 0.001;                      // Wave speed
-let waveDirection = { x: 1, y: 0, z: 0 };      // Wave propagation direction
-
-// ============================================================================
-// VISUALIZATION MODES (Exposed to window for menu controls)
-// ============================================================================
-
-window.currentColorMode = 'key';        // Color mode: 'tags', 'key', 'bpm', 'length'
-window.currentXMode = 'bpm';            // X-axis: 'bpm', 'key', 'tags', 'length', 'random'
-window.currentYMode = 'key';            // Y-axis: 'bpm', 'key', 'tags', 'length', 'random'
-window.currentZMode = 'tags';           // Z-axis: 'bpm', 'key', 'tags', 'length', 'random'
-let xAxisScale = 1.0;                   // X-axis scale (internal)
-let yAxisScale = 1.0;                   // Y-axis scale (internal)
-let zAxisScale = 1.0;                   // Z-axis scale (internal)
-window.visibilityDistance = 800;        // Fog/render distance
-
-// ============================================================================
-// CAMERA MOVEMENT (Exposed to window for menu controls)
-// ============================================================================
-
-window.moveSpeed = 5.0;
-window.lookSensitivity = 0.002;
-let keys = {};
-let velocity = null;
-let pitch = 0;
-let yaw = 0;
-
-// ============================================================================
-// AUDIO FILES DATA
-// ============================================================================
-
-let audioFilesData = [];
-let currentFileData = null;
-
-// ============================================================================
-// THREE.JS LOADING
-// ============================================================================
-
-let THREE = null;
-let threeLoaded = false;
-
-// Post-processing variables
-let composer = null;
-let bloomPass = null;
-window.bloomStrength = 1.5; // Default bloom strength (0-10 range)
-
-// Tag filter state
-let currentFilterMode = 'canHave'; // 'canHave', 'mustHave', 'exclude'
-const canHaveTags = new Set();
-const mustHaveTags = new Set();
-const excludeTags = new Set();
-let tagFilterPanelVisible = false;
-
-// Search state
-let searchQuery = '';
-
-async function loadThreeJS() {
-    if (threeLoaded) return true;
-
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-        script.onload = async () => {
-            THREE = window.THREE;
-            threeLoaded = true;
-            console.log('Three.js loaded successfully');
-
-            // Load post-processing libraries
-            await loadPostProcessing();
-
-            resolve(true);
+        // Configuration
+        this.config = {
+            particleSize: options.particleSize || 17.5,
+            particlesPerCluster: options.particlesPerCluster || 48,
+            clusterRadius: options.clusterRadius || 10,
+            moveSpeed: options.moveSpeed || 3.0,
+            lookSensitivity: options.lookSensitivity || 0.002,
+            orbitSpeed: options.orbitSpeed || 0.0000015,
+            orbitRadius: options.orbitRadius || 80,
+            visibilityDistance: options.visibilityDistance || 900,
+            audioReactivity: options.audioReactivity !== false,
+            bloomStrength: options.bloomStrength || 0,
+            colorMode: options.colorMode || 'tags',
+            xAxisMode: options.xAxisMode || 'bpm',
+            yAxisMode: options.yAxisMode || 'key',
+            zAxisMode: options.zAxisMode || 'tags'
         };
-        script.onerror = () => {
-            console.error('Failed to load Three.js');
-            reject(false);
-        };
-        document.head.appendChild(script);
-    });
-}
 
-/**
- * Loads Three.js post-processing libraries for bloom effect
- */
-async function loadPostProcessing() {
-    const libraries = [
-        'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js',
-        'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js',
-        'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js',
-        'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js',
-        'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js',
-        'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js'
-    ];
+        // Three.js core
+        this.scene = null;
+        this.camera = null;
+        this.renderer = null;
+        this.composer = null;
+        this.bloomPass = null;
+        this.raycaster = null;
+        this.mouse = new THREE.Vector2();
 
-    for (const lib of libraries) {
-        await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = lib;
-            script.onload = resolve;
-            script.onerror = () => {
-                console.warn(`Failed to load ${lib}`);
-                resolve(); // Continue even if one fails
-            };
-            document.head.appendChild(script);
-        });
+        // Particle system
+        this.particleSystem = null;
+        this.particles = []; // Array of cluster objects
+        this.audioFiles = [];
+
+        // State
+        this.isActive = false;
+        this.isPointerLocked = false;
+        this.animationId = null;
+        this.animationTime = 0;
+
+        // Camera state
+        this.pitch = 0;
+        this.yaw = 0;
+        this.keys = {};
+        this.velocity = new THREE.Vector3();
+
+        // Audio reactivity
+        this.currentAudioAmplitude = 0;
+        this.bassAmplitude = 0;
+        this.midsAmplitude = 0;
+        this.highsAmplitude = 0;
+
+        // Event listeners (bound methods for easy removal)
+        this.boundOnKeyDown = this.onKeyDown.bind(this);
+        this.boundOnKeyUp = this.onKeyUp.bind(this);
+        this.boundOnMouseMove = this.onMouseMove.bind(this);
+        this.boundOnClick = this.onClick.bind(this);
+        this.boundOnResize = this.onWindowResize.bind(this);
+        this.boundOnPointerLockChange = this.onPointerLockChange.bind(this);
     }
 
-    console.log('✅ Post-processing libraries loaded');
-}
+    /**
+     * Initialize galaxy view with audio files data
+     * @param {Array} audioFiles - Array of audio file objects
+     */
+    init(audioFiles) {
+        console.log('🌌 Galaxy View: Initializing with', audioFiles.length, 'files');
 
-// ============================================================================
-// VIEW LIFECYCLE
-// ============================================================================
+        this.audioFiles = audioFiles;
 
-export async function init(data = {}) {
-    console.log('🌌 Galaxy view initializing (Phase 2A - Advanced Particles)...');
+        this.initScene();
+        this.detectFrequentTags();
+        this.createParticles();
+        this.setupEventListeners();
 
-    // Load Three.js first
-    await loadThreeJS();
-
-    // Initialize Three.js-dependent variables
-    mouse = new THREE.Vector2();
-    velocity = new THREE.Vector3();
-
-    // Store audio files data
-    if (data.audioFiles) {
-        audioFilesData = data.audioFiles;
-        console.log('📁 Loaded', audioFilesData.length, 'audio files');
-    }
-    if (data.currentFile) {
-        currentFileData = data.currentFile;
-        console.log('🎵 Current file:', currentFileData.name);
+        console.log('✅ Galaxy View: Initialization complete');
     }
 
-    // Show galaxy container
-    const container = document.getElementById('galaxyViewContainer');
-    if (!container) {
-        console.error('❌ Galaxy view container not found');
-        return;
-    }
+    /**
+     * Initialize Three.js scene
+     */
+    initScene() {
+        // Scene
+        this.scene = new THREE.Scene();
+        this.scene.fog = new THREE.Fog(0x000000, 10, this.config.visibilityDistance);
 
-    // MUST show container BEFORE reading dimensions
-    container.style.display = 'block';
-    container.innerHTML = '';
+        // Camera
+        const aspect = this.container.clientWidth / this.container.clientHeight;
+        this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, this.config.visibilityDistance * 2);
+        this.camera.position.set(0, 10, 30);
 
-    // Create instructions overlay
-    const instructions = document.createElement('div');
-    instructions.id = 'galaxyInstructions';
-    instructions.style.cssText = `
-        position: absolute;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.7);
-        color: #fff;
-        padding: 15px 25px;
-        border-radius: 8px;
-        font-family: monospace;
-        font-size: 14px;
-        text-align: center;
-        z-index: 100;
-        pointer-events: none;
-    `;
-    instructions.innerHTML = `
-        Click to lock pointer | ESC to unlock<br>
-        WASD + Mouse | Shift=Sprint | E or Click to load particle
-    `;
-    container.appendChild(instructions);
+        // Renderer
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.container.appendChild(this.renderer.domElement);
 
-    // Create crosshair for pointer lock mode (only if it doesn't exist)
-    let crosshair = document.getElementById('galaxyCrosshair');
-    if (!crosshair) {
-        crosshair = document.createElement('div');
-        crosshair.id = 'galaxyCrosshair';
-        crosshair.style.cssText = `
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 20px;
-            height: 20px;
-            pointer-events: none;
-            z-index: 99;
-            display: none;
-        `;
-        crosshair.innerHTML = `
-            <div style="position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: rgba(255,255,255,0.6); transform: translateY(-50%);"></div>
-            <div style="position: absolute; left: 50%; top: 0; width: 2px; height: 100%; background: rgba(255,255,255,0.6); transform: translateX(-50%);"></div>
-            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 4px; height: 4px; border: 2px solid rgba(255,255,255,0.8); border-radius: 50%;"></div>
-        `;
-        container.appendChild(crosshair);
-    }
-
-    // Create file tooltip (only if it doesn't exist)
-    let tooltip = document.getElementById('galaxyFileTooltip');
-    if (!tooltip) {
-        tooltip = document.createElement('div');
-        tooltip.id = 'galaxyFileTooltip';
-        tooltip.style.cssText = `
-            position: absolute;
-            background: rgba(10, 10, 10, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            padding: 12px;
-            color: #fff;
-            font-family: monospace;
-            font-size: 12px;
-            pointer-events: none;
-            z-index: 1000;
-            display: none;
-            max-width: 300px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-        `;
-        tooltip.innerHTML = `
-            <div class="tooltip-title" style="font-weight: bold; margin-bottom: 8px; font-size: 13px;"></div>
-            <div class="tooltip-metadata" style="color: #aaa; margin-bottom: 6px;"></div>
-            <div class="tooltip-tags" style="display: flex; flex-wrap: wrap; gap: 4px;"></div>
-        `;
-        document.body.appendChild(tooltip);
-    }
-
-    // Create tag filter panel (only if it doesn't exist)
-    let tagFilterPanel = document.getElementById('galaxyTagFilterPanel');
-    if (!tagFilterPanel) {
-        tagFilterPanel = document.createElement('div');
-        tagFilterPanel.id = 'galaxyTagFilterPanel';
-        tagFilterPanel.style.cssText = `
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            width: 300px;
-            max-height: 500px;
-            background: rgba(15, 15, 15, 0.95);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 12px;
-            padding: 16px;
-            color: #fff;
-            font-family: monospace;
-            font-size: 12px;
-            z-index: 900;
-            display: none;
-            overflow-y: auto;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-        `;
-        tagFilterPanel.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3 style="margin: 0; font-size: 14px; font-weight: bold;">Tag Filters</h3>
-                <button onclick="window.toggleGalaxyTagFilterPanel()" style="
-                    background: rgba(255, 255, 255, 0.1);
-                    border: 1px solid rgba(255, 255, 255, 0.2);
-                    color: #fff;
-                    border-radius: 4px;
-                    padding: 4px 8px;
-                    cursor: pointer;
-                    font-size: 11px;
-                ">Close</button>
-            </div>
-
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; margin-bottom: 8px; font-size: 11px; color: #aaa;">Filter Mode</label>
-                <div style="display: flex; gap: 6px;">
-                    <button id="canHaveBtn" class="filter-mode-btn" onclick="window.setGalaxyFilterMode('canHave')" style="
-                        flex: 1;
-                        background: rgba(100, 200, 100, 0.3);
-                        border: 2px solid rgba(100, 200, 100, 0.6);
-                        color: #fff;
-                        border-radius: 6px;
-                        padding: 8px;
-                        cursor: pointer;
-                        font-size: 10px;
-                        font-weight: bold;
-                        transition: all 0.2s;
-                    ">Can Have</button>
-                    <button id="mustHaveBtn" class="filter-mode-btn" onclick="window.setGalaxyFilterMode('mustHave')" style="
-                        flex: 1;
-                        background: rgba(30, 30, 30, 0.3);
-                        border: 2px solid rgba(255, 255, 255, 0.2);
-                        color: #888;
-                        border-radius: 6px;
-                        padding: 8px;
-                        cursor: pointer;
-                        font-size: 10px;
-                        font-weight: bold;
-                        transition: all 0.2s;
-                    ">Must Have</button>
-                    <button id="excludeBtn" class="filter-mode-btn" onclick="window.setGalaxyFilterMode('exclude')" style="
-                        flex: 1;
-                        background: rgba(30, 30, 30, 0.3);
-                        border: 2px solid rgba(255, 255, 255, 0.2);
-                        color: #888;
-                        border-radius: 6px;
-                        padding: 8px;
-                        cursor: pointer;
-                        font-size: 10px;
-                        font-weight: bold;
-                        transition: all 0.2s;
-                    ">Exclude</button>
-                </div>
-            </div>
-
-            <div id="activeFiltersDisplay" style="margin-bottom: 12px; min-height: 20px;">
-                <div style="font-size: 11px; color: #666;">No active filters</div>
-            </div>
-
-            <div style="margin-bottom: 12px;">
-                <input type="text" id="tagFilterSearch" placeholder="Search tags..." style="
-                    width: 100%;
-                    background: rgba(255, 255, 255, 0.05);
-                    border: 1px solid rgba(255, 255, 255, 0.15);
-                    border-radius: 6px;
-                    padding: 8px;
-                    color: #fff;
-                    font-family: monospace;
-                    font-size: 11px;
-                " oninput="window.handleGalaxyTagFilterSearch(this.value)">
-            </div>
-
-            <div id="tagFilterButtons" style="
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 6px;
-                max-height: 250px;
-                overflow-y: auto;
-            "></div>
-
-            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
-                <button onclick="window.clearGalaxyTagFilters()" style="
-                    width: 100%;
-                    background: rgba(200, 100, 100, 0.3);
-                    border: 1px solid rgba(200, 100, 100, 0.5);
-                    color: #fff;
-                    border-radius: 6px;
-                    padding: 8px;
-                    cursor: pointer;
-                    font-size: 11px;
-                ">Clear All Filters</button>
-            </div>
-        `;
-        document.body.appendChild(tagFilterPanel);
-    }
-
-    // Setup Three.js scene
-    setupScene(container);
-
-    // Create advanced particles from audio files
-    console.log('✨ Creating advanced particle system...');
-    createParticles();
-
-    // Setup controls
-    setupControls(container);
-
-    // Setup audio analysis connection to global wavesurfer
-    setupAudioConnection();
-
-    // Load options menu
-    loadOptionsMenu();
-
-    // Auto-load default preset if set
-    const defaultPresetName = localStorage.getItem('galaxyDefaultPreset');
-    if (defaultPresetName && window.loadPreset) {
-        console.log('🎨 Auto-loading default preset:', defaultPresetName);
-        // Delay slightly to ensure menu is fully loaded
-        setTimeout(() => {
-            window.loadPreset(defaultPresetName);
-        }, 1000); // Increased delay to ensure everything is initialized
-    }
-
-    // Start animation loop
-    startAnimation();
-
-    console.log('🎉 Galaxy view Phase 2C initialized (full animation + audio)!');
-}
-
-/**
- * Connect to global wavesurfer for audio analysis
- */
-function setupAudioConnection() {
-    if (window.wavesurfer) {
-        // If wavesurfer is already loaded and playing, connect now
-        if (window.wavesurfer.isPlaying && window.wavesurfer.isPlaying()) {
-            console.log('🎵 Wavesurfer already playing, connecting audio analyzer...');
-            setupAudioAnalysis(window.wavesurfer);
-        }
-
-        // Listen for when audio starts playing
-        window.wavesurfer.on('play', () => {
-            if (!analyser) {
-                console.log('🎵 Audio started, connecting analyzer...');
-                setupAudioAnalysis(window.wavesurfer);
-            }
-        });
-
-        // Reconnect analyzer when new file loads
-        window.wavesurfer.on('ready', () => {
-            console.log('🎵 New file ready, reconnecting audio analyzer...');
-            cleanupAudioAnalysis();
-            if (window.wavesurfer.isPlaying && window.wavesurfer.isPlaying()) {
-                setupAudioAnalysis(window.wavesurfer);
-            }
-        });
-
-        console.log('✅ Audio connection listeners registered');
-    } else {
-        console.warn('⚠️ window.wavesurfer not found - audio reactivity will not work');
-    }
-}
-
-export function update(data = {}) {
-    console.log('Galaxy view update called', data);
-
-    if (data.currentFile) {
-        currentFileData = data.currentFile;
-        highlightCurrentFile();
-
-        // Reconnect audio analyzer when file changes
-        if (window.wavesurfer) {
-            connectAudio(window.wavesurfer);
-        }
-    }
-
-    if (data.audioFiles) {
-        audioFilesData = data.audioFiles;
-        recreateParticles();
-
-        // Also reconnect audio after recreating particles (in case wavesurfer is playing)
-        if (window.wavesurfer) {
-            connectAudio(window.wavesurfer);
-        }
-    }
-}
-
-/**
- * Connects audio analyzer to wavesurfer instance
- * This should be called whenever audio changes (new file loads)
- * Exported as public API for external control
- */
-export function connectAudio(wavesurferInstance) {
-    if (!wavesurferInstance) {
-        console.warn('⚠️ connectAudio called with no wavesurfer instance');
-        return;
-    }
-
-    console.log('🔌 Connecting Galaxy View to audio...');
-
-    // Clean up existing analyzer first
-    cleanupAudioAnalysis();
-
-    // Setup new analyzer
-    setupAudioAnalysis(wavesurferInstance);
-}
-
-export async function destroy() {
-    console.log('Galaxy view destroying...');
-
-    // Cleanup audio analysis
-    cleanupAudioAnalysis();
-
-    // Stop animation
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-    }
-
-    // Remove event listeners
-    document.removeEventListener('keydown', onKeyDown);
-    document.removeEventListener('keyup', onKeyUp);
-    document.removeEventListener('pointerlockchange', onPointerLockChange);
-    document.removeEventListener('mousemove', onMouseMove);
-
-    // Cleanup Three.js
-    if (renderer && renderer.domElement) {
-        if (renderer.domElement.parentNode) {
-            renderer.domElement.parentNode.removeChild(renderer.domElement);
-        }
-    }
-
-    // Cleanup instanced mesh
-    if (particleSystem) {
-        scene.remove(particleSystem);
-        if (particleSystem.geometry) particleSystem.geometry.dispose();
-        if (particleSystem.material) {
-            if (particleSystem.material.map) particleSystem.material.map.dispose();
-            particleSystem.material.dispose();
-        }
-        particleSystem = null;
-    }
-
-    particles = [];
-
-    if (scene) {
-        scene.clear();
-        scene = null;
-    }
-
-    if (renderer) {
-        renderer.dispose();
-        renderer = null;
-    }
-
-    camera = null;
-    raycaster = null;
-
-    // Hide container
-    const container = document.getElementById('galaxyViewContainer');
-    if (container) {
-        container.style.display = 'none';
-        container.innerHTML = '';
-    }
-
-    console.log('Galaxy view destroyed');
-}
-
-// ============================================================================
-// SCENE SETUP
-// ============================================================================
-
-function setupScene(container) {
-    // Scene
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
-    scene.fog = new THREE.Fog(0x000000, 10, window.visibilityDistance);
-
-    // Camera
-    camera = new THREE.PerspectiveCamera(
-        75,
-        container.clientWidth / container.clientHeight,
-        0.1,
-        2000
-    );
-    camera.position.set(0, 50, 200);
-
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    container.appendChild(renderer.domElement);
-
-    // Raycaster for mouse picking
-    raycaster = new THREE.Raycaster();
-    raycaster.params.Points = { threshold: 2 };  // Increase threshold for easier clicking
-
-    // Ambient light
-    const ambientLight = new THREE.AmbientLight(0x404040, 2);
-    scene.add(ambientLight);
-
-    // Directional light
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(5, 10, 7.5);
-    scene.add(directionalLight);
-
-    // Add star background
-    addStarsBackground();
-
-    // Setup post-processing bloom
-    setupBloom(container);
-
-    // Handle window resize
-    window.addEventListener('resize', () => {
-        if (!camera || !renderer || !container) return;
-        camera.aspect = container.clientWidth / container.clientHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(container.clientWidth, container.clientHeight);
-
-        // Resize composer too
-        if (composer) {
-            composer.setSize(container.clientWidth, container.clientHeight);
-        }
-    });
-}
-
-/**
- * Sets up post-processing bloom effect
- */
-function setupBloom(container) {
-    if (!THREE.EffectComposer || !THREE.RenderPass || !THREE.UnrealBloomPass) {
-        console.warn('⚠️ Post-processing libraries not loaded, skipping bloom setup');
-        return;
-    }
-
-    try {
-        // Create composer
-        composer = new THREE.EffectComposer(renderer);
-
-        // Add render pass (renders the scene)
-        const renderPass = new THREE.RenderPass(scene, camera);
-        composer.addPass(renderPass);
-
-        // Add bloom pass
-        bloomPass = new THREE.UnrealBloomPass(
-            new THREE.Vector2(container.clientWidth, container.clientHeight),
-            window.bloomStrength, // strength (0-10)
-            0.4,                   // radius
-            0.85                   // threshold
+        // Post-processing (bloom)
+        const renderScene = new THREE.RenderPass(this.scene, this.camera);
+        this.bloomPass = new THREE.UnrealBloomPass(
+            new THREE.Vector2(this.container.clientWidth, this.container.clientHeight),
+            this.config.bloomStrength,
+            1.0,
+            0.1
         );
-        composer.addPass(bloomPass);
 
-        console.log('✅ Bloom post-processing enabled (strength:', window.bloomStrength, ')');
-    } catch (error) {
-        console.error('❌ Failed to setup bloom:', error);
-        composer = null;
-        bloomPass = null;
-    }
-}
+        this.composer = new THREE.EffectComposer(this.renderer);
+        this.composer.addPass(renderScene);
+        this.composer.addPass(this.bloomPass);
 
-/**
- * Add stars background with skybox gradient
- * Creates a space-like environment
- */
-function addStarsBackground() {
-    // Create space skybox using shader material for gradient
-    const skyboxGeometry = new THREE.SphereGeometry(window.visibilityDistance * 1.5, 32, 32);
-    const skyboxMaterial = new THREE.ShaderMaterial({
-        uniforms: {},
-        vertexShader: `
-            varying vec3 vWorldPosition;
-            void main() {
-                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                vWorldPosition = worldPosition.xyz;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `,
-        fragmentShader: `
-            varying vec3 vWorldPosition;
-            void main() {
-                // Deep space gradient: dark blue to black
-                vec3 topColor = vec3(0.02, 0.02, 0.08);  // Very dark blue
-                vec3 bottomColor = vec3(0.0, 0.0, 0.0);   // Black
+        // Raycaster for click detection
+        this.raycaster = new THREE.Raycaster();
 
-                float h = normalize(vWorldPosition).y * 0.5 + 0.5;
-                vec3 color = mix(bottomColor, topColor, h);
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        this.scene.add(ambientLight);
 
-                gl_FragColor = vec4(color, 1.0);
-            }
-        `,
-        side: THREE.BackSide
-    });
+        const light1 = new THREE.PointLight(0x667eea, 1.5, 100);
+        light1.position.set(50, 50, 50);
+        this.scene.add(light1);
 
-    const skybox = new THREE.Mesh(skyboxGeometry, skyboxMaterial);
-    scene.add(skybox);
+        const light2 = new THREE.PointLight(0x764ba2, 1.5, 100);
+        light2.position.set(-50, -50, -50);
+        this.scene.add(light2);
 
-    // Add stars with varied sizes and brightness
-    const starsGeometry = new THREE.BufferGeometry();
-    const starsVertices = [];
-    const starsSizes = [];
-    const starsColors = [];
-
-    for (let i = 0; i < 5000; i++) {
-        const x = (Math.random() - 0.5) * window.visibilityDistance * 1.8;
-        const y = (Math.random() - 0.5) * window.visibilityDistance * 1.8;
-        const z = (Math.random() - 0.5) * window.visibilityDistance * 1.8;
-        starsVertices.push(x, y, z);
-
-        // Varied star sizes for depth
-        const size = Math.random() * 1.5 + 0.2;
-        starsSizes.push(size);
-
-        // Varied star colors (white to blue-white)
-        const brightness = 0.7 + Math.random() * 0.3;
-        starsColors.push(brightness, brightness, brightness + 0.1);
+        // Stars background
+        this.addStarsBackground();
     }
 
-    starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
-    starsGeometry.setAttribute('size', new THREE.Float32BufferAttribute(starsSizes, 1));
-    starsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(starsColors, 3));
+    /**
+     * Add stars background
+     */
+    addStarsBackground() {
+        const starsGeometry = new THREE.BufferGeometry();
+        const starsVertices = [];
+        const starsSizes = [];
+        const starsColors = [];
+        const starsCount = 2000;
 
-    const starsMaterial = new THREE.PointsMaterial({
-        size: 0.5,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.8,
-        sizeAttenuation: true
-    });
+        for (let i = 0; i < starsCount; i++) {
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            const radius = this.config.visibilityDistance * 0.9;
 
-    const stars = new THREE.Points(starsGeometry, starsMaterial);
-    scene.add(stars);
+            const x = radius * Math.sin(phi) * Math.cos(theta);
+            const y = radius * Math.sin(phi) * Math.sin(theta);
+            const z = radius * Math.cos(phi);
 
-    console.log('⭐ Added star background with 5000 stars');
-}
+            starsVertices.push(x, y, z);
+            starsSizes.push(Math.random() * 2 + 0.5);
 
-// ============================================================================
-// ADVANCED PARTICLE SYSTEM
-// ============================================================================
-
-/**
- * Create advanced particle system with instanced mesh rendering
- */
-function createParticles() {
-    // Use window variables for config (controlled by options menu)
-    const config = {
-        colorMode: window.currentColorMode,
-        xMode: window.currentXMode,
-        yMode: window.currentYMode,
-        zMode: window.currentZMode,
-        xScale: xAxisScale,
-        yScale: yAxisScale,
-        zScale: zAxisScale
-    };
-
-    console.log('✨ createParticles called with config:', config);
-
-    // Clear existing particles array
-    particles = [];
-
-    // Remove old particle system if it exists
-    if (particleSystem) {
-        scene.remove(particleSystem);
-        if (particleSystem.geometry) particleSystem.geometry.dispose();
-        if (particleSystem.material) {
-            if (particleSystem.material.map) particleSystem.material.map.dispose();
-            particleSystem.material.dispose();
+            const brightness = 0.7 + Math.random() * 0.3;
+            starsColors.push(brightness, brightness, brightness + 0.1);
         }
+
+        starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+        starsGeometry.setAttribute('size', new THREE.Float32BufferAttribute(starsSizes, 1));
+        starsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(starsColors, 3));
+
+        const starsMaterial = new THREE.PointsMaterial({
+            size: 0.5,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            sizeAttenuation: true
+        });
+
+        const stars = new THREE.Points(starsGeometry, starsMaterial);
+        this.scene.add(stars);
     }
 
-    if (!audioFilesData || audioFilesData.length === 0) {
-        console.warn('⚠️ No audio files to visualize');
-        return;
+    /**
+     * Detect frequent tags for color assignment
+     */
+    detectFrequentTags() {
+        const categoryCounts = new Map();
+
+        this.audioFiles.forEach(file => {
+            const category = this.extractCategoryFromFile(file);
+            categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+        });
+
+        // For simplicity, we'll use a basic color palette
+        // In production, implement the full category detection from reference
+        console.log('📊 Detected categories:', Array.from(categoryCounts.keys()));
     }
 
-    // Filter out any hidden files (hidden by category OR tag filter OR search)
-    const visibleFiles = audioFilesData.filter(f =>
-        !f._hiddenFromParticles &&
-        !f._hiddenByTagFilter &&
-        !f._hiddenBySearch
-    );
+    /**
+     * Extract category from file (tags/filename)
+     */
+    extractCategoryFromFile(file) {
+        // Priority 1: First tag
+        if (file.tags && file.tags.length > 0) {
+            return file.tags[0].toLowerCase().trim();
+        }
 
-    // Calculate particles needed
-    const densityAddition = Math.floor(densityGradient * window.particlesPerCluster);
-    const maxParticlesPerCluster = window.particlesPerCluster + densityAddition;
-    let totalParticlesNeeded = visibleFiles.length * maxParticlesPerCluster;
+        // Priority 2: Filename prefix
+        if (file.name) {
+            const match = file.name.match(/^([a-z]+)[-_\s]/i);
+            if (match) {
+                return match[1].toLowerCase();
+            }
+        }
 
-    // Apply particle limit if set
-    let count = totalParticlesNeeded;
-    let particleReductionFactor = 1.0;
-
-    if (maxParticleCount > 0 && totalParticlesNeeded > maxParticleCount) {
-        count = maxParticleCount;
-        particleReductionFactor = maxParticleCount / totalParticlesNeeded;
-        console.log(`Particle limit: ${totalParticlesNeeded} → ${maxParticleCount}`);
+        return 'other';
     }
 
-    // Create geometry - simple plane sprite
-    const geometry = new THREE.PlaneGeometry(1, 1);
+    /**
+     * Get color for file based on current mode
+     */
+    getColorForFile(file) {
+        if (this.config.colorMode === 'tags') {
+            return this.getColorByTag(file);
+        } else if (this.config.colorMode === 'bpm') {
+            return this.getColorByBPM(file.bpm);
+        } else if (this.config.colorMode === 'key') {
+            return this.getColorByKey(file.key);
+        } else if (this.config.colorMode === 'length') {
+            return this.getColorByLength(file.length);
+        }
+        return { hue: 200, sat: 0.6 };
+    }
 
-    // Create material with texture
-    const material = new THREE.MeshBasicMaterial({
-        map: createParticleTexture(window.particleShape),
-        transparent: true,
-        opacity: window.particleBrightness,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false
-    });
+    /**
+     * Color by tag/category
+     */
+    getColorByTag(file) {
+        const category = this.extractCategoryFromFile(file);
+        const hash = category.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const hue = (hash * 37) % 360;
+        return { hue, sat: 0.7 };
+    }
 
-    // Create instanced mesh
-    particleSystem = new THREE.InstancedMesh(geometry, material, count);
-    particleSystem.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    /**
+     * Color by BPM range
+     */
+    getColorByBPM(bpm) {
+        if (!bpm) return { hue: 0, sat: 0 };
+        if (bpm < 80) return { hue: 240, sat: 0.8 };
+        if (bpm < 100) return { hue: 180, sat: 0.8 };
+        if (bpm < 120) return { hue: 120, sat: 0.8 };
+        if (bpm < 140) return { hue: 60, sat: 0.8 };
+        if (bpm < 160) return { hue: 30, sat: 0.8 };
+        return { hue: 0, sat: 0.8 };
+    }
 
-    const dummy = new THREE.Object3D();
-    const color = new THREE.Color();
-    let instanceIndex = 0;
+    /**
+     * Color by musical key
+     */
+    getColorByKey(key) {
+        const keyColorMap = {
+            'Cmaj': 0, 'Gmaj': 30, 'Dmaj': 60, 'Amaj': 90, 'Emaj': 120, 'Bmaj': 150,
+            'F#maj': 180, 'Dbmaj': 210, 'Abmaj': 240, 'Ebmaj': 270, 'Bbmaj': 300, 'Fmaj': 330,
+            'Cmin': 15, 'Gmin': 45, 'Dmin': 75, 'Amin': 105, 'Emin': 135, 'Bmin': 165,
+            'F#min': 195, 'Dbmin': 225, 'Abmin': 255, 'Ebmin': 285, 'Bbmin': 315, 'Fmin': 345
+        };
+        if (key && keyColorMap[key] !== undefined) {
+            return { hue: keyColorMap[key], sat: 0.8 };
+        }
+        return { hue: 0, sat: 0 };
+    }
 
-    // Create particles for each visible file
-    visibleFiles.forEach((file, fileIndex) => {
-        const centerPos = calculateFilePosition(file, fileIndex, config);
+    /**
+     * Color by length/duration
+     */
+    getColorByLength(length) {
+        if (!length) return { hue: 0, sat: 0 };
+        if (length < 30) return { hue: 0, sat: 0.8 };
+        if (length < 60) return { hue: 30, sat: 0.8 };
+        if (length < 120) return { hue: 60, sat: 0.8 };
+        if (length < 180) return { hue: 120, sat: 0.8 };
+        if (length < 240) return { hue: 180, sat: 0.8 };
+        if (length < 300) return { hue: 240, sat: 0.8 };
+        return { hue: 280, sat: 0.8 };
+    }
 
-        // Get color based on current mode
-        const colorData = getColorForFile(file, config.colorMode);
-        const baseColor = new THREE.Color().setHSL(colorData.hue / 360, colorData.sat, 0.6);
+    /**
+     * Calculate position for file based on axis modes
+     */
+    calculateFilePosition(file, index) {
+        const range = 300;
+        const x = this.calculateAxisValue(file, this.config.xAxisMode, range);
+        const y = this.calculateAxisValue(file, this.config.yAxisMode, range);
+        const z = this.calculateAxisValue(file, this.config.zAxisMode, range);
+        return { x, y, z };
+    }
 
-        // Store cluster data
-        const cluster = {
-            file,
-            centerPosition: new THREE.Vector3(centerPos.x, centerPos.y, centerPos.z),
-            color: baseColor.clone(),
-            colorData,
-            fileIndex,
-            subParticles: [],
-            // Animation time tracking (for hover slowdown)
-            customTime: null,
-            lastRealTime: null
+    /**
+     * Calculate axis value based on mode
+     */
+    calculateAxisValue(file, mode, range) {
+        const keyToPosition = {
+            'Cmaj': 0, 'Gmaj': 1, 'Dmaj': 2, 'Amaj': 3, 'Emaj': 4, 'Bmaj': 5,
+            'F#maj': 6, 'Dbmaj': 7, 'Abmaj': 8, 'Ebmaj': 9, 'Bbmaj': 10, 'Fmaj': 11
         };
 
-        // Calculate particles for this cluster
-        const baseParticles = particlesPerCluster;
-        const densityAddition = Math.floor(densityGradient * baseParticles);
-        let totalParticles = baseParticles + densityAddition;
+        switch (mode) {
+            case 'bpm':
+                if (file.bpm) {
+                    const normalized = ((file.bpm - 60) / 140);
+                    return normalized * range - (range / 2);
+                }
+                return (Math.random() - 0.5) * range;
 
-        // Apply reduction if limit is active
-        if (particleReductionFactor < 1.0) {
-            totalParticles = Math.max(1, Math.floor(totalParticles * particleReductionFactor));
+            case 'key':
+                if (file.key && keyToPosition[file.key] !== undefined) {
+                    const normalized = keyToPosition[file.key] / 11.5;
+                    return normalized * range - (range / 2);
+                }
+                return (Math.random() - 0.5) * range;
+
+            case 'tags':
+                if (file.tags && file.tags.length > 0) {
+                    const tagHash = file.tags[0].split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    const normalized = (tagHash % 100) / 100;
+                    return normalized * range - (range / 2);
+                }
+                return (Math.random() - 0.5) * range;
+
+            case 'length':
+                if (file.length) {
+                    const normalized = Math.min(file.length / 300, 1);
+                    return normalized * range - (range / 2);
+                }
+                return (Math.random() - 0.5) * range;
+
+            case 'random':
+            default:
+                return (Math.random() - 0.5) * range;
+        }
+    }
+
+    /**
+     * Create particle system
+     */
+    createParticles() {
+        // Remove old system
+        if (this.particleSystem) {
+            this.scene.remove(this.particleSystem);
+            if (this.particleSystem.geometry) this.particleSystem.geometry.dispose();
+            if (this.particleSystem.material) this.particleSystem.material.dispose();
         }
 
-        // Create sub-particles
-        for (let i = 0; i < totalParticles; i++) {
-            // Generate seed for this particle (used for positioning and animation)
-            const seed = fileIndex * 10000 + i;
+        this.particles = [];
 
-            let offsetX, offsetY, offsetZ;
-            let isCenterParticle = false;
-            let radiusVariation = 0;
+        // Calculate total particles
+        const totalParticles = this.audioFiles.length * this.config.particlesPerCluster;
 
-            // First 2 particles at center for visibility
-            if (i < 2) {
-                offsetX = 0;
-                offsetY = 0;
-                offsetZ = 0;
-                isCenterParticle = true;
-                radiusVariation = 0;
-            } else {
-                // Generate distribution based on shape mode
-                const theta = seededRandom(seed * 2) * Math.PI * 2;
-                const phi = Math.acos(2 * seededRandom(seed * 2 + 1) - 1);
+        // Create geometry
+        const geometry = new THREE.PlaneGeometry(1, 1);
 
-                // Determine if this is a density gradient particle
-                const isDensityParticle = i >= baseParticles;
+        // Create material with particle texture
+        const material = new THREE.MeshBasicMaterial({
+            map: this.createParticleTexture(),
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
 
-                if (isDensityParticle) {
-                    const randomRadius = seededRandom(seed * 3);
-                    radiusVariation = Math.pow(randomRadius, 2.0) * 0.6;
-                } else if (subParticleShape === 'sphere') {
-                    radiusVariation = 1.0;
-                } else if (subParticleShape === 'spiked') {
-                    radiusVariation = seededRandom(seed * 3) < 0.5 ? 0.4 : 1.0;
-                } else {
-                    radiusVariation = 0.5 + seededRandom(seed * 3) * 0.5;
-                }
+        // Create instanced mesh
+        this.particleSystem = new THREE.InstancedMesh(geometry, material, totalParticles);
+        this.particleSystem.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
-                offsetX = window.clusterRadius * Math.sin(phi) * Math.cos(theta) * radiusVariation;
-                offsetY = window.clusterRadius * Math.sin(phi) * Math.sin(theta) * radiusVariation;
-                offsetZ = window.clusterRadius * Math.cos(phi) * radiusVariation;
-            }
+        const dummy = new THREE.Object3D();
+        const color = new THREE.Color();
+        let instanceIndex = 0;
 
-            // Calculate distance from center
-            const actualDistance = Math.sqrt(offsetX * offsetX + offsetY * offsetY + offsetZ * offsetZ) / window.clusterRadius;
+        // Create clusters
+        this.audioFiles.forEach((file, fileIndex) => {
+            const centerPos = this.calculateFilePosition(file, fileIndex);
+            const colorData = this.getColorForFile(file);
+            const baseColor = new THREE.Color().setHSL(colorData.hue / 360, colorData.sat, 0.6);
 
-            // Sub-particle data with orbit properties for animation
-            const subParticle = {
-                offset: new THREE.Vector3(offsetX, offsetY, offsetZ),
-                instanceIndex: instanceIndex,
-                isCenterParticle: isCenterParticle,
-                baseRadius: radiusVariation,
-                distanceFromCenter: actualDistance,
-                // Animation properties
-                orbitPhase: seededRandom(seed * 4) * Math.PI * 2,
-                randomOrbitAxis: new THREE.Vector3(
-                    seededRandom(seed * 5) * 2 - 1,
-                    seededRandom(seed * 6) * 2 - 1,
-                    seededRandom(seed * 7) * 2 - 1
-                ).normalize(),
-                randomOrbitSpeed: 0.5 + seededRandom(seed * 8) * 1.5
+            const cluster = {
+                file,
+                centerPosition: new THREE.Vector3(centerPos.x, centerPos.y, centerPos.z),
+                color: baseColor.clone(),
+                colorData,
+                fileIndex,
+                subParticles: [],
+                customTime: null,
+                lastRealTime: null
             };
 
-            cluster.subParticles.push(subParticle);
-
-            // Set initial position
-            dummy.position.set(
-                centerPos.x + offsetX,
-                centerPos.y + offsetY,
-                centerPos.z + offsetZ
-            );
-            dummy.scale.setScalar(window.particleSize * subParticleScale);
-            dummy.updateMatrix();
-
-            particleSystem.setMatrixAt(instanceIndex, dummy.matrix);
-
-            // Set color
-            if (isCenterParticle) {
-                color.setHSL(colorData.hue / 360, colorData.sat, 0.8);
-            } else {
-                const colorSeed = fileIndex * 10000 + i + 5000;
-                const hueShift = (seededRandom(colorSeed) - 0.5) * 0.05;
-                let baseLightness = 0.6 + (seededRandom(colorSeed + 1) - 0.5) * 0.1;
-                color.setHSL(
-                    (colorData.hue / 360 + hueShift + 1) % 1,
-                    colorData.sat,
-                    baseLightness
+            // Create sub-particles in cluster
+            for (let i = 0; i < this.config.particlesPerCluster; i++) {
+                const offset = new THREE.Vector3(
+                    (Math.random() - 0.5) * this.config.clusterRadius,
+                    (Math.random() - 0.5) * this.config.clusterRadius,
+                    (Math.random() - 0.5) * this.config.clusterRadius
                 );
-            }
-            particleSystem.setColorAt(instanceIndex, color);
 
-            instanceIndex++;
-        }
+                const orbitPhase = Math.random() * Math.PI * 2;
 
-        particles.push(cluster);
-    });
-
-    // Update instance attributes
-    particleSystem.instanceMatrix.needsUpdate = true;
-    if (particleSystem.instanceColor) {
-        particleSystem.instanceColor.needsUpdate = true;
-    }
-
-    // Add to scene
-    scene.add(particleSystem);
-    console.log(`✅ Created ${particles.length} clusters with ${count} total particles`);
-}
-
-/**
- * Calculate 3D position for a file based on its properties and axis modes
- */
-function calculateFilePosition(file, index, config) {
-    const {
-        xMode = 'bpm',
-        yMode = 'key',
-        zMode = 'tags',
-        xScale = 1.0,
-        yScale = 1.0,
-        zScale = 1.0
-    } = config;
-
-    // Use axis modes to calculate position
-    let x = calculateAxisValue(file, xMode, 100);
-    let y = calculateAxisValue(file, yMode, 80);
-    let z = calculateAxisValue(file, zMode, 60);
-
-    // Add slight randomness to prevent exact overlaps
-    x += (seededRandom(index * 3 + 1) - 0.5) * 2;
-    y += (seededRandom(index * 3 + 2) - 0.5) * 2;
-    z += (seededRandom(index * 3 + 3) - 0.5) * 2;
-
-    // Apply axis scaling
-    x *= xScale;
-    y *= yScale;
-    z *= zScale;
-
-    return { x, y, z };
-}
-
-/**
- * Converts file property to axis coordinate value
- */
-function calculateAxisValue(file, mode, scale) {
-    switch (mode) {
-        case 'bpm':
-            const bpm = file.bpm || 120;
-            return mapRange(bpm, 60, 180, -scale, scale);
-
-        case 'key':
-            const keyValue = getKeyValue(file.key);
-            return mapRange(keyValue, 0, 11, -scale, scale);
-
-        case 'tags':
-            const tag = (file.tags && file.tags[0]) || file.name || '';
-            const hash = hashString(tag);
-            return (hash - 0.5) * scale * 2;
-
-        case 'length':
-            const length = file.length || 180;
-            return mapRange(length, 0, 600, -scale, scale);
-
-        case 'random':
-            const seed = hashString(file.id || file.name || '');
-            return (seed - 0.5) * scale * 2;
-
-        default:
-            return 0;
-    }
-}
-
-/**
- * Determines particle color based on file properties and color mode
- */
-function getColorForFile(file, mode = 'tags') {
-    switch (mode) {
-        case 'tags':
-            const category = getCategoryForFile(file);
-            return CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
-
-        case 'key':
-            const key = file.key || 'C';
-            const keyBase = key.split('/')[0].replace('maj', '').replace('min', '').trim();
-            return KEY_COLORS[keyBase] || { hue: 0, sat: 0.5 };
-
-        case 'bpm':
-            const bpm = file.bpm || 120;
-            for (const range of BPM_COLORS) {
-                if (bpm >= range.min && bpm < range.max) {
-                    return { hue: range.hue, sat: range.sat };
-                }
-            }
-            return { hue: 0, sat: 0.5 };
-
-        case 'length':
-            const length = file.length || 180;
-            const hue = mapRange(Math.min(length, 600), 0, 600, 0, 360);
-            return { hue: hue, sat: 0.7 };
-
-        default:
-            return { hue: 0, sat: 0.5 };
-    }
-}
-
-/**
- * Determines category from file tags
- */
-function getCategoryForFile(file) {
-    if (!file.tags || !Array.isArray(file.tags)) return 'other';
-
-    const tags = file.tags.map(t => t.toLowerCase());
-    const categories = ['drums', 'inst', 'vox', 'bass', 'gtr', 'pno', 'piano',
-                       'syn', 'perc', 'pad', 'lead', 'fx', 'arp'];
-
-    for (const category of categories) {
-        if (tags.some(tag => tag.includes(category))) {
-            return category;
-        }
-    }
-
-    return 'other';
-}
-
-/**
- * Updates cluster center positions without recreating particles
- * More efficient than recreateParticles when only axis scales change
- */
-function updateClusterPositions() {
-    if (particles.length === 0) return;
-
-    particles.forEach((cluster, index) => {
-        // Recalculate position with current axis modes and scales
-        const config = {
-            xMode: window.currentXMode,
-            yMode: window.currentYMode,
-            zMode: window.currentZMode,
-            xScale: xAxisScale,
-            yScale: yAxisScale,
-            zScale: zAxisScale
-        };
-
-        const newPos = calculateFilePosition(cluster.file, index, config);
-        cluster.centerPosition.set(newPos.x, newPos.y, newPos.z);
-    });
-
-    console.log('📏 Updated cluster positions with new axis scales');
-}
-
-/**
- * Recreate particles (when file list changes or visualization settings change)
- */
-function recreateParticles() {
-    console.log('🔄 recreateParticles called');
-    console.log('  Color mode:', window.currentColorMode);
-    console.log('  X axis:', window.currentXMode);
-    console.log('  Y axis:', window.currentYMode);
-    console.log('  Z axis:', window.currentZMode);
-    console.log('  Particle size:', window.particleSize);
-    console.log('  Cluster radius:', window.clusterRadius);
-
-    createParticles();
-    highlightCurrentFile();
-    updateFileCount();
-
-    // Re-populate file browser elements
-    if (audioFilesData && audioFilesData.length > 0) {
-        populateColorLegend();
-        populateTags();
-        populateFileList();
-    }
-}
-
-/**
- * Highlight currently playing file
- */
-function highlightCurrentFile() {
-    if (!currentFileData || !particleSystem) return;
-
-    // Find the cluster for the current file
-    particles.forEach(cluster => {
-        const isCurrentFile = cluster.file.id === currentFileData.id;
-
-        // Store if this is the active cluster (for audio reactivity)
-        cluster.isPlaying = isCurrentFile;
-
-        // Update all subparticles in this cluster
-        cluster.subParticles.forEach(subParticle => {
-            const idx = subParticle.instanceIndex;
-
-            // Get current matrix
-            const matrix = new THREE.Matrix4();
-            particleSystem.getMatrixAt(idx, matrix);
-
-            // Extract position and update scale
-            const position = new THREE.Vector3();
-            const quaternion = new THREE.Quaternion();
-            const scale = new THREE.Vector3();
-            matrix.decompose(position, quaternion, scale);
-
-            // Make playing file bigger and brighter
-            if (isCurrentFile) {
-                if (subParticle.isCenterParticle) {
-                    scale.setScalar(window.particleSize * subParticleScale * 2.0); // 2x larger
-                } else {
-                    scale.setScalar(window.particleSize * subParticleScale * 1.5); // 1.5x larger
-                }
-
-                // Brighter color
-                const color = new THREE.Color();
-                particleSystem.getColorAt(idx, color);
-                color.multiplyScalar(1.5);
-                particleSystem.setColorAt(idx, color);
-            } else {
-                // Reset to normal size
-                scale.setScalar(window.particleSize * subParticleScale);
-            }
-
-            // Update matrix
-            matrix.compose(position, quaternion, scale);
-            particleSystem.setMatrixAt(idx, matrix);
-        });
-    });
-
-    particleSystem.instanceMatrix.needsUpdate = true;
-    if (particleSystem.instanceColor) {
-        particleSystem.instanceColor.needsUpdate = true;
-    }
-}
-
-/**
- * Main animation update function - updates all particle positions based on motion mode and audio
- * This is the core animation loop from the reference visualizer
- */
-function updateParticleAnimation(deltaTime) {
-    if (!particleSystem || !particles || particles.length === 0) return;
-
-    // Update animation time
-    animationTime += deltaTime;
-
-    const audioPlaying = window.wavesurfer && window.wavesurfer.isPlaying && window.wavesurfer.isPlaying();
-    const dummy = new THREE.Object3D();
-    const currentFileId = currentFileData ? currentFileData.id : null;
-
-    // Process each cluster
-    particles.forEach((cluster, clusterIndex) => {
-        // Check if category is hidden
-        if (hiddenCategories.size > 0) {
-            const category = getCategoryForFile(cluster.file);
-            if (hiddenCategories.has(category)) {
-                // Hide all sub-particles for this cluster
-                cluster.subParticles.forEach(subParticle => {
-                    dummy.position.set(0, -10000, 0);
-                    dummy.scale.setScalar(0.001);
-                    dummy.updateMatrix();
-                    particleSystem.setMatrixAt(subParticle.instanceIndex, dummy.matrix);
+                cluster.subParticles.push({
+                    instanceIndex,
+                    offset,
+                    orbitPhase,
+                    isCenterParticle: i === 0
                 });
-                return;
-            }
-        }
 
-        // Handle hover time manipulation
-        let clusterTime = animationTime;
-        if (hoveredCluster === cluster && mouseInteractionEnabled && hoverSlowdown > 1) {
-            if (cluster.customTime === null) {
-                cluster.customTime = animationTime;
-                cluster.lastRealTime = animationTime;
-            }
+                // Set initial position
+                dummy.position.set(
+                    centerPos.x + offset.x,
+                    centerPos.y + offset.y,
+                    centerPos.z + offset.z
+                );
+                dummy.scale.setScalar(this.config.particleSize);
+                dummy.updateMatrix();
+                this.particleSystem.setMatrixAt(instanceIndex, dummy.matrix);
+                this.particleSystem.setColorAt(instanceIndex, baseColor);
 
-            const realDelta = animationTime - cluster.lastRealTime;
-            const slowedDelta = realDelta / hoverSlowdown;
-            cluster.customTime += slowedDelta;
-            cluster.lastRealTime = animationTime;
-            clusterTime = cluster.customTime;
-        } else {
-            cluster.customTime = null;
-            cluster.lastRealTime = null;
-        }
-
-        // Calculate base motion offsets for the entire cluster
-        let clusterOffsetX = 0, clusterOffsetY = 0, clusterOffsetZ = 0;
-
-        if (motionEnabled) {
-            switch (window.motionMode) {
-                case 'collective':
-                    clusterOffsetX = Math.sin(clusterTime * window.orbitSpeed * 1000) * window.orbitRadius;
-                    clusterOffsetY = Math.sin(clusterTime * window.orbitSpeed * 1500) * window.orbitRadius * 0.5;
-                    clusterOffsetZ = Math.cos(clusterTime * window.orbitSpeed * 1000) * window.orbitRadius;
-                    break;
-
-                case 'individual':
-                    const seed = clusterIndex * 1000;
-                    clusterOffsetX = Math.sin(clusterTime * window.orbitSpeed * 1000 + seed) * window.orbitRadius;
-                    clusterOffsetY = Math.cos(clusterTime * window.orbitSpeed * 800 + seed * 1.5) * window.orbitRadius * 0.7;
-                    clusterOffsetZ = Math.sin(clusterTime * window.orbitSpeed * 1200 + seed * 0.5) * window.orbitRadius;
-                    break;
-
-                case 'random':
-                    const t = clusterTime * window.orbitSpeed * 500;
-                    const noise1 = Math.sin(t + clusterIndex) * Math.cos(t * 1.3 + clusterIndex * 2);
-                    const noise2 = Math.sin(t * 0.7 + clusterIndex * 3) * Math.cos(t * 1.1);
-                    const noise3 = Math.cos(t * 0.9 + clusterIndex * 1.5) * Math.sin(t * 1.2);
-                    clusterOffsetX = noise1 * window.orbitRadius;
-                    clusterOffsetY = noise2 * window.orbitRadius;
-                    clusterOffsetZ = noise3 * window.orbitRadius;
-                    break;
-
-                case 'audio':
-                    if (audioReactivityEnabled && currentAudioAmplitude > 0) {
-                        const isCurrentFile = currentFileId && cluster.file.id === currentFileId;
-
-                        // Only apply audio motion if this is the current file, or if globalAudioReactivity > 0
-                        if (isCurrentFile || window.globalAudioReactivity > 0.001) {
-                            const audioScale = currentAudioAmplitude * window.audioReactivityStrength * 0.1;
-                            clusterOffsetX = Math.sin(clusterIndex * 0.5) * audioScale;
-                            clusterOffsetY = currentAudioAmplitude * window.audioReactivityStrength * 0.5;
-                            clusterOffsetZ = Math.cos(clusterIndex * 0.5) * audioScale;
-                        }
-                    }
-                    break;
-
-                case 'wave':
-                    const wavePhase = (cluster.centerPosition.x * waveDirection.x +
-                                      cluster.centerPosition.y * waveDirection.y +
-                                      cluster.centerPosition.z * waveDirection.z) * 0.05;
-                    const waveOffset = Math.sin(clusterTime * waveFrequency * 1000 + wavePhase) * waveAmplitude;
-                    clusterOffsetX = waveDirection.x * waveOffset;
-                    clusterOffsetY = waveDirection.y * waveOffset + waveOffset * 0.3;
-                    clusterOffsetZ = waveDirection.z * waveOffset;
-                    break;
-
-                case 'none':
-                default:
-                    break;
-            }
-        }
-
-        // Update each sub-particle in the cluster
-        cluster.subParticles.forEach((subParticle) => {
-            let x = cluster.centerPosition.x + clusterOffsetX;
-            let y = cluster.centerPosition.y + clusterOffsetY;
-            let z = cluster.centerPosition.z + clusterOffsetZ;
-
-            // Individual sub-particle motion (within cluster)
-            if (motionEnabled && window.motionMode !== 'none') {
-                const orbitTime = clusterTime * 0.0001;
-                const phase = subParticle.orbitPhase;
-
-                if (window.motionMode === 'individual' || window.motionMode === 'random') {
-                    const axis = subParticle.randomOrbitAxis;
-                    const speed = subParticle.randomOrbitSpeed * orbitTime;
-
-                    const angle = speed + phase;
-                    const cos = Math.cos(angle);
-                    const sin = Math.sin(angle);
-
-                    const rotatedOffset = {
-                        x: subParticle.offset.x * cos + subParticle.offset.z * sin,
-                        y: subParticle.offset.y,
-                        z: -subParticle.offset.x * sin + subParticle.offset.z * cos
-                    };
-
-                    x += rotatedOffset.x;
-                    y += rotatedOffset.y;
-                    z += rotatedOffset.z;
-                } else {
-                    x += subParticle.offset.x;
-                    y += subParticle.offset.y;
-                    z += subParticle.offset.z;
-                }
-            } else {
-                x += subParticle.offset.x;
-                y += subParticle.offset.y;
-                z += subParticle.offset.z;
+                instanceIndex++;
             }
 
-            // Audio reactivity - expand/contract clusters
-            if (audioReactivityEnabled && currentAudioAmplitude > 0 && !subParticle.isCenterParticle) {
-                const isCurrentFile = currentFileId && cluster.file.id === currentFileId;
-
-                // Only apply spreading if this is the current file, or if globalAudioReactivity > 0
-                if (isCurrentFile || window.globalAudioReactivity > 0.001) {
-                    const audioExpansion = 1.0 + currentAudioAmplitude * window.clusterSpreadOnAudio * 0.01;
-
-                    let expansionFactor = audioExpansion;
-
-                    if (window.audioFrequencyMode === 'bass' && bassAmplitude > 0) {
-                        expansionFactor = 1.0 + bassAmplitude * window.clusterSpreadOnAudio * 0.01 *
-                                         (1.0 + subParticle.distanceFromCenter);
-                    } else if (window.audioFrequencyMode === 'highs' && highsAmplitude > 0) {
-                        expansionFactor = 1.0 + highsAmplitude * window.clusterSpreadOnAudio * 0.01 *
-                                         (2.0 - subParticle.distanceFromCenter);
-                    }
-
-                    const expandedOffsetX = subParticle.offset.x * expansionFactor;
-                    const expandedOffsetY = subParticle.offset.y * expansionFactor;
-                    const expandedOffsetZ = subParticle.offset.z * expansionFactor;
-
-                    x = cluster.centerPosition.x + clusterOffsetX + expandedOffsetX;
-                    y = cluster.centerPosition.y + clusterOffsetY + expandedOffsetY;
-                    z = cluster.centerPosition.z + clusterOffsetZ + expandedOffsetZ;
-                }
-            }
-
-            // Set position
-            dummy.position.set(x, y, z);
-
-            // Calculate scale with various effects
-            let scale = window.particleSize * subParticleScale;
-
-            // Audio pulse effect
-            if (audioReactivityEnabled && audioPlaying) {
-                const isCurrentFile = currentFileId && cluster.file.id === currentFileId;
-
-                if (isCurrentFile) {
-                    // Playing file always reacts
-                    scale *= (1.0 + currentAudioAmplitude * window.audioReactivityStrength * 0.001);
-                } else if (window.globalAudioReactivity > 0.001) {
-                    // Use window.globalAudioReactivity for non-playing files (only if > 0.001 to account for float precision)
-                    scale *= (1.0 + currentAudioAmplitude * window.globalAudioReactivity * 0.001);
-                }
-                // If globalAudioReactivity is 0, non-playing files won't pulse
-            }
-
-            // Hover scale effect
-            if (hoveredCluster === cluster && mouseInteractionEnabled && hoverScale > 1.0) {
-                scale *= hoverScale;
-            }
-
-            // Distance-based scale for sub-particles
-            if (!subParticle.isCenterParticle && subParticle.distanceFromCenter > 0) {
-                scale *= (1.0 - subParticle.distanceFromCenter * 0.2);
-            }
-
-            dummy.scale.setScalar(scale);
-
-            // Make particles face camera (billboard effect)
-            dummy.lookAt(camera.position);
-
-            // Update instance matrix
-            dummy.updateMatrix();
-            particleSystem.setMatrixAt(subParticle.instanceIndex, dummy.matrix);
-        });
-    });
-
-    // Flag that instance matrix needs update
-    particleSystem.instanceMatrix.needsUpdate = true;
-}
-
-// ============================================================================
-// AUDIO ANALYZER
-// ============================================================================
-
-/**
- * Sets up audio analyzer connected to WaveSurfer instance
- * This taps into WaveSurfer's audio chain without breaking playback
- */
-function setupAudioAnalysis(wavesurferInstance) {
-    if (!wavesurferInstance) {
-        console.error('❌ Audio Analysis: No WaveSurfer instance provided');
-        return false;
-    }
-
-    try {
-        // Give WaveSurfer a moment to initialize its audio chain
-        setTimeout(() => {
-            // Get the media element from WaveSurfer v7
-            const mediaElement = wavesurferInstance.getMediaElement();
-
-            if (!mediaElement) {
-                console.error('❌ Audio Analysis: No media element found');
-                return false;
-            }
-
-            if (AUDIO_DEBUG) {
-                console.log('📊 Audio Analysis: Media element found:', mediaElement);
-            }
-
-            // Try to get audio context
-            if (!mediaElement.audioContext) {
-                console.error('❌ Audio Analysis: No audioContext on media element');
-
-                // Try alternative approach
-                if (wavesurferInstance.backend && wavesurferInstance.backend.ac) {
-                    audioContext = wavesurferInstance.backend.ac;
-                    console.log('✓ Audio Analysis: Got context from backend');
-                } else {
-                    console.error('❌ Audio Analysis: Could not find audio context');
-                    return false;
-                }
-            } else {
-                audioContext = mediaElement.audioContext;
-            }
-
-            // Get the gain node
-            const gainNode = mediaElement.gainNode;
-
-            if (!audioContext || !gainNode) {
-                console.error('❌ Audio Analysis: Missing audioContext or gainNode');
-                return false;
-            }
-
-            if (AUDIO_DEBUG) {
-                console.log('📊 Audio Analysis: Audio context state:', audioContext.state);
-                console.log('📊 Audio Analysis: Sample rate:', audioContext.sampleRate);
-            }
-
-            // Clean up any existing analyser
-            if (analyser) {
-                try {
-                    analyser.disconnect();
-                    analyser = null;
-                } catch (e) {
-                    // Ignore disconnect errors
-                }
-            }
-
-            // Create new analyser node
-            analyser = audioContext.createAnalyser();
-            analyser.fftSize = 512;                     // 256 bins for frequency data
-            analyser.smoothingTimeConstant = 0.8;       // Smoothing (0-1)
-            analyser.minDecibels = -90;                 // Minimum power value
-            analyser.maxDecibels = -10;                 // Maximum power value
-
-            // Insert analyser into the audio chain
-            try {
-                // Disconnect gain from destination
-                gainNode.disconnect();
-
-                // Reconnect through analyser
-                gainNode.connect(analyser);
-                analyser.connect(audioContext.destination);
-
-                console.log('✅ Audio Analysis: Analyser connected to audio chain');
-            } catch (error) {
-                console.error('❌ Audio Analysis: Failed to insert analyser:', error);
-
-                // Try to restore original connection if we failed
-                try {
-                    gainNode.connect(audioContext.destination);
-                } catch (e) {
-                    console.error('❌ Audio Analysis: Failed to restore connection');
-                }
-                return false;
-            }
-
-            // Prepare data array for frequency data
-            const bufferLength = analyser.frequencyBinCount;
-            audioDataArray = new Uint8Array(bufferLength);
-
-            console.log('✅ Galaxy View: Audio analysis setup complete');
-
-            // Resume context if suspended (common on mobile/autoplay restrictions)
-            if (audioContext.state === 'suspended') {
-                audioContext.resume().then(() => {
-                    console.log('✅ Audio Analysis: Audio context resumed');
-                }).catch(err => {
-                    console.warn('⚠️ Audio Analysis: Could not resume context:', err);
-                });
-            }
-
-            return true;
-
-        }, 100); // Small delay to ensure WaveSurfer is ready
-
-    } catch (error) {
-        console.error('❌ Audio Analysis setup error:', error);
-        return false;
-    }
-}
-
-/**
- * Updates audio amplitude values from analyzer
- * Call this every frame in animation loop
- */
-function updateAudioAmplitude() {
-    if (!analyser || !audioDataArray) {
-        // No analyser available, set all to 0
-        currentAudioAmplitude = 0;
-        bassAmplitude = 0;
-        midsAmplitude = 0;
-        highsAmplitude = 0;
-        return;
-    }
-
-    // Get frequency data (0-255 for each frequency bin)
-    analyser.getByteFrequencyData(audioDataArray);
-
-    // Calculate frequency ranges based on sample rate
-    const bufferLength = analyser.frequencyBinCount;
-    const sampleRate = audioContext.sampleRate;
-    const nyquist = sampleRate / 2; // Maximum frequency we can represent
-
-    // Calculate bin indices for frequency bands
-    const binWidth = nyquist / bufferLength;
-
-    // Frequency band boundaries
-    const bassEnd = Math.floor(250 / binWidth);    // Bass: 0-250 Hz
-    const midsEnd = Math.floor(2000 / binWidth);   // Mids: 250-2000 Hz
-    // Highs: 2000+ Hz (rest of the bins)
-
-    // Calculate amplitudes for each frequency band
-    let bassSum = 0, midsSum = 0, highsSum = 0;
-    let bassCount = 0, midsCount = 0, highsCount = 0;
-
-    // Bass: 20-250 Hz (skip first bin as it's often DC offset)
-    for (let i = 1; i < bassEnd && i < bufferLength; i++) {
-        bassSum += audioDataArray[i];
-        bassCount++;
-    }
-
-    // Mids: 250-2000 Hz
-    for (let i = bassEnd; i < midsEnd && i < bufferLength; i++) {
-        midsSum += audioDataArray[i];
-        midsCount++;
-    }
-
-    // Highs: 2000+ Hz
-    for (let i = midsEnd; i < bufferLength; i++) {
-        highsSum += audioDataArray[i];
-        highsCount++;
-    }
-
-    // Calculate averages (0-255 range)
-    const bassAvg = bassCount > 0 ? bassSum / bassCount : 0;
-    const midsAvg = midsCount > 0 ? midsSum / midsCount : 0;
-    const highsAvg = highsCount > 0 ? highsSum / highsCount : 0;
-
-    // Normalize to 0-1 range and apply amplification
-    bassAmplitude = Math.min((bassAvg / 128) * 3, 5);
-    midsAmplitude = Math.min((midsAvg / 128) * 3, 5);
-    highsAmplitude = Math.min((highsAvg / 128) * 3, 5);
-
-    // Set overall amplitude based on selected frequency mode
-    switch (window.audioFrequencyMode) {
-        case 'bass':
-            currentAudioAmplitude = bassAmplitude;
-            break;
-        case 'mids':
-            currentAudioAmplitude = midsAmplitude;
-            break;
-        case 'highs':
-            currentAudioAmplitude = highsAmplitude;
-            break;
-        case 'all':
-        default:
-            // Weighted average - bass has more visual impact
-            currentAudioAmplitude = (bassAmplitude * 0.5 + midsAmplitude * 0.3 + highsAmplitude * 0.2);
-            break;
-    }
-}
-
-/**
- * Cleans up audio analyzer when switching files or destroying view
- */
-function cleanupAudioAnalysis() {
-    if (analyser) {
-        try {
-            analyser.disconnect();
-        } catch (e) {
-            // Ignore disconnect errors
-        }
-        analyser = null;
-    }
-
-    audioDataArray = null;
-    currentAudioAmplitude = 0;
-    bassAmplitude = 0;
-    midsAmplitude = 0;
-    highsAmplitude = 0;
-
-    console.log('🧹 Galaxy View: Audio analysis cleaned up');
-}
-
-// ============================================================================
-// ANIMATION CONTROLS
-// ============================================================================
-
-/**
- * Sets the current motion mode
- */
-function setMotionMode(mode) {
-    const validModes = ['none', 'collective', 'individual', 'random', 'audio', 'wave'];
-    if (validModes.includes(mode)) {
-        window.motionMode = mode;
-        console.log(`🎭 Motion mode set to: ${mode}`);
-    }
-}
-
-/**
- * Toggles motion on/off
- */
-function toggleMotion() {
-    motionEnabled = !motionEnabled;
-    console.log(`🎭 Motion ${motionEnabled ? 'enabled' : 'disabled'}`);
-    return motionEnabled;
-}
-
-/**
- * Sets audio reactivity parameters
- */
-function setAudioReactivity(params) {
-    if (params.enabled !== undefined) audioReactivityEnabled = params.enabled;
-    if (params.strength !== undefined) audioReactivityStrength = clamp(params.strength, 0, 100);
-    if (params.globalStrength !== undefined) globalAudioReactivity = clamp(params.globalStrength, 0, 10);
-    if (params.clusterSpread !== undefined) clusterSpreadOnAudio = clamp(params.clusterSpread, 0, 100);
-
-    console.log('🎵 Audio reactivity updated:', {
-        enabled: audioReactivityEnabled,
-        strength: audioReactivityStrength,
-        global: globalAudioReactivity,
-        spread: clusterSpreadOnAudio
-    });
-}
-
-/**
- * Toggles visibility of a category
- */
-function toggleCategoryVisibility(category) {
-    if (hiddenCategories.has(category)) {
-        hiddenCategories.delete(category);
-        console.log(`👁️ Showing category: ${category}`);
-    } else {
-        hiddenCategories.add(category);
-        console.log(`👁️ Hiding category: ${category}`);
-    }
-}
-
-// ============================================================================
-// OPTIONS MENU
-// ============================================================================
-
-/**
- * Loads and integrates the Galaxy View options menu
- */
-function loadOptionsMenu() {
-    console.log('📋 Loading Galaxy View options menu...');
-
-    // Fetch the complete options menu HTML
-    fetch('src/views/galaxyOptionsMenu.html')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to load options menu: ${response.status}`);
-            }
-            return response.text();
-        })
-        .then(html => {
-            // Create container for the menu
-            const menuContainer = document.createElement('div');
-            menuContainer.id = 'galaxyMenuContainer';
-            menuContainer.innerHTML = html;
-            document.body.appendChild(menuContainer);
-
-            console.log('✅ Options menu HTML injected');
-
-            // Wire up controls to Galaxy View variables
-            wireUpMenuControls();
-
-            // The HTML's <script> tag will execute when innerHTML is set, defining
-            // initOptionsMenu2Drag and initOptionsMenu2Resize functions.
-            // We need to call them manually since DOMContentLoaded has already fired.
-            setTimeout(() => {
-                if (typeof window.initOptionsMenu2Drag === 'function') {
-                    window.initOptionsMenu2Drag();
-                    console.log('✅ Menu drag functionality initialized');
-                } else {
-                    console.warn('⚠️ initOptionsMenu2Drag not found');
-                }
-
-                if (typeof window.initOptionsMenu2Resize === 'function') {
-                    window.initOptionsMenu2Resize();
-                    console.log('✅ Menu resize functionality initialized');
-                } else {
-                    console.warn('⚠️ initOptionsMenu2Resize not found');
-                }
-
-                // Update file count display
-                updateFileCount();
-
-                // Populate file browser, tags, and color legend
-                if (audioFilesData && audioFilesData.length > 0) {
-                    populateColorLegend();
-                    populateTags();
-                    populateFileList();
-                } else {
-                    console.warn('⚠️ No audio files data available to populate browser');
-                }
-
-                // Wire up additional controls that need special handling
-                wireUpAdditionalControls();
-
-                // Initialize all UI displays with current values
-                updateAudioUI();
-
-                // Update global reactivity display
-                const globalReactivityDisplay = document.getElementById('globalReactivityValue');
-                if (globalReactivityDisplay) {
-                    globalReactivityDisplay.textContent = window.globalAudioReactivity.toFixed(1);
-                }
-            }, 100); // Small delay to ensure scripts have executed
-
-            console.log('✅ Galaxy View options menu loaded successfully');
-        })
-        .catch(error => {
-            console.error('❌ Failed to load options menu:', error);
-            console.warn('Galaxy View will work without options menu (controls via console)');
-        });
-}
-
-/**
- * Wires up options menu controls to Galaxy View variables and functions
- * Delegates to the imported controls module with dependency injection
- */
-function wireUpMenuControls() {
-    // Create context object with references to internal variables/functions
-    const context = {
-        recreateParticles,
-        updateClusterPositions,
-        setMotionMode,
-        hiddenCategories,
-        particleSystem,
-        createParticleTexture,
-        particles,
-        scene,
-        audioFilesData,
-        updateFileCount,
-        // Provide getters/setters for internal axis scale variables
-        getAxisScales: () => ({ xAxisScale, yAxisScale, zAxisScale }),
-        setAxisScales: (x, y, z) => {
-            if (x !== undefined) xAxisScale = x;
-            if (y !== undefined) yAxisScale = y;
-            if (z !== undefined) zAxisScale = z;
-        },
-        // Provide access to bloom pass
-        getBloomPass: () => bloomPass
-    };
-
-    // Call imported implementation with context
-    wireUpMenuControlsImpl(context);
-}
-
-/**
- * Wires up additional controls - delegates to imported module
- */
-function wireUpAdditionalControls() {
-    wireUpAdditionalControlsImpl();
-}
-
-/**
- * Updates the file count display in the options menu
- * Call this after loading menu and after recreating particles
- */
-function updateFileCount() {
-    const fileCountEl = document.getElementById('galaxyFileCount');
-    if (fileCountEl) {
-        const count = audioFilesData ? audioFilesData.length : 0;
-        fileCountEl.textContent = `${count} files loaded`;
-        console.log('📊 Updated file count display:', count, '| audioFilesData.length:', audioFilesData?.length);
-    } else {
-        console.warn('⚠️ galaxyFileCount element not found yet');
-    }
-}
-
-/**
- * Populates the color legend with categories and their colors
- */
-function populateColorLegend() {
-    const legendContainer = document.getElementById('galaxyTagLegend');
-    if (!legendContainer) {
-        console.warn('⚠️ galaxyTagLegend element not found');
-        return;
-    }
-
-    legendContainer.innerHTML = '';
-
-    // Get unique categories from audio files
-    const categories = new Set();
-    audioFilesData.forEach(file => {
-        const category = getCategoryForFile(file);
-        categories.add(category);
-    });
-
-    // Create color boxes for each category
-    Array.from(categories).sort().forEach(category => {
-        const colorData = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
-        const color = `hsl(${colorData.hue}, ${colorData.sat * 100}%, 60%)`;
-
-        const item = document.createElement('div');
-        item.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 4px 8px;
-            margin-bottom: 4px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-        `;
-
-        const colorBox = document.createElement('div');
-        colorBox.style.cssText = `
-            width: 16px;
-            height: 16px;
-            background: ${color};
-            border-radius: 3px;
-        `;
-
-        const label = document.createElement('span');
-        label.textContent = category;
-        label.style.color = '#fff';
-
-        item.appendChild(colorBox);
-        item.appendChild(label);
-
-        // Click to toggle category visibility
-        item.addEventListener('click', () => {
-            toggleCategoryVisibility(category);
-            item.style.opacity = hiddenCategories.has(category) ? '0.5' : '1.0';
+            this.particles.push(cluster);
         });
 
-        legendContainer.appendChild(item);
-    });
+        this.particleSystem.instanceMatrix.needsUpdate = true;
+        if (this.particleSystem.instanceColor) {
+            this.particleSystem.instanceColor.needsUpdate = true;
+        }
 
-    console.log('✅ Populated color legend with', categories.size, 'categories');
-}
+        this.scene.add(this.particleSystem);
 
-/**
- * Populates the tags list
- */
-function populateTags() {
-    const tagsContainer = document.getElementById('galaxyTagsList');
-    if (!tagsContainer) {
-        console.warn('⚠️ galaxyTagsList element not found');
-        return;
+        console.log(`✨ Created ${totalParticles} particles in ${this.particles.length} clusters`);
     }
 
-    // Get all unique tags from audio files
-    const tagCounts = {};
-    audioFilesData.forEach(file => {
-        if (file.tags && Array.isArray(file.tags)) {
-            file.tags.forEach(tag => {
-                tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-            });
-        }
-    });
+    /**
+     * Create particle texture (circle)
+     */
+    createParticleTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
 
-    // Sort tags by count (descending)
-    const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+        const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.5)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
-    tagsContainer.innerHTML = '';
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 64, 64);
 
-    sortedTags.forEach(([tag, count]) => {
-        // Determine tag filter state and color
-        let bgColor = 'rgba(255,255,255,0.05)';
-        let borderLeft = 'none';
-        
-        if (canHaveTags.has(tag)) {
-            bgColor = 'rgba(100, 200, 100, 0.15)';
-            borderLeft = '3px solid rgba(100, 200, 100, 0.8)';
-        } else if (mustHaveTags.has(tag)) {
-            bgColor = 'rgba(100, 100, 200, 0.15)';
-            borderLeft = '3px solid rgba(100, 100, 200, 0.8)';
-        } else if (excludeTags.has(tag)) {
-            bgColor = 'rgba(200, 100, 100, 0.15)';
-            borderLeft = '3px solid rgba(200, 100, 100, 0.8)';
-        }
+        const texture = new THREE.CanvasTexture(canvas);
+        return texture;
+    }
 
-        const item = document.createElement('div');
-        item.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 4px 8px;
-            margin-bottom: 2px;
-            background: ${bgColor};
-            border-left: ${borderLeft};
-            border-radius: 4px;
-            font-size: 11px;
-            color: #ccc;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-        `;
+    /**
+     * Setup event listeners
+     */
+    setupEventListeners() {
+        window.addEventListener('resize', this.boundOnResize);
+        document.addEventListener('keydown', this.boundOnKeyDown);
+        document.addEventListener('keyup', this.boundOnKeyUp);
+        document.addEventListener('mousemove', this.boundOnMouseMove);
+        document.addEventListener('click', this.boundOnClick);
+        document.addEventListener('pointerlockchange', this.boundOnPointerLockChange);
 
-        // Hover effect
-        item.addEventListener('mouseenter', () => {
-            item.style.background = item.style.background.replace(/0\.15/, '0.25').replace(/0\.05/, '0.1');
-            item.style.transform = 'translateX(2px)';
+        // Request pointer lock on canvas click
+        this.renderer.domElement.addEventListener('click', () => {
+            this.renderer.domElement.requestPointerLock();
         });
-        item.addEventListener('mouseleave', () => {
-            item.style.background = bgColor;
-            item.style.transform = 'translateX(0)';
-        });
-
-        const tagName = document.createElement('span');
-        tagName.textContent = tag;
-
-        const tagCount = document.createElement('span');
-        tagCount.textContent = count;
-        tagCount.style.cssText = `
-            background: rgba(255,255,255,0.1);
-            padding: 2px 6px;
-            border-radius: 8px;
-            font-size: 10px;
-        `;
-
-        item.appendChild(tagName);
-        item.appendChild(tagCount);
-
-        // Click handler to add/remove tag from filter
-        item.addEventListener('click', () => {
-            if (window.handleGalaxyTagFilterClick) {
-                window.handleGalaxyTagFilterClick(tag);
-            } else {
-                console.error('❌ handleGalaxyTagFilterClick not found');
-            }
-        });
-
-        tagsContainer.appendChild(item);
-    });
-
-    console.log('✅ Populated tags list with', sortedTags.length, 'tags');
-}
-
-
-/**
- * Populates the file list
- */
-function populateFileList() {
-    console.log('📋 populateFileList() called');
-
-    const fileListContainer = document.getElementById('galaxyFileList');
-    if (!fileListContainer) {
-        console.warn('⚠️ galaxyFileList element not found');
-        return;
     }
 
-    console.log('📋 File list container found, clearing...');
-    fileListContainer.innerHTML = '';
-
-    if (!audioFilesData || audioFilesData.length === 0) {
-        console.warn('⚠️ No audioFilesData available for file list');
-        return;
+    /**
+     * Remove event listeners
+     */
+    removeEventListeners() {
+        window.removeEventListener('resize', this.boundOnResize);
+        document.removeEventListener('keydown', this.boundOnKeyDown);
+        document.removeEventListener('keyup', this.boundOnKeyUp);
+        document.removeEventListener('mousemove', this.boundOnMouseMove);
+        document.removeEventListener('click', this.boundOnClick);
+        document.removeEventListener('pointerlockchange', this.boundOnPointerLockChange);
     }
 
-    console.log(`📋 Total files in audioFilesData: ${audioFilesData.length}`);
-
-    // Filter files based on visibility
-    const visibleFiles = audioFilesData.filter(f =>
-        !f._hiddenFromParticles &&
-        !f._hiddenByTagFilter &&
-        !f._hiddenBySearch
-    );
-
-    console.log(`📋 Visible files after filtering: ${visibleFiles.length}`);
-
-    visibleFiles.forEach(file => {
-        const category = getCategoryForFile(file);
-        const colorData = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
-        const color = `hsl(${colorData.hue}, ${colorData.sat * 100}%, 60%)`;
-
-        const item = document.createElement('div');
-        item.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 8px;
-            margin-bottom: 3px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-            transition: background 0.2s;
-        `;
-
-        // Color indicator
-        const colorIndicator = document.createElement('div');
-        colorIndicator.style.cssText = `
-            width: 4px;
-            height: 20px;
-            background: ${color};
-            border-radius: 2px;
-            flex-shrink: 0;
-        `;
-
-        // File name
-        const fileName = document.createElement('div');
-        fileName.textContent = file.name || 'Unknown';
-        fileName.style.cssText = `
-            flex: 1;
-            color: #fff;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        `;
-
-        // Metadata (BPM, Key)
-        const metadata = document.createElement('div');
-        const bpm = file.bpm || '?';
-        const key = file.key || '?';
-        metadata.textContent = `${bpm} | ${key}`;
-        metadata.style.cssText = `
-            font-size: 10px;
-            color: #888;
-            white-space: nowrap;
-        `;
-
-        item.appendChild(colorIndicator);
-        item.appendChild(fileName);
-        item.appendChild(metadata);
-
-        // Hover effect
-        item.addEventListener('mouseenter', () => {
-            item.style.background = 'rgba(255,255,255,0.1)';
-        });
-
-        item.addEventListener('mouseleave', () => {
-            item.style.background = 'rgba(255,255,255,0.05)';
-        });
-
-        // Click to load file
-        item.addEventListener('click', () => {
-            if (window.loadAudio) {
-                window.loadAudio(file.id, true);
-            } else {
-                console.error('❌ window.loadAudio not found!');
-            }
-        });
-
-        fileListContainer.appendChild(item);
-    });
-
-    console.log('✅ Populated file list with', visibleFiles.length, 'visible files (', audioFilesData.length, 'total)');
-}
-
-// ============================================================================
-// TAG FILTER SYSTEM
-// ============================================================================
-
-/**
- * Toggle tag filter panel visibility
- */
-function toggleTagFilterPanel() {
-    const panel = document.getElementById('galaxyTagFilterPanel');
-    if (!panel) return;
-
-    tagFilterPanelVisible = !tagFilterPanelVisible;
-    panel.style.display = tagFilterPanelVisible ? 'block' : 'none';
-
-    // Populate tags when panel opens
-    if (tagFilterPanelVisible) {
-        populateTagFilterButtons();
+    /**
+     * Keyboard down handler
+     */
+    onKeyDown(event) {
+        this.keys[event.key.toLowerCase()] = true;
+        if (event.key === 'Shift') this.keys.shift = true;
     }
 
-    console.log('🏷️ Tag filter panel:', tagFilterPanelVisible ? 'visible' : 'hidden');
-}
-
-/**
- * Set the current filter mode (canHave, mustHave, exclude)
- */
-function setFilterMode(mode) {
-    currentFilterMode = mode;
-
-    // Update button styles for BOTH standalone panel AND options menu
-    const buttons = {
-        canHave: [
-            document.getElementById('canHaveBtn'),        // Standalone panel
-            document.getElementById('galaxyCanHaveBtn')   // Options menu
-        ],
-        mustHave: [
-            document.getElementById('mustHaveBtn'),       // Standalone panel
-            document.getElementById('galaxyMustHaveBtn')  // Options menu
-        ],
-        exclude: [
-            document.getElementById('excludeBtn'),        // Standalone panel
-            document.getElementById('galaxyExcludeBtn')   // Options menu
-        ]
-    };
-
-    Object.keys(buttons).forEach(key => {
-        const btns = buttons[key];
-
-        btns.forEach(btn => {
-            if (!btn) return;
-
-            if (key === mode) {
-                // Active state
-                if (key === 'canHave') {
-                    btn.style.background = 'rgba(100, 200, 100, 0.3)';
-                    btn.style.borderColor = 'rgba(100, 200, 100, 0.6)';
-                    btn.style.color = '#fff';
-                } else if (key === 'mustHave') {
-                    btn.style.background = 'rgba(100, 100, 200, 0.3)';
-                    btn.style.borderColor = 'rgba(100, 100, 200, 0.6)';
-                    btn.style.color = '#fff';
-                } else if (key === 'exclude') {
-                    btn.style.background = 'rgba(200, 100, 100, 0.3)';
-                    btn.style.borderColor = 'rgba(200, 100, 100, 0.6)';
-                    btn.style.color = '#fff';
-                }
-            } else {
-                // Inactive state
-                btn.style.background = 'rgba(30, 30, 30, 0.3)';
-                btn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                btn.style.color = '#888';
-            }
-        });
-    });
-
-    console.log('🏷️ Filter mode set to:', mode);
-}
-
-
-/**
- * Populate tag filter buttons from all available tags
- */
-function populateTagFilterButtons(searchQuery = '') {
-    const container = document.getElementById('tagFilterButtons');
-    if (!container) return;
-
-    // Collect all unique tags
-    const tagCounts = new Map();
-    audioFilesData.forEach(file => {
-        if (file.tags && Array.isArray(file.tags)) {
-            file.tags.forEach(tag => {
-                tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
-            });
-        }
-    });
-
-    // Filter by search query
-    let tags = Array.from(tagCounts.keys());
-    if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        tags = tags.filter(tag => tag.toLowerCase().includes(query));
+    /**
+     * Keyboard up handler
+     */
+    onKeyUp(event) {
+        this.keys[event.key.toLowerCase()] = false;
+        if (event.key === 'Shift') this.keys.shift = false;
     }
 
-    // Sort by frequency (most common first)
-    tags.sort((a, b) => tagCounts.get(b) - tagCounts.get(a));
+    /**
+     * Mouse move handler (for camera look)
+     */
+    onMouseMove(event) {
+        if (!this.isPointerLocked) return;
 
-    // Clear container
-    container.innerHTML = '';
-
-    // Create button for each tag
-    tags.forEach(tag => {
-        const button = document.createElement('button');
-        button.textContent = `${tag} (${tagCounts.get(tag)})`;
-        button.onclick = () => handleTagFilterClick(tag);
-
-        // Determine button color based on which set it's in
-        let bgColor = 'rgba(50, 50, 50, 0.5)';
-        let borderColor = 'rgba(255, 255, 255, 0.2)';
-        let textColor = '#ccc';
-
-        if (canHaveTags.has(tag)) {
-            bgColor = 'rgba(100, 200, 100, 0.3)';
-            borderColor = 'rgba(100, 200, 100, 0.6)';
-            textColor = '#fff';
-        } else if (mustHaveTags.has(tag)) {
-            bgColor = 'rgba(100, 100, 200, 0.3)';
-            borderColor = 'rgba(100, 100, 200, 0.6)';
-            textColor = '#fff';
-        } else if (excludeTags.has(tag)) {
-            bgColor = 'rgba(200, 100, 100, 0.3)';
-            borderColor = 'rgba(200, 100, 100, 0.6)';
-            textColor = '#fff';
-        }
-
-        button.style.cssText = `
-            background: ${bgColor};
-            border: 1px solid ${borderColor};
-            color: ${textColor};
-            border-radius: 6px;
-            padding: 8px;
-            cursor: pointer;
-            font-size: 10px;
-            font-family: monospace;
-            transition: all 0.2s;
-        `;
-
-        // Hover effect
-        button.onmouseenter = () => {
-            button.style.transform = 'scale(1.05)';
-        };
-        button.onmouseleave = () => {
-            button.style.transform = 'scale(1.0)';
-        };
-
-        container.appendChild(button);
-    });
-
-    console.log(`✅ Populated ${tags.length} tag filter buttons`);
-}
-
-/**
- * Handle clicking a tag in the filter panel
- */
-function handleTagFilterClick(tag) {
-    // Check if tag is already in current mode set
-    let tagWasInCurrentMode = false;
-    
-    if (currentFilterMode === 'canHave' && canHaveTags.has(tag)) {
-        tagWasInCurrentMode = true;
-    } else if (currentFilterMode === 'mustHave' && mustHaveTags.has(tag)) {
-        tagWasInCurrentMode = true;
-    } else if (currentFilterMode === 'exclude' && excludeTags.has(tag)) {
-        tagWasInCurrentMode = true;
-    }
-
-    // Remove from all sets first
-    canHaveTags.delete(tag);
-    mustHaveTags.delete(tag);
-    excludeTags.delete(tag);
-
-    // If tag was NOT already in current mode, add it
-    // If it WAS in current mode, leave it removed (toggle off)
-    if (!tagWasInCurrentMode) {
-        if (currentFilterMode === 'canHave') {
-            canHaveTags.add(tag);
-        } else if (currentFilterMode === 'mustHave') {
-            mustHaveTags.add(tag);
-        } else if (currentFilterMode === 'exclude') {
-            excludeTags.add(tag);
-        }
-    }
-
-    // Update UI
-    populateTagFilterButtons();
-    populateTags();  // Update options menu tags list
-    updateActiveFiltersDisplay();
-    applyTagFilters();
-
-    const action = tagWasInCurrentMode ? 'removed from' : 'added to';
-    console.log(`🏷️ Tag "${tag}" ${action} ${currentFilterMode} filter`);
-}
-
-
-/**
- * Update the active filters display
- */
-function updateActiveFiltersDisplay() {
-    // Update BOTH standalone panel AND options menu displays
-    const containers = [
-        document.getElementById('activeFiltersDisplay'),       // Standalone panel
-        document.getElementById('galaxyActiveFiltersDisplay')  // Options menu
-    ];
-
-    const hasFilters = canHaveTags.size > 0 || mustHaveTags.size > 0 || excludeTags.size > 0;
-
-    let html = '';
-
-    if (!hasFilters) {
-        html = '<div style="font-size: 11px; color: #666;">No active filters</div>';
-    } else {
-        if (canHaveTags.size > 0) {
-            html += `<div style="margin-bottom: 6px;">
-                <span style="color: rgba(100, 200, 100, 1); font-size: 10px; font-weight: bold;">CAN HAVE:</span>
-                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">`;
-            canHaveTags.forEach(tag => {
-                html += `<span style="background: rgba(100, 200, 100, 0.2); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`;
-            });
-            html += `</div></div>`;
-        }
-
-        if (mustHaveTags.size > 0) {
-            html += `<div style="margin-bottom: 6px;">
-                <span style="color: rgba(100, 100, 200, 1); font-size: 10px; font-weight: bold;">MUST HAVE:</span>
-                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">`;
-            mustHaveTags.forEach(tag => {
-                html += `<span style="background: rgba(100, 100, 200, 0.2); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`;
-            });
-            html += `</div></div>`;
-        }
-
-        if (excludeTags.size > 0) {
-            html += `<div style="margin-bottom: 6px;">
-                <span style="color: rgba(200, 100, 100, 1); font-size: 10px; font-weight: bold;">EXCLUDE:</span>
-                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">`;
-            excludeTags.forEach(tag => {
-                html += `<span style="background: rgba(200, 100, 100, 0.2); padding: 3px 6px; border-radius: 4px; font-size: 10px;">${tag}</span>`;
-            });
-            html += `</div></div>`;
-        }
-    }
-
-    // Update both containers
-    containers.forEach(container => {
-        if (container) {
-            container.innerHTML = html;
-        }
-    });
-}
-
-
-/**
- * Apply tag filters to particles
- */
-function applyTagFilters() {
-    if (!audioFilesData || audioFilesData.length === 0) return;
-
-    const hasFilters = canHaveTags.size > 0 || mustHaveTags.size > 0 || excludeTags.size > 0;
-
-    audioFilesData.forEach(file => {
-        if (!hasFilters) {
-            // No filters - show all files
-            file._hiddenByTagFilter = false;
-            return;
-        }
-
-        let visible = true;
-        const fileTags = new Set(file.tags || []);
-
-        // Must-have: ALL must-have tags must be present
-        if (mustHaveTags.size > 0) {
-            visible = [...mustHaveTags].every(tag => fileTags.has(tag));
-        }
-
-        // Exclude: NONE of exclude tags can be present
-        if (visible && excludeTags.size > 0) {
-            visible = ![...excludeTags].some(tag => fileTags.has(tag));
-        }
-
-        // Can-have: AT LEAST ONE can-have tag must be present (if any set)
-        if (visible && canHaveTags.size > 0) {
-            visible = [...canHaveTags].some(tag => fileTags.has(tag));
-        }
-
-        file._hiddenByTagFilter = !visible;
-    });
-
-    // Recreate particles with new visibility
-    recreateParticles();
-
-    // Update options menu UI elements to reflect filter results
-    populateFileList();     // Update file list
-    populateTags();         // Update tags list (to show filter state)
-    populateColorLegend();  // Update color legend
-
-    const visibleCount = audioFilesData.filter(f => !f._hiddenByTagFilter).length;
-    console.log(`🏷️ Tag filters applied: ${visibleCount}/${audioFilesData.length} files visible`);
-}
-
-/**
- * Clear all tag filters
- */
-function clearTagFilters() {
-    canHaveTags.clear();
-    mustHaveTags.clear();
-    excludeTags.clear();
-
-    populateTagFilterButtons();
-    updateActiveFiltersDisplay();
-    applyTagFilters();
-
-    console.log('🏷️ All tag filters cleared');
-}
-
-/**
- * Handle tag filter search input
- */
-function handleTagFilterSearch(value) {
-    populateTagFilterButtons(value);
-}
-
-// ============================================================================
-// SEARCH FUNCTIONALITY
-// ============================================================================
-
-/**
- * Handle search input - filters files by name or tags
- */
-function handleSearch(query) {
-    searchQuery = query.toLowerCase().trim();
-    console.log(`🔍 Search called with query: "${query}"`);
-
-    if (!audioFilesData || audioFilesData.length === 0) {
-        console.warn('⚠️ No audio files data available for search');
-        return;
-    }
-
-    // Apply search filter to all files
-    audioFilesData.forEach(file => {
-        if (!searchQuery) {
-            // No search query - show all files
-            file._hiddenBySearch = false;
-            return;
-        }
-
-        // Check if file name matches
-        const nameMatch = file.name && file.name.toLowerCase().includes(searchQuery);
-
-        // Check if any tags match
-        const tagsMatch = file.tags && file.tags.some(tag =>
-            tag.toLowerCase().includes(searchQuery)
-        );
-
-        // File is visible if name OR tags match
-        file._hiddenBySearch = !(nameMatch || tagsMatch);
-    });
-
-    const visibleCount = audioFilesData.filter(f => !f._hiddenBySearch).length;
-    console.log(`🔍 After filtering: ${visibleCount}/${audioFilesData.length} files match search`);
-
-    // Update options menu UI elements FIRST (before recreateParticles)
-    console.log('🔍 Updating file list...');
-    populateFileList();     // Update file list
-    console.log('🔍 Updating tags list...');
-    populateTags();         // Update tags list
-    console.log('🔍 Updating color legend...');
-    populateColorLegend();  // Update color legend
-
-    // Recreate particles with new visibility LAST
-    console.log('🔍 Recreating particles...');
-    recreateParticles();
-
-    console.log(`✅ Search complete: "${searchQuery}" - ${visibleCount}/${audioFilesData.length} files visible`);
-}
-
-/**
- * Handle keyboard events in search input
- */
-function handleSearchKeyboard(event) {
-    // Clear search on Escape key
-    if (event.key === 'Escape') {
-        const searchInput = document.getElementById('galaxySearchInput');
-        if (searchInput) {
-            searchInput.value = '';
-            handleSearch('');
-        }
-    }
-}
-
-// Expose globally so it can be called from outside
-window.updateGalaxyFileCount = updateFileCount;
-window.populateGalaxyColorLegend = populateColorLegend;
-window.populateGalaxyTags = populateTags;
-window.populateGalaxyFileList = populateFileList;
-
-// Expose tag filter functions globally
-window.toggleGalaxyTagFilterPanel = toggleTagFilterPanel;
-window.setGalaxyFilterMode = setFilterMode;
-window.handleGalaxyTagFilterClick = handleTagFilterClick;
-window.handleGalaxyTagFilterSearch = handleTagFilterSearch;
-window.clearGalaxyTagFilters = clearTagFilters;
-
-// Expose search functions globally
-window.handleSearch = handleSearch;
-window.handleSearchKeyboard = handleSearchKeyboard;
-
-// ============================================================================
-// CONTROLS
-// ============================================================================
-
-function setupControls(container) {
-    // Click to select particle OR request pointer lock
-    // NOTE: Using mousedown instead of click because click events are often suppressed in pointer lock mode
-    container.addEventListener('mousedown', (event) => {
-        // Only respond to left mouse button
-        if (event.button !== 0) return;
-
-        if (!isPointerLocked) {
-            // Not locked - request pointer lock
-            container.requestPointerLock();
-        } else {
-            // Already locked - select particle at crosshair
-            console.log('🖱️ Left-click in pointer lock mode - selecting particle at crosshair');
-            selectParticleAtCrosshair();
-        }
-    });
-
-    document.addEventListener('pointerlockchange', onPointerLockChange);
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup', onKeyUp);
-}
-
-function onPointerLockChange() {
-    isPointerLocked = document.pointerLockElement !== null;
-    const instructions = document.getElementById('galaxyInstructions');
-    if (instructions) {
-        instructions.style.display = isPointerLocked ? 'none' : 'block';
-    }
-    // Show/hide crosshair
-    const crosshair = document.getElementById('galaxyCrosshair');
-    if (crosshair) {
-        crosshair.style.display = isPointerLocked ? 'block' : 'none';
-    }
-}
-
-function onMouseMove(event) {
-    // Track mouse position for tooltips
-    lastMouseX = event.clientX;
-    lastMouseY = event.clientY;
-
-    if (!isPointerLocked) {
-        // Update mouse position for raycasting
-        const container = document.getElementById('galaxyViewContainer');
-        if (!container || !renderer) return;
-
-        const rect = renderer.domElement.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-        // Check for hover and show tooltip in non-pointer-lock mode
-        updateMouseHover();
-    } else {
-        // Camera look controls
         const movementX = event.movementX || 0;
         const movementY = event.movementY || 0;
 
-        yaw -= movementX * window.lookSensitivity;
-        pitch -= movementY * window.lookSensitivity;
+        this.yaw -= movementX * this.config.lookSensitivity;
+        this.pitch -= movementY * this.config.lookSensitivity;
 
-        // Limit pitch to prevent flipping
-        pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
-    }
-}
-
-/**
- * Updates hover detection in non-pointer-lock mode (regular mouse movement)
- */
-function updateMouseHover() {
-    if (!particleSystem || !particles || particles.length === 0) return;
-
-    // Raycast from mouse position
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObject(particleSystem);
-
-    if (intersects.length > 0) {
-        const intersection = intersects[0];
-        const instanceId = intersection.instanceId;
-
-        // Find which cluster this instance belongs to
-        let newHoveredCluster = null;
-        for (const cluster of particles) {
-            const subParticle = cluster.subParticles.find(sp => sp.instanceIndex === instanceId);
-            if (subParticle) {
-                newHoveredCluster = cluster;
-                break;
-            }
-        }
-
-        // Update hovered cluster if it changed
-        if (newHoveredCluster !== hoveredCluster) {
-            hoveredCluster = newHoveredCluster;
-
-            // Show tooltip
-            if (hoveredCluster) {
-                showFileTooltip(hoveredCluster, lastMouseX, lastMouseY);
-            }
-        } else if (hoveredCluster) {
-            // Update tooltip position even if same cluster (mouse moved)
-            const tooltip = document.getElementById('galaxyFileTooltip');
-            if (tooltip && tooltip.style.display === 'block') {
-                tooltip.style.left = (lastMouseX + 15) + 'px';
-                tooltip.style.top = (lastMouseY + 15) + 'px';
-            }
-        }
-    } else {
-        // No particle under mouse - clear hover
-        if (hoveredCluster !== null) {
-            hoveredCluster = null;
-            hideFileTooltip();
-        }
-    }
-}
-
-function onKeyDown(event) {
-    keys[event.code] = true;
-
-    // Don't handle hotkeys if user is typing in an input field
-    const isTyping = event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA';
-
-    // Press 'E' to select particle at crosshair (when in pointer lock mode)
-    if (event.code === 'KeyE' && isPointerLocked) {
-        selectParticleAtCrosshair();
+        // Clamp pitch to prevent camera flipping
+        this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
     }
 
-    // Keyboard hotkeys (only when not typing)
-    if (!isTyping) {
-        // M - Toggle options menu
-        if (event.code === 'KeyM') {
-            if (window.toggleOptionsMenu2) {
-                window.toggleOptionsMenu2();
-            }
-            event.preventDefault();
-        }
+    /**
+     * Click handler (for particle selection)
+     */
+    onClick(event) {
+        if (!this.isPointerLocked) return;
 
-        // F - Toggle tag filter panel
-        if (event.code === 'KeyF') {
-            toggleTagFilterPanel();
-            event.preventDefault();
-        }
+        // Raycast from center of screen
+        this.mouse.x = 0;
+        this.mouse.y = 0;
 
-        // Escape - Close all panels
-        if (event.code === 'Escape') {
-            // Close tag filter panel
-            if (tagFilterPanelVisible) {
-                toggleTagFilterPanel();
-            }
-            // Exit pointer lock
-            if (isPointerLocked) {
-                document.exitPointerLock();
-            }
-            event.preventDefault();
-        }
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const intersects = this.raycaster.intersectObject(this.particleSystem, true);
 
-        // Slash (/) - Focus search input
-        if (event.code === 'Slash') {
-            const searchInput = document.getElementById('galaxySearchInput');
-            if (searchInput) {
-                // Open options menu if closed
-                const menu = document.getElementById('optionsMenu2');
-                if (menu && menu.style.display === 'none') {
-                    if (window.toggleOptionsMenu2) {
-                        window.toggleOptionsMenu2();
-                    }
+        if (intersects.length > 0) {
+            const instanceId = intersects[0].instanceId;
+
+            // Find which cluster this instance belongs to
+            const cluster = this.particles.find(c =>
+                c.subParticles.some(sp => sp.instanceIndex === instanceId)
+            );
+
+            if (cluster && this.onFileClick) {
+                console.log('🎯 Clicked particle for file:', cluster.file.name);
+                this.onFileClick(cluster.file);
+            }
+        }
+    }
+
+    /**
+     * Pointer lock change handler
+     */
+    onPointerLockChange() {
+        this.isPointerLocked = document.pointerLockElement === this.renderer.domElement;
+    }
+
+    /**
+     * Window resize handler
+     */
+    onWindowResize() {
+        const width = this.container.clientWidth;
+        const height = this.container.clientHeight;
+
+        this.camera.aspect = width / height;
+        this.camera.updateProjectionMatrix();
+
+        this.renderer.setSize(width, height);
+        this.composer.setSize(width, height);
+    }
+
+    /**
+     * Update camera movement (WASD)
+     */
+    updateMovement() {
+        // Calculate forward/right vectors
+        const forward = new THREE.Vector3(
+            Math.sin(this.yaw),
+            0,
+            Math.cos(this.yaw)
+        );
+        const right = new THREE.Vector3(
+            Math.cos(this.yaw),
+            0,
+            -Math.sin(this.yaw)
+        );
+
+        // Reset velocity
+        this.velocity.set(0, 0, 0);
+
+        // Speed modifier
+        const speed = this.keys.shift ? this.config.moveSpeed * 2 : this.config.moveSpeed;
+
+        // WASD movement
+        if (this.keys['w']) this.velocity.add(forward.clone().multiplyScalar(speed));
+        if (this.keys['s']) this.velocity.add(forward.clone().multiplyScalar(-speed));
+        if (this.keys['a']) this.velocity.add(right.clone().multiplyScalar(-speed));
+        if (this.keys['d']) this.velocity.add(right.clone().multiplyScalar(speed));
+        if (this.keys['q']) this.velocity.y += speed; // Up
+        if (this.keys['e']) this.velocity.y -= speed; // Down
+
+        // Apply velocity to camera
+        this.camera.position.add(this.velocity);
+
+        // Update camera rotation
+        this.camera.rotation.order = 'YXZ';
+        this.camera.rotation.y = this.yaw;
+        this.camera.rotation.x = this.pitch;
+    }
+
+    /**
+     * Update particles animation
+     */
+    updateParticles() {
+        if (!this.particleSystem) return;
+
+        const dummy = new THREE.Object3D();
+
+        this.particles.forEach((cluster) => {
+            // Initialize custom time if needed
+            if (cluster.customTime === null) {
+                cluster.customTime = this.animationTime;
+            }
+
+            const deltaTime = cluster.lastRealTime !== null ? (this.animationTime - cluster.lastRealTime) : 0;
+            cluster.lastRealTime = this.animationTime;
+            cluster.customTime += deltaTime;
+
+            const clusterAnimationTime = cluster.customTime;
+
+            // Check if this is the currently playing file
+            const currentFileId = this.playerStateManager?.getCurrentFile?.();
+            const isPlaying = (cluster.file.id === currentFileId);
+
+            // Audio-reactive spread
+            let spreadFactor = 1.0;
+            if (this.config.audioReactivity && this.currentAudioAmplitude > 0) {
+                if (isPlaying) {
+                    spreadFactor = 1.0 + this.currentAudioAmplitude * 0.3;
+                } else {
+                    spreadFactor = 1.0 + this.currentAudioAmplitude * 0.05;
                 }
-                // Focus search
-                setTimeout(() => searchInput.focus(), 100);
             }
-            event.preventDefault();
-        }
-    }
-}
 
-function onKeyUp(event) {
-    keys[event.code] = false;
-}
+            const basePos = cluster.centerPosition;
 
-/**
- * Selects and loads the particle at the crosshair position (screen center)
- * Used for both clicking in pointer lock mode and pressing 'E' key
- */
-function selectParticleAtCrosshair() {
-    if (!particleSystem || !particles || particles.length === 0) return;
+            // Update sub-particles
+            cluster.subParticles.forEach(subParticle => {
+                let finalX, finalY, finalZ;
 
-    // Raycast from screen center (crosshair position)
-    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                if (subParticle.isCenterParticle) {
+                    // Center particle stays at cluster center
+                    finalX = basePos.x;
+                    finalY = basePos.y;
+                    finalZ = basePos.z;
+                } else {
+                    // Orbital motion
+                    const time = clusterAnimationTime * 1000;
+                    const orbitRadius = this.config.orbitRadius * 0.05;
 
-    // Raycast against the instanced mesh
-    const intersects = raycaster.intersectObject(particleSystem);
+                    const orbitX = Math.sin(time + subParticle.orbitPhase) * orbitRadius;
+                    const orbitY = Math.sin(time * 0.8 + subParticle.orbitPhase * 0.7) * (orbitRadius * 0.3);
+                    const orbitZ = Math.cos(time + subParticle.orbitPhase) * orbitRadius;
 
-    if (intersects.length > 0) {
-        const intersection = intersects[0];
-        const instanceId = intersection.instanceId;
+                    finalX = basePos.x + subParticle.offset.x * spreadFactor + orbitX;
+                    finalY = basePos.y + subParticle.offset.y * spreadFactor + orbitY;
+                    finalZ = basePos.z + subParticle.offset.z * spreadFactor + orbitZ;
+                }
 
-        // Find which cluster this instance belongs to
-        let clickedCluster = null;
-        for (const cluster of particles) {
-            const subParticle = cluster.subParticles.find(sp => sp.instanceIndex === instanceId);
-            if (subParticle) {
-                clickedCluster = cluster;
-                break;
-            }
-        }
-
-        if (clickedCluster) {
-            const file = clickedCluster.file;
-            console.log('✅ Selected cluster:', file.name, 'ID:', file.id);
-
-            // Load file using global function
-            if (window.loadAudio) {
-                window.loadAudio(file.id, true);
-            } else {
-                console.error('❌ window.loadAudio not found!');
-            }
-        }
-    } else {
-        console.log('🎯 No particle at crosshair');
-    }
-}
-
-
-function updateMovement(delta) {
-    if (!isPointerLocked) return;
-
-    // Update camera rotation
-    camera.rotation.order = 'YXZ';
-    camera.rotation.y = yaw;
-    camera.rotation.x = pitch;
-
-    // Movement direction
-    const forward = new THREE.Vector3(0, 0, -1);
-    const right = new THREE.Vector3(1, 0, 0);
-
-    forward.applyQuaternion(camera.quaternion);
-    right.applyQuaternion(camera.quaternion);
-
-    // Reset velocity
-    velocity.set(0, 0, 0);
-
-    // Check if Shift is held (sprint mode)
-    const isSprinting = keys['ShiftLeft'] || keys['ShiftRight'];
-    const currentSpeed = isSprinting ? window.moveSpeed * 2.5 : window.moveSpeed;
-
-    // WASD movement
-    if (keys['KeyW']) velocity.add(forward);
-    if (keys['KeyS']) velocity.sub(forward);
-    if (keys['KeyA']) velocity.sub(right);
-    if (keys['KeyD']) velocity.add(right);
-
-    // Normalize and apply speed
-    if (velocity.length() > 0) {
-        velocity.normalize().multiplyScalar(currentSpeed);
-        camera.position.add(velocity);
-    }
-}
-
-// ============================================================================
-// CROSSHAIR HOVER DETECTION & TOOLTIP
-// ============================================================================
-
-/**
- * Shows file tooltip with details about the hovered file
- */
-function showFileTooltip(cluster, mouseX, mouseY) {
-    const tooltip = document.getElementById('galaxyFileTooltip');
-    if (!tooltip) return;
-
-    const file = cluster.file;
-
-    // Populate title
-    const titleEl = tooltip.querySelector('.tooltip-title');
-    titleEl.textContent = file.name || 'Unknown';
-
-    // Populate metadata
-    const metadataEl = tooltip.querySelector('.tooltip-metadata');
-    const bpm = file.bpm || '?';
-    const key = file.key || '?';
-    const length = file.length || 0;
-    const minutes = Math.floor(length / 60);
-    const seconds = Math.floor(length % 60);
-    const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    metadataEl.textContent = `${bpm} BPM | ${key} | ${timeStr}`;
-
-    // Populate tags
-    const tagsEl = tooltip.querySelector('.tooltip-tags');
-    tagsEl.innerHTML = '';
-    if (file.tags && file.tags.length > 0) {
-        file.tags.forEach(tag => {
-            const chip = document.createElement('span');
-            chip.style.cssText = `
-                background: rgba(255, 255, 255, 0.1);
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-size: 10px;
-                color: #ddd;
-            `;
-            chip.textContent = tag;
-            tagsEl.appendChild(chip);
+                // Update instance matrix
+                dummy.position.set(finalX, finalY, finalZ);
+                dummy.scale.setScalar(this.config.particleSize * (isPlaying ? 1.2 : 1.0));
+                dummy.updateMatrix();
+                this.particleSystem.setMatrixAt(subParticle.instanceIndex, dummy.matrix);
+            });
         });
+
+        this.particleSystem.instanceMatrix.needsUpdate = true;
     }
 
-    // Position tooltip near mouse (with some offset)
-    tooltip.style.left = (mouseX + 15) + 'px';
-    tooltip.style.top = (mouseY + 15) + 'px';
-    tooltip.style.display = 'block';
-}
+    /**
+     * Update audio data from frequency analyzer
+     * @param {Uint8Array} frequencies - Frequency data
+     */
+    updateAudioData(frequencies) {
+        if (!frequencies || frequencies.length === 0) return;
 
-/**
- * Hides the file tooltip
- */
-function hideFileTooltip() {
-    const tooltip = document.getElementById('galaxyFileTooltip');
-    if (tooltip) {
-        tooltip.style.display = 'none';
-    }
-}
+        const sum = frequencies.reduce((a, b) => a + b, 0);
+        this.currentAudioAmplitude = Math.min((sum / frequencies.length / 128) * 3, 5);
 
-// Track mouse position for tooltip
-let lastMouseX = 0;
-let lastMouseY = 0;
+        const bassEnd = Math.floor(frequencies.length * 0.2);
+        const midsEnd = Math.floor(frequencies.length * 0.6);
 
-/**
- * Updates the hovered cluster based on crosshair position
- * Called every frame to detect which particle is under the crosshair in pointer lock mode
- */
-function updateCrosshairHover() {
-    // Only update hover in pointer lock mode
-    if (!isPointerLocked || !particleSystem || !particles || particles.length === 0) {
-        // Clear hover if not in pointer lock mode
-        if (hoveredCluster !== null) {
-            hoveredCluster = null;
-            hideFileTooltip();
-        }
-        return;
+        const bassSlice = frequencies.slice(0, bassEnd);
+        const midsSlice = frequencies.slice(bassEnd, midsEnd);
+        const highsSlice = frequencies.slice(midsEnd);
+
+        this.bassAmplitude = bassSlice.reduce((a, b) => a + b, 0) / bassSlice.length / 128;
+        this.midsAmplitude = midsSlice.reduce((a, b) => a + b, 0) / midsSlice.length / 128;
+        this.highsAmplitude = highsSlice.reduce((a, b) => a + b, 0) / highsSlice.length / 128;
     }
 
-    // Raycast from screen center (crosshair position)
-    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+    /**
+     * Animation loop
+     */
+    animate() {
+        if (!this.isActive) return;
 
-    // Raycast against the instanced mesh
-    const intersects = raycaster.intersectObject(particleSystem);
+        this.animationId = requestAnimationFrame(() => this.animate());
 
-    if (intersects.length > 0) {
-        const intersection = intersects[0];
-        const instanceId = intersection.instanceId;
-
-        // Find which cluster this instance belongs to
-        let newHoveredCluster = null;
-        for (const cluster of particles) {
-            const subParticle = cluster.subParticles.find(sp => sp.instanceIndex === instanceId);
-            if (subParticle) {
-                newHoveredCluster = cluster;
-                break;
-            }
-        }
-
-        // Update hovered cluster if it changed
-        if (newHoveredCluster !== hoveredCluster) {
-            hoveredCluster = newHoveredCluster;
-
-            // Show tooltip for new hovered cluster
-            if (hoveredCluster) {
-                // Use center of screen for tooltip position in pointer lock mode
-                showFileTooltip(hoveredCluster, window.innerWidth / 2, window.innerHeight / 2);
-            }
-        }
-    } else {
-        // No particle at crosshair - clear hover
-        if (hoveredCluster !== null) {
-            hoveredCluster = null;
-            hideFileTooltip();
-        }
-    }
-}
-
-// ============================================================================
-// ANIMATION LOOP
-// ============================================================================
-
-function startAnimation() {
-    let lastTime = performance.now();
-
-    function animate() {
-        if (!scene || !camera || !renderer) return;
-
-        const currentTime = performance.now();
-        const delta = (currentTime - lastTime) / 1000;
-        lastTime = currentTime;
-
-        // Update audio analysis
-        updateAudioAmplitude();
-
-        // Update audio reactivity UI displays
-        updateAudioUI();
-
-        // Update crosshair hover (must be before particle animation)
-        updateCrosshairHover();
-
-        // Update particle animation (motion modes + audio reactivity)
-        updateParticleAnimation(delta);
+        // Increment animation time
+        this.animationTime += this.config.orbitSpeed;
 
         // Update camera movement
-        updateMovement(delta);
+        this.updateMovement();
 
-        // Render scene (use composer if bloom is enabled, otherwise direct render)
-        if (composer) {
-            composer.render();
-        } else {
-            renderer.render(scene, camera);
-        }
+        // Update particles
+        this.updateParticles();
 
-        animationFrameId = requestAnimationFrame(animate);
+        // Render
+        this.composer.render();
     }
 
-    animate();
-}
+    /**
+     * Show galaxy view and start animation
+     */
+    show() {
+        this.container.style.display = 'block';
+        this.isActive = true;
 
-/**
- * Updates the audio reactivity UI displays in the options menu
- * Called every frame to show real-time audio analysis
- */
-function updateAudioUI() {
-    // Update "No file playing" status
-    const currentFileDisplay = document.querySelector('.current-file-display span');
-    if (currentFileDisplay) {
-        const isPlaying = window.wavesurfer && window.wavesurfer.isPlaying && window.wavesurfer.isPlaying();
+        // Resize to container
+        this.onWindowResize();
 
-        // Debug: Check if we have wavesurfer and currentFileData
-        if (!window.wavesurfer) {
-            // Wavesurfer not available yet
-            currentFileDisplay.textContent = 'Wavesurfer not ready';
-            currentFileDisplay.style.color = '#888';
-        } else if (isPlaying && currentFileData) {
-            currentFileDisplay.textContent = `Playing: ${currentFileData.name || 'Unknown'}`;
-            currentFileDisplay.style.color = '#0f0';
-        } else if (isPlaying && !currentFileData) {
-            // Playing but no currentFileData - try to get from window
-            const currentFile = window.audioFiles?.find(f => f.id === window.currentFileId);
-            if (currentFile) {
-                currentFileData = currentFile;
-                currentFileDisplay.textContent = `Playing: ${currentFile.name || 'Unknown'}`;
-                currentFileDisplay.style.color = '#0f0';
-            } else {
-                currentFileDisplay.textContent = 'Playing (unknown file)';
-                currentFileDisplay.style.color = '#fa0';
+        // Start animation if not already running
+        if (!this.animationId) {
+            this.animate();
+        }
+
+        console.log('🌌 Galaxy View shown');
+    }
+
+    /**
+     * Hide galaxy view and pause animation
+     */
+    hide() {
+        this.container.style.display = 'none';
+        this.isActive = false;
+
+        // Release pointer lock
+        if (document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+
+        console.log('🌌 Galaxy View hidden');
+    }
+
+    /**
+     * Clean up resources
+     */
+    destroy() {
+        this.hide();
+
+        // Stop animation
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+
+        // Remove event listeners
+        this.removeEventListeners();
+
+        // Dispose Three.js resources
+        if (this.particleSystem) {
+            if (this.particleSystem.geometry) this.particleSystem.geometry.dispose();
+            if (this.particleSystem.material) this.particleSystem.material.dispose();
+        }
+
+        if (this.renderer) {
+            this.renderer.dispose();
+            if (this.renderer.domElement.parentNode) {
+                this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
             }
-        } else {
-            currentFileDisplay.textContent = 'No file playing';
-            currentFileDisplay.style.color = '#f00';
         }
-    }
 
-    // Update current amplitude display
-    const amplitudeDisplay = document.getElementById('audioAmplitudeDisplay');
-    if (amplitudeDisplay) {
-        amplitudeDisplay.textContent = currentAudioAmplitude.toFixed(2);
-    }
-
-    // Update frequency band displays
-    const bassDisplay = document.getElementById('bassAmplitudeDisplay');
-    if (bassDisplay) {
-        bassDisplay.textContent = bassAmplitude.toFixed(2);
-    }
-
-    const midsDisplay = document.getElementById('midsAmplitudeDisplay');
-    if (midsDisplay) {
-        midsDisplay.textContent = midsAmplitude.toFixed(2);
-    }
-
-    const highsDisplay = document.getElementById('highsAmplitudeDisplay');
-    if (highsDisplay) {
-        highsDisplay.textContent = highsAmplitude.toFixed(2);
+        console.log('🌌 Galaxy View destroyed');
     }
 }

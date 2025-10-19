@@ -1,28 +1,248 @@
-// Galaxy View - 3D particle visualization with game controls
-// Phase 1: Basic Three.js implementation with WASD + mouse controls
+// Galaxy View - 3D particle visualization with advanced instanced mesh rendering
+// Phase 2A: Integrated utilities + advanced particle system with subparticle clusters
+
+// ============================================================================
+// CORE UTILITIES
+// ============================================================================
+
+/**
+ * Generates a deterministic pseudo-random number from a seed
+ * Used to ensure consistent particle positions across renders
+ */
+function seededRandom(seed) {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+}
+
+/**
+ * Creates a texture for particle sprites using HTML Canvas
+ * Supports multiple shapes with smooth alpha gradients
+ */
+function createParticleTexture(shape) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d', { alpha: true });
+    const centerX = 64;
+    const centerY = 64;
+
+    ctx.clearRect(0, 0, 128, 128);
+
+    switch(shape) {
+        case 'circle':
+            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 60);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
+            gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+
+        case 'square':
+            const sqGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 50);
+            sqGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            sqGradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.5)');
+            sqGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = sqGradient;
+            ctx.fillRect(14, 14, 100, 100);
+            break;
+
+        case 'disc':
+            const discGradient = ctx.createRadialGradient(centerX, centerY, 45, centerX, centerY, 58);
+            discGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            discGradient.addColorStop(0.8, 'rgba(255, 255, 255, 1)');
+            discGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = discGradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 58, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+
+        case 'ring':
+            const ringGradient = ctx.createRadialGradient(centerX, centerY, 30, centerX, centerY, 58);
+            ringGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+            ringGradient.addColorStop(0.3, 'rgba(255, 255, 255, 1)');
+            ringGradient.addColorStop(0.7, 'rgba(255, 255, 255, 1)');
+            ringGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = ringGradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 58, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 30, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+            break;
+
+        default:
+            const defaultGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 60);
+            defaultGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            defaultGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = defaultGradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+            ctx.fill();
+    }
+
+    if (typeof THREE !== 'undefined') {
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        return texture;
+    } else {
+        console.warn('THREE.js not loaded, returning canvas element instead');
+        return canvas;
+    }
+}
+
+/**
+ * Maps a value from one range to another (linear interpolation)
+ */
+function mapRange(value, inMin, inMax, outMin, outMax) {
+    return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+}
+
+/**
+ * Clamps a value between min and max bounds
+ */
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Simple hash function for strings (for consistent tag-based positioning)
+ */
+function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    return Math.abs(hash) / 2147483647;
+}
+
+/**
+ * Gets a key value from musical key notation
+ */
+function getKeyValue(key) {
+    if (!key) return 0;
+    const keyMap = {
+        'C': 0, 'C#': 1, 'Db': 1,
+        'D': 2, 'D#': 3, 'Eb': 3,
+        'E': 4, 'Fb': 4,
+        'F': 5, 'F#': 6, 'Gb': 6,
+        'G': 7, 'G#': 8, 'Ab': 8,
+        'A': 9, 'A#': 10, 'Bb': 10,
+        'B': 11, 'Cb': 11
+    };
+    const keyName = key.split('/')[0]
+        .replace('maj', '')
+        .replace('min', '')
+        .replace('m', '')
+        .trim();
+    return keyMap[keyName] || 0;
+}
+
+// ============================================================================
+// PARTICLE SYSTEM CONSTANTS
+// ============================================================================
+
+const KEY_COLORS = {
+    'C': { hue: 0, sat: 0.7 },
+    'G': { hue: 30, sat: 0.7 },
+    'D': { hue: 60, sat: 0.7 },
+    'A': { hue: 90, sat: 0.7 },
+    'E': { hue: 120, sat: 0.7 },
+    'B': { hue: 150, sat: 0.7 },
+    'F#': { hue: 180, sat: 0.7 },
+    'C#': { hue: 210, sat: 0.7 },
+    'G#': { hue: 240, sat: 0.7 },
+    'D#': { hue: 270, sat: 0.7 },
+    'A#': { hue: 300, sat: 0.7 },
+    'F': { hue: 330, sat: 0.7 }
+};
+
+const BPM_COLORS = [
+    { min: 0, max: 90, hue: 240, sat: 0.7 },
+    { min: 90, max: 110, hue: 180, sat: 0.7 },
+    { min: 110, max: 128, hue: 120, sat: 0.7 },
+    { min: 128, max: 140, hue: 60, sat: 0.7 },
+    { min: 140, max: 160, hue: 30, sat: 0.7 },
+    { min: 160, max: 180, hue: 0, sat: 0.7 },
+    { min: 180, max: 999, hue: 300, sat: 0.7 }
+];
+
+const CATEGORY_COLORS = {
+    'drums': { hue: 0, sat: 0.8 },
+    'inst': { hue: 30, sat: 0.7 },
+    'vox': { hue: 60, sat: 0.7 },
+    'bass': { hue: 120, sat: 0.8 },
+    'gtr': { hue: 180, sat: 0.7 },
+    'pno': { hue: 240, sat: 0.7 },
+    'piano': { hue: 240, sat: 0.7 },
+    'syn': { hue: 270, sat: 0.8 },
+    'perc': { hue: 90, sat: 0.6 },
+    'pad': { hue: 200, sat: 0.6 },
+    'lead': { hue: 300, sat: 0.8 },
+    'fx': { hue: 150, sat: 0.6 },
+    'arp': { hue: 210, sat: 0.7 },
+    'other': { hue: 0, sat: 0.3 }
+};
+
+// ============================================================================
+// SCENE VARIABLES
+// ============================================================================
 
 let scene = null;
 let camera = null;
 let renderer = null;
-let particles = [];
 let raycaster = null;
-let mouse = null;  // Will be initialized after Three.js loads
+let mouse = null;
 let animationFrameId = null;
 let isPointerLocked = false;
 
-// Camera movement
+// ============================================================================
+// PARTICLE SYSTEM VARIABLES
+// ============================================================================
+
+let particleSystem = null;        // THREE.InstancedMesh for all particles
+let particles = [];               // Array of cluster objects
+let particlesPerCluster = 48;     // Number of sub-particles per file
+let particleSize = 5;              // Base size of particles
+let subParticleScale = 0.3;       // Sub-particles are smaller than main
+let clusterRadius = 10;            // Spread radius for sub-particles
+let particleShape = 'circle';      // Shape: 'circle', 'square', 'disc', 'ring'
+let particleBrightness = 0.8;      // Base particle brightness/opacity
+let subParticleShape = 'default';  // Cluster shape: 'default', 'sphere', 'spiked'
+let densityGradient = 0;          // 0-1, adds more particles near center
+let maxParticleCount = 0;         // Maximum particles limit (0 = unlimited)
+
+// ============================================================================
+// CAMERA MOVEMENT
+// ============================================================================
+
 let moveSpeed = 5.0;
 let lookSensitivity = 0.002;
 let keys = {};
-let velocity = null;  // Will be initialized after Three.js loads
+let velocity = null;
 let pitch = 0;
 let yaw = 0;
 
-// Audio files data
+// ============================================================================
+// AUDIO FILES DATA
+// ============================================================================
+
 let audioFilesData = [];
 let currentFileData = null;
 
-// Load Three.js dynamically
+// ============================================================================
+// THREE.JS LOADING
+// ============================================================================
+
 let THREE = null;
 let threeLoaded = false;
 
@@ -46,27 +266,24 @@ async function loadThreeJS() {
     });
 }
 
+// ============================================================================
+// VIEW LIFECYCLE
+// ============================================================================
+
 export async function init(data = {}) {
-    console.log('🌌 Galaxy view initializing...');
-    console.log('📊 Data received:', {
-        audioFiles: data.audioFiles ? data.audioFiles.length : 0,
-        currentFile: data.currentFile ? data.currentFile.name : 'none'
-    });
+    console.log('🌌 Galaxy view initializing (Phase 2A - Advanced Particles)...');
 
     // Load Three.js first
-    console.log('📦 Loading Three.js...');
     await loadThreeJS();
-    console.log('✅ Three.js loaded, version:', THREE.REVISION);
 
     // Initialize Three.js-dependent variables
     mouse = new THREE.Vector2();
     velocity = new THREE.Vector3();
-    console.log('✅ Three.js-dependent variables initialized');
 
     // Store audio files data
     if (data.audioFiles) {
         audioFilesData = data.audioFiles;
-        console.log('📁 Stored', audioFilesData.length, 'audio files');
+        console.log('📁 Loaded', audioFilesData.length, 'audio files');
     }
     if (data.currentFile) {
         currentFileData = data.currentFile;
@@ -79,19 +296,10 @@ export async function init(data = {}) {
         console.error('❌ Galaxy view container not found');
         return;
     }
-    console.log('📦 Container found:', container.id);
 
     // MUST show container BEFORE reading dimensions
     container.style.display = 'block';
     container.innerHTML = '';
-
-    console.log('📐 Container dimensions AFTER showing:', {
-        width: container.clientWidth,
-        height: container.clientHeight,
-        offsetWidth: container.offsetWidth,
-        offsetHeight: container.offsetHeight,
-        computedStyle: window.getComputedStyle(container).position
-    });
 
     // Create instructions overlay
     const instructions = document.createElement('div');
@@ -112,40 +320,27 @@ export async function init(data = {}) {
         pointer-events: none;
     `;
     instructions.innerHTML = `
-        <strong>🌌 Galaxy View - Phase 1</strong><br>
+        <strong>🌌 Galaxy View - Phase 2A</strong><br>
+        Instanced Mesh Rendering | Subparticle Clusters<br>
         Click to lock pointer | ESC to unlock<br>
-        WASD to move | Mouse to look | Click particles to load file
+        WASD to move | Mouse to look | Shift to sprint | Click particles to load
     `;
     container.appendChild(instructions);
 
     // Setup Three.js scene
-    console.log('🎨 Setting up Three.js scene...');
     setupScene(container);
-    console.log('✅ Scene setup complete');
 
-    // Create particles from audio files
-    console.log('✨ Creating particles...');
+    // Create advanced particles from audio files
+    console.log('✨ Creating advanced particle system...');
     createParticles();
-    console.log('✅ Particles created');
 
     // Setup controls
-    console.log('🎮 Setting up controls...');
     setupControls(container);
-    console.log('✅ Controls setup complete');
 
     // Start animation loop
-    console.log('🎬 Starting animation loop...');
     startAnimation();
-    console.log('✅ Animation loop started');
 
-    console.log('🎉 Galaxy view initialized successfully!');
-    console.log('📊 Final state:', {
-        scene: !!scene,
-        camera: !!camera,
-        renderer: !!renderer,
-        particles: particles.length,
-        animationRunning: !!animationFrameId
-    });
+    console.log('🎉 Galaxy view Phase 2A initialized!');
 }
 
 export function update(data = {}) {
@@ -185,13 +380,20 @@ export async function destroy() {
         }
     }
 
+    // Cleanup instanced mesh
+    if (particleSystem) {
+        scene.remove(particleSystem);
+        if (particleSystem.geometry) particleSystem.geometry.dispose();
+        if (particleSystem.material) {
+            if (particleSystem.material.map) particleSystem.material.map.dispose();
+            particleSystem.material.dispose();
+        }
+        particleSystem = null;
+    }
+
+    particles = [];
+
     if (scene) {
-        // Dispose geometries and materials
-        particles.forEach(p => {
-            if (p.geometry) p.geometry.dispose();
-            if (p.material) p.material.dispose();
-        });
-        particles = [];
         scene.clear();
         scene = null;
     }
@@ -214,18 +416,16 @@ export async function destroy() {
     console.log('Galaxy view destroyed');
 }
 
-/**
- * Setup Three.js scene
- */
+// ============================================================================
+// SCENE SETUP
+// ============================================================================
+
 function setupScene(container) {
-    console.log('  🎨 Creating scene...');
     // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
     scene.fog = new THREE.Fog(0x000000, 10, 800);
-    console.log('  ✅ Scene created');
 
-    console.log('  📷 Creating camera...');
     // Camera
     camera = new THREE.PerspectiveCamera(
         75,
@@ -234,32 +434,24 @@ function setupScene(container) {
         2000
     );
     camera.position.set(0, 50, 200);
-    console.log('  ✅ Camera created at position:', camera.position);
 
-    console.log('  🖼️ Creating renderer...');
     // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
-    console.log('  ✅ Renderer created with size:', container.clientWidth, 'x', container.clientHeight);
-    console.log('  ✅ Renderer canvas appended to container');
-    console.log('  📐 Canvas element:', renderer.domElement, 'size:', renderer.domElement.width, 'x', renderer.domElement.height);
 
     // Raycaster for mouse picking
     raycaster = new THREE.Raycaster();
-    console.log('  ✅ Raycaster created');
 
     // Ambient light
     const ambientLight = new THREE.AmbientLight(0x404040, 2);
     scene.add(ambientLight);
-    console.log('  💡 Ambient light added');
 
     // Directional light
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
     directionalLight.position.set(5, 10, 7.5);
     scene.add(directionalLight);
-    console.log('  💡 Directional light added');
 
     // Handle window resize
     window.addEventListener('resize', () => {
@@ -270,67 +462,316 @@ function setupScene(container) {
     });
 }
 
+// ============================================================================
+// ADVANCED PARTICLE SYSTEM
+// ============================================================================
+
 /**
- * Create particles from audio files
+ * Create advanced particle system with instanced mesh rendering
  */
 function createParticles() {
-    console.log('  ✨ Creating particles from audio files...');
+    const config = {
+        colorMode: 'key',  // Color by musical key
+        xMode: 'bpm',      // X-axis: BPM
+        yMode: 'key',      // Y-axis: Musical key
+        zMode: 'tags',     // Z-axis: Tags
+        xScale: 1.0,
+        yScale: 1.0,
+        zScale: 1.0
+    };
 
-    // Clear existing particles
-    particles.forEach(p => {
-        if (p.geometry) p.geometry.dispose();
-        if (p.material) p.material.dispose();
-        scene.remove(p);
-    });
+    // Clear existing particles array
     particles = [];
 
+    // Remove old particle system if it exists
+    if (particleSystem) {
+        scene.remove(particleSystem);
+        if (particleSystem.geometry) particleSystem.geometry.dispose();
+        if (particleSystem.material) {
+            if (particleSystem.material.map) particleSystem.material.map.dispose();
+            particleSystem.material.dispose();
+        }
+    }
+
     if (!audioFilesData || audioFilesData.length === 0) {
-        console.warn('  ⚠️ No audio files to visualize');
+        console.warn('⚠️ No audio files to visualize');
         return;
     }
 
-    console.log(`  📊 Creating ${audioFilesData.length} particles...`);
+    // Filter out any hidden files
+    const visibleFiles = audioFilesData.filter(f => !f._hiddenFromParticles);
 
-    audioFilesData.forEach((file, index) => {
-        // Position based on BPM and key (simple layout)
-        const bpm = file.bpm || 120;
-        const keyValue = getKeyValue(file.key);
+    // Calculate particles needed
+    const densityAddition = Math.floor(densityGradient * particlesPerCluster);
+    const maxParticlesPerCluster = particlesPerCluster + densityAddition;
+    let totalParticlesNeeded = visibleFiles.length * maxParticlesPerCluster;
 
-        const x = ((bpm - 80) / 100) * 400 - 200;  // BPM 80-180 → -200 to +200
-        const y = (keyValue / 12) * 200 - 100;     // 12 keys → -100 to +100
-        const z = (Math.random() - 0.5) * 100;     // Random depth
+    // Apply particle limit if set
+    let count = totalParticlesNeeded;
+    let particleReductionFactor = 1.0;
 
-        // Create particle
-        const geometry = new THREE.SphereGeometry(3, 16, 16);
-        const material = new THREE.MeshStandardMaterial({
-            color: getColorForFile(file),
-            emissive: getColorForFile(file),
-            emissiveIntensity: 0.3,
-            metalness: 0.5,
-            roughness: 0.5
-        });
+    if (maxParticleCount > 0 && totalParticlesNeeded > maxParticleCount) {
+        count = maxParticleCount;
+        particleReductionFactor = maxParticleCount / totalParticlesNeeded;
+        console.log(`Particle limit: ${totalParticlesNeeded} → ${maxParticleCount}`);
+    }
 
-        const particle = new THREE.Mesh(geometry, material);
-        particle.position.set(x, y, z);
-        particle.userData = { file: file, originalScale: 1.0 };
+    // Create geometry - simple plane sprite
+    const geometry = new THREE.PlaneGeometry(1, 1);
 
-        scene.add(particle);
-        particles.push(particle);
-
-        // Log first few particles
-        if (index < 3) {
-            console.log(`  🔵 Particle ${index}:`, {
-                name: file.name,
-                bpm: bpm,
-                key: file.key,
-                position: { x, y, z },
-                color: getColorForFile(file).getHexString()
-            });
-        }
+    // Create material with texture
+    const material = new THREE.MeshBasicMaterial({
+        map: createParticleTexture(particleShape),
+        transparent: true,
+        opacity: particleBrightness,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false
     });
 
-    console.log(`  ✅ Created ${particles.length} particles and added to scene`);
-    console.log(`  📊 Scene children count:`, scene.children.length);
+    // Create instanced mesh
+    particleSystem = new THREE.InstancedMesh(geometry, material, count);
+    particleSystem.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color();
+    let instanceIndex = 0;
+
+    // Create particles for each visible file
+    visibleFiles.forEach((file, fileIndex) => {
+        const centerPos = calculateFilePosition(file, fileIndex, config);
+
+        // Get color based on current mode
+        const colorData = getColorForFile(file, config.colorMode);
+        const baseColor = new THREE.Color().setHSL(colorData.hue / 360, colorData.sat, 0.6);
+
+        // Store cluster data
+        const cluster = {
+            file,
+            centerPosition: new THREE.Vector3(centerPos.x, centerPos.y, centerPos.z),
+            color: baseColor.clone(),
+            colorData,
+            fileIndex,
+            subParticles: []
+        };
+
+        // Calculate particles for this cluster
+        const baseParticles = particlesPerCluster;
+        const densityAddition = Math.floor(densityGradient * baseParticles);
+        let totalParticles = baseParticles + densityAddition;
+
+        // Apply reduction if limit is active
+        if (particleReductionFactor < 1.0) {
+            totalParticles = Math.max(1, Math.floor(totalParticles * particleReductionFactor));
+        }
+
+        // Create sub-particles
+        for (let i = 0; i < totalParticles; i++) {
+            let offsetX, offsetY, offsetZ;
+            let isCenterParticle = false;
+            let radiusVariation = 0;
+
+            // First 2 particles at center for visibility
+            if (i < 2) {
+                offsetX = 0;
+                offsetY = 0;
+                offsetZ = 0;
+                isCenterParticle = true;
+                radiusVariation = 0;
+            } else {
+                // Generate distribution based on shape mode
+                const seed = fileIndex * 10000 + i;
+                const theta = seededRandom(seed * 2) * Math.PI * 2;
+                const phi = Math.acos(2 * seededRandom(seed * 2 + 1) - 1);
+
+                // Determine if this is a density gradient particle
+                const isDensityParticle = i >= baseParticles;
+
+                if (isDensityParticle) {
+                    const randomRadius = seededRandom(seed * 3);
+                    radiusVariation = Math.pow(randomRadius, 2.0) * 0.6;
+                } else if (subParticleShape === 'sphere') {
+                    radiusVariation = 1.0;
+                } else if (subParticleShape === 'spiked') {
+                    radiusVariation = seededRandom(seed * 3) < 0.5 ? 0.4 : 1.0;
+                } else {
+                    radiusVariation = 0.5 + seededRandom(seed * 3) * 0.5;
+                }
+
+                offsetX = clusterRadius * Math.sin(phi) * Math.cos(theta) * radiusVariation;
+                offsetY = clusterRadius * Math.sin(phi) * Math.sin(theta) * radiusVariation;
+                offsetZ = clusterRadius * Math.cos(phi) * radiusVariation;
+            }
+
+            // Calculate distance from center
+            const actualDistance = Math.sqrt(offsetX * offsetX + offsetY * offsetY + offsetZ * offsetZ) / clusterRadius;
+
+            // Sub-particle data
+            const subParticle = {
+                offset: new THREE.Vector3(offsetX, offsetY, offsetZ),
+                instanceIndex: instanceIndex,
+                isCenterParticle: isCenterParticle,
+                baseRadius: radiusVariation,
+                distanceFromCenter: actualDistance
+            };
+
+            cluster.subParticles.push(subParticle);
+
+            // Set initial position
+            dummy.position.set(
+                centerPos.x + offsetX,
+                centerPos.y + offsetY,
+                centerPos.z + offsetZ
+            );
+            dummy.scale.setScalar(particleSize * subParticleScale);
+            dummy.updateMatrix();
+
+            particleSystem.setMatrixAt(instanceIndex, dummy.matrix);
+
+            // Set color
+            if (isCenterParticle) {
+                color.setHSL(colorData.hue / 360, colorData.sat, 0.8);
+            } else {
+                const colorSeed = fileIndex * 10000 + i + 5000;
+                const hueShift = (seededRandom(colorSeed) - 0.5) * 0.05;
+                let baseLightness = 0.6 + (seededRandom(colorSeed + 1) - 0.5) * 0.1;
+                color.setHSL(
+                    (colorData.hue / 360 + hueShift + 1) % 1,
+                    colorData.sat,
+                    baseLightness
+                );
+            }
+            particleSystem.setColorAt(instanceIndex, color);
+
+            instanceIndex++;
+        }
+
+        particles.push(cluster);
+    });
+
+    // Update instance attributes
+    particleSystem.instanceMatrix.needsUpdate = true;
+    if (particleSystem.instanceColor) {
+        particleSystem.instanceColor.needsUpdate = true;
+    }
+
+    // Add to scene
+    scene.add(particleSystem);
+    console.log(`✅ Created ${particles.length} clusters with ${count} total particles`);
+}
+
+/**
+ * Calculate 3D position for a file based on its properties and axis modes
+ */
+function calculateFilePosition(file, index, config) {
+    const {
+        xMode = 'bpm',
+        yMode = 'key',
+        zMode = 'tags',
+        xScale = 1.0,
+        yScale = 1.0,
+        zScale = 1.0
+    } = config;
+
+    // Use axis modes to calculate position
+    let x = calculateAxisValue(file, xMode, 100);
+    let y = calculateAxisValue(file, yMode, 80);
+    let z = calculateAxisValue(file, zMode, 60);
+
+    // Add slight randomness to prevent exact overlaps
+    x += (seededRandom(index * 3 + 1) - 0.5) * 2;
+    y += (seededRandom(index * 3 + 2) - 0.5) * 2;
+    z += (seededRandom(index * 3 + 3) - 0.5) * 2;
+
+    // Apply axis scaling
+    x *= xScale;
+    y *= yScale;
+    z *= zScale;
+
+    return { x, y, z };
+}
+
+/**
+ * Converts file property to axis coordinate value
+ */
+function calculateAxisValue(file, mode, scale) {
+    switch (mode) {
+        case 'bpm':
+            const bpm = file.bpm || 120;
+            return mapRange(bpm, 60, 180, -scale, scale);
+
+        case 'key':
+            const keyValue = getKeyValue(file.key);
+            return mapRange(keyValue, 0, 11, -scale, scale);
+
+        case 'tags':
+            const tag = (file.tags && file.tags[0]) || file.name || '';
+            const hash = hashString(tag);
+            return (hash - 0.5) * scale * 2;
+
+        case 'length':
+            const length = file.length || 180;
+            return mapRange(length, 0, 600, -scale, scale);
+
+        case 'random':
+            const seed = hashString(file.id || file.name || '');
+            return (seed - 0.5) * scale * 2;
+
+        default:
+            return 0;
+    }
+}
+
+/**
+ * Determines particle color based on file properties and color mode
+ */
+function getColorForFile(file, mode = 'tags') {
+    switch (mode) {
+        case 'tags':
+            const category = getCategoryForFile(file);
+            return CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
+
+        case 'key':
+            const key = file.key || 'C';
+            const keyBase = key.split('/')[0].replace('maj', '').replace('min', '').trim();
+            return KEY_COLORS[keyBase] || { hue: 0, sat: 0.5 };
+
+        case 'bpm':
+            const bpm = file.bpm || 120;
+            for (const range of BPM_COLORS) {
+                if (bpm >= range.min && bpm < range.max) {
+                    return { hue: range.hue, sat: range.sat };
+                }
+            }
+            return { hue: 0, sat: 0.5 };
+
+        case 'length':
+            const length = file.length || 180;
+            const hue = mapRange(Math.min(length, 600), 0, 600, 0, 360);
+            return { hue: hue, sat: 0.7 };
+
+        default:
+            return { hue: 0, sat: 0.5 };
+    }
+}
+
+/**
+ * Determines category from file tags
+ */
+function getCategoryForFile(file) {
+    if (!file.tags || !Array.isArray(file.tags)) return 'other';
+
+    const tags = file.tags.map(t => t.toLowerCase());
+    const categories = ['drums', 'inst', 'vox', 'bass', 'gtr', 'pno', 'piano',
+                       'syn', 'perc', 'pad', 'lead', 'fx', 'arp'];
+
+    for (const category of categories) {
+        if (tags.some(tag => tag.includes(category))) {
+            return category;
+        }
+    }
+
+    return 'other';
 }
 
 /**
@@ -345,43 +786,60 @@ function recreateParticles() {
  * Highlight currently playing file
  */
 function highlightCurrentFile() {
-    if (!currentFileData) return;
+    if (!currentFileData || !particleSystem) return;
 
-    particles.forEach(p => {
-        const isCurrentFile = p.userData.file.id === currentFileData.id;
-        if (isCurrentFile) {
-            p.material.emissiveIntensity = 0.8;
-            p.scale.setScalar(1.5);
-        } else {
-            p.material.emissiveIntensity = 0.3;
-            p.scale.setScalar(1.0);
-        }
+    // Find the cluster for the current file
+    particles.forEach(cluster => {
+        const isCurrentFile = cluster.file.id === currentFileData.id;
+
+        // Update all subparticles in this cluster
+        cluster.subParticles.forEach(subParticle => {
+            const idx = subParticle.instanceIndex;
+
+            // Get current matrix
+            const matrix = new THREE.Matrix4();
+            particleSystem.getMatrixAt(idx, matrix);
+
+            // Extract position and update scale
+            const position = new THREE.Vector3();
+            const quaternion = new THREE.Quaternion();
+            const scale = new THREE.Vector3();
+            matrix.decompose(position, quaternion, scale);
+
+            // Make playing file bigger and brighter
+            if (isCurrentFile) {
+                if (subParticle.isCenterParticle) {
+                    scale.setScalar(particleSize * subParticleScale * 2.0); // 2x larger
+                } else {
+                    scale.setScalar(particleSize * subParticleScale * 1.5); // 1.5x larger
+                }
+
+                // Brighter color
+                const color = new THREE.Color();
+                particleSystem.getColorAt(idx, color);
+                color.multiplyScalar(1.5);
+                particleSystem.setColorAt(idx, color);
+            } else {
+                // Reset to normal size
+                scale.setScalar(particleSize * subParticleScale);
+            }
+
+            // Update matrix
+            matrix.compose(position, quaternion, scale);
+            particleSystem.setMatrixAt(idx, matrix);
+        });
     });
+
+    particleSystem.instanceMatrix.needsUpdate = true;
+    if (particleSystem.instanceColor) {
+        particleSystem.instanceColor.needsUpdate = true;
+    }
 }
 
-/**
- * Get numeric value from musical key
- */
-function getKeyValue(key) {
-    if (!key) return 0;
-    const keyMap = { 'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11 };
-    const keyName = key.split('/')[0].replace('maj', '').replace('min', '').trim();
-    return keyMap[keyName] || 0;
-}
+// ============================================================================
+// CONTROLS
+// ============================================================================
 
-/**
- * Get color based on file properties
- */
-function getColorForFile(file) {
-    // Simple color based on key
-    const keyValue = getKeyValue(file.key);
-    const hue = (keyValue / 12) * 360;
-    return new THREE.Color().setHSL(hue / 360, 0.7, 0.5);
-}
-
-/**
- * Setup keyboard and mouse controls
- */
 function setupControls(container) {
     // Pointer lock
     container.addEventListener('click', () => {
@@ -438,44 +896,42 @@ function onKeyUp(event) {
 }
 
 function onClick(event) {
-    console.log('🖱️ Canvas clicked, pointer locked:', isPointerLocked);
+    if (isPointerLocked) return; // Don't click particles when pointer is locked
 
-    if (isPointerLocked) {
-        console.log('  ⚠️ Pointer is locked, ignoring click');
-        return; // Don't click particles when pointer is locked
-    }
-
-    console.log('  📍 Mouse position:', mouse.x, mouse.y);
-
-    // Raycast to find clicked particle
+    // Raycast to find clicked particle cluster
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(particles);
 
-    console.log('  🎯 Raycast found', intersects.length, 'intersections');
+    // Raycast against the instanced mesh
+    const intersects = raycaster.intersectObject(particleSystem);
 
     if (intersects.length > 0) {
-        const clickedParticle = intersects[0].object;
-        const file = clickedParticle.userData.file;
+        const intersection = intersects[0];
+        const instanceId = intersection.instanceId;
 
-        console.log('  ✅ Clicked particle:', file.name, 'ID:', file.id);
-        console.log('  🔍 window.loadAudio exists?', !!window.loadAudio);
-
-        // Load file using global function
-        if (window.loadAudio) {
-            console.log('  📞 Calling window.loadAudio with ID:', file.id);
-            window.loadAudio(file.id, true);
-            console.log('  ✅ window.loadAudio called');
-        } else {
-            console.error('  ❌ window.loadAudio not found!');
+        // Find which cluster this instance belongs to
+        let clickedCluster = null;
+        for (const cluster of particles) {
+            const subParticle = cluster.subParticles.find(sp => sp.instanceIndex === instanceId);
+            if (subParticle) {
+                clickedCluster = cluster;
+                break;
+            }
         }
-    } else {
-        console.log('  ⚠️ No particles hit by raycast');
+
+        if (clickedCluster) {
+            const file = clickedCluster.file;
+            console.log('✅ Clicked cluster:', file.name, 'ID:', file.id);
+
+            // Load file using global function
+            if (window.loadAudio) {
+                window.loadAudio(file.id, true);
+            } else {
+                console.error('❌ window.loadAudio not found!');
+            }
+        }
     }
 }
 
-/**
- * Update camera position based on WASD keys
- */
 function updateMovement(delta) {
     if (!isPointerLocked) return;
 
@@ -487,7 +943,6 @@ function updateMovement(delta) {
     // Movement direction
     const forward = new THREE.Vector3(0, 0, -1);
     const right = new THREE.Vector3(1, 0, 0);
-    const up = new THREE.Vector3(0, 1, 0);
 
     forward.applyQuaternion(camera.quaternion);
     right.applyQuaternion(camera.quaternion);
@@ -499,36 +954,31 @@ function updateMovement(delta) {
     const isSprinting = keys['ShiftLeft'] || keys['ShiftRight'];
     const currentSpeed = isSprinting ? moveSpeed * 2.5 : moveSpeed;
 
-    // WASD movement (Space bar NOT used - reserved for pause/play)
+    // WASD movement
     if (keys['KeyW']) velocity.add(forward);
     if (keys['KeyS']) velocity.sub(forward);
     if (keys['KeyA']) velocity.sub(right);
     if (keys['KeyD']) velocity.add(right);
-    // NOTE: Space bar removed from movement - it's used for play/pause
-    // Shift is now sprint modifier instead of move down
 
-    // Normalize and apply speed (with sprint modifier)
+    // Normalize and apply speed
     if (velocity.length() > 0) {
         velocity.normalize().multiplyScalar(currentSpeed);
         camera.position.add(velocity);
     }
 }
 
-/**
- * Animation loop
- */
+// ============================================================================
+// ANIMATION LOOP
+// ============================================================================
+
 function startAnimation() {
     let lastTime = performance.now();
-    let frameCount = 0;
 
     function animate() {
-        if (!scene || !camera || !renderer) {
-            console.error('❌ Animation stopped: missing scene, camera, or renderer');
-            return;
-        }
+        if (!scene || !camera || !renderer) return;
 
         const currentTime = performance.now();
-        const delta = (currentTime - lastTime) / 1000; // seconds
+        const delta = (currentTime - lastTime) / 1000;
         lastTime = currentTime;
 
         // Update movement
@@ -536,18 +986,6 @@ function startAnimation() {
 
         // Render scene
         renderer.render(scene, camera);
-
-        // Log first frame render
-        if (frameCount === 0) {
-            console.log('  🎬 First frame rendered!');
-            console.log('  📊 Renderer info:', {
-                drawingBufferWidth: renderer.domElement.width,
-                drawingBufferHeight: renderer.domElement.height,
-                particlesInScene: particles.length,
-                cameraPosition: camera.position
-            });
-        }
-        frameCount++;
 
         animationFrameId = requestAnimationFrame(animate);
     }

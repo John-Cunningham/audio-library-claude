@@ -905,6 +905,7 @@ function getCategoryForFile(file) {
 function recreateParticles() {
     createParticles();
     highlightCurrentFile();
+    updateFileCount();
 }
 
 /**
@@ -1496,6 +1497,9 @@ function loadOptionsMenu() {
                 } else {
                     console.warn('⚠️ initOptionsMenu2Resize not found');
                 }
+
+                // Update file count display
+                updateFileCount();
             }, 100); // Small delay to ensure scripts have executed
 
             console.log('✅ Galaxy View options menu loaded successfully');
@@ -1838,6 +1842,24 @@ function wireUpMenuControls() {
 
     console.log('✅ Galaxy View controls wired up for options menu');
 }
+
+/**
+ * Updates the file count display in the options menu
+ * Call this after loading menu and after recreating particles
+ */
+function updateFileCount() {
+    const fileCountEl = document.getElementById('galaxyFileCount');
+    if (fileCountEl) {
+        const count = audioFilesData ? audioFilesData.length : 0;
+        fileCountEl.textContent = `${count} files loaded`;
+        console.log('📊 Updated file count display:', count);
+    } else {
+        console.warn('⚠️ galaxyFileCount element not found yet');
+    }
+}
+
+// Expose globally so it can be called from outside
+window.updateGalaxyFileCount = updateFileCount;
 
 // ============================================================================
 // CONTROLS

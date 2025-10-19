@@ -86,7 +86,7 @@ function updateFileInfo(file) {
     const infoEl = document.getElementById('galaxyFileInfo');
     if (infoEl && file) {
         infoEl.innerHTML = `
-            <strong>${file.fileName || 'Unknown'}</strong><br>
+            <strong>${file.name || file.fileName || 'Unknown'}</strong><br>
             BPM: ${file.bpm || 'N/A'} | Key: ${file.key || 'N/A'}
         `;
     }

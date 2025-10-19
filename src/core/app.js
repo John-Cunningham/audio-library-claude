@@ -1112,6 +1112,11 @@
             const result = await fileLoader.loadFile(fileId, autoplay);
             if (!result || result.alreadyLoaded) return;
 
+            // Update current view with new file data (for Galaxy View, etc.)
+            const currentFile = audioFiles.find(f => f.id === fileId);
+            ViewManager.updateCurrentView({
+                currentFile: currentFile || null
+            });
         }
 
         function playPause() {

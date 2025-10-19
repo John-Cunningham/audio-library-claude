@@ -1115,7 +1115,8 @@
             // Update current view with new file data (for Galaxy View, etc.)
             const currentFile = audioFiles.find(f => f.id === fileId);
             ViewManager.updateCurrentView({
-                currentFile: currentFile || null
+                currentFile: currentFile || null,
+                audioFiles: audioFiles
             });
         }
 
@@ -1661,6 +1662,7 @@
             const currentFile = audioFiles.find(f => f.id === currentFileId);
             return {
                 currentFile: currentFile || null,
+                audioFiles: audioFiles,  // Full file list for Galaxy View
                 renderFunction: FileListRenderer.render,
                 renderTagsFunction: renderTags
             };

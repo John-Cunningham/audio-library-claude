@@ -649,6 +649,9 @@ function createParticles() {
 
         // Create sub-particles
         for (let i = 0; i < totalParticles; i++) {
+            // Generate seed for this particle (used for positioning and animation)
+            const seed = fileIndex * 10000 + i;
+
             let offsetX, offsetY, offsetZ;
             let isCenterParticle = false;
             let radiusVariation = 0;
@@ -662,7 +665,6 @@ function createParticles() {
                 radiusVariation = 0;
             } else {
                 // Generate distribution based on shape mode
-                const seed = fileIndex * 10000 + i;
                 const theta = seededRandom(seed * 2) * Math.PI * 2;
                 const phi = Math.acos(2 * seededRandom(seed * 2 + 1) - 1);
 

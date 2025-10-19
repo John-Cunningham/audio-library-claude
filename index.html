@@ -759,6 +759,42 @@
             background: rgba(74, 158, 255, 0.08);
         }
 
+        /* Crosshair for Galaxy View aiming */
+        .crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            z-index: 500;
+            pointer-events: none;
+            display: none; /* Hidden by default, toggled by Galaxy View */
+        }
+
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .crosshair::before {
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            transform: translateY(-50%);
+        }
+
+        .crosshair::after {
+            left: 50%;
+            top: 0;
+            height: 100%;
+            width: 2px;
+            transform: translateX(-50%);
+        }
+
         /* Mobile responsiveness */
         @media (max-width: 768px) {
             .header {
@@ -944,6 +980,9 @@
     </style>
 </head>
 <body>
+    <!-- Crosshair for Galaxy View (hidden by default) -->
+    <div class="crosshair" id="crosshair"></div>
+
     <div class="container">
         <div class="header">
             <h1>🎵 Audio Library Manager</h1>

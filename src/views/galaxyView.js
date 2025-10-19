@@ -578,6 +578,9 @@ function setupScene(container) {
     directionalLight.position.set(5, 10, 7.5);
     scene.add(directionalLight);
 
+    // Add star background
+    addStarsBackground();
+
     // Handle window resize
     window.addEventListener('resize', () => {
         if (!camera || !renderer || !container) return;
@@ -585,6 +588,81 @@ function setupScene(container) {
         camera.updateProjectionMatrix();
         renderer.setSize(container.clientWidth, container.clientHeight);
     });
+}
+
+/**
+ * Add stars background with skybox gradient
+ * Creates a space-like environment
+ */
+function addStarsBackground() {
+    // Create space skybox using shader material for gradient
+    const skyboxGeometry = new THREE.SphereGeometry(window.visibilityDistance * 1.5, 32, 32);
+    const skyboxMaterial = new THREE.ShaderMaterial({
+        uniforms: {},
+        vertexShader: `
+            varying vec3 vWorldPosition;
+            void main() {
+                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                vWorldPosition = worldPosition.xyz;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            varying vec3 vWorldPosition;
+            void main() {
+                // Deep space gradient: dark blue to black
+                vec3 topColor = vec3(0.02, 0.02, 0.08);  // Very dark blue
+                vec3 bottomColor = vec3(0.0, 0.0, 0.0);   // Black
+
+                float h = normalize(vWorldPosition).y * 0.5 + 0.5;
+                vec3 color = mix(bottomColor, topColor, h);
+
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `,
+        side: THREE.BackSide
+    });
+
+    const skybox = new THREE.Mesh(skyboxGeometry, skyboxMaterial);
+    scene.add(skybox);
+
+    // Add stars with varied sizes and brightness
+    const starsGeometry = new THREE.BufferGeometry();
+    const starsVertices = [];
+    const starsSizes = [];
+    const starsColors = [];
+
+    for (let i = 0; i < 5000; i++) {
+        const x = (Math.random() - 0.5) * window.visibilityDistance * 1.8;
+        const y = (Math.random() - 0.5) * window.visibilityDistance * 1.8;
+        const z = (Math.random() - 0.5) * window.visibilityDistance * 1.8;
+        starsVertices.push(x, y, z);
+
+        // Varied star sizes for depth
+        const size = Math.random() * 1.5 + 0.2;
+        starsSizes.push(size);
+
+        // Varied star colors (white to blue-white)
+        const brightness = 0.7 + Math.random() * 0.3;
+        starsColors.push(brightness, brightness, brightness + 0.1);
+    }
+
+    starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+    starsGeometry.setAttribute('size', new THREE.Float32BufferAttribute(starsSizes, 1));
+    starsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(starsColors, 3));
+
+    const starsMaterial = new THREE.PointsMaterial({
+        size: 0.5,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.8,
+        sizeAttenuation: true
+    });
+
+    const stars = new THREE.Points(starsGeometry, starsMaterial);
+    scene.add(stars);
+
+    console.log('⭐ Added star background with 5000 stars');
 }
 
 // ============================================================================
@@ -1552,9 +1630,20 @@ function wireUpMenuControls() {
 
     // Global functions expected by options menu HTML
 
-    // UI Toggle Functions (stubs - these features don't exist yet)
+    // UI Toggle Functions
+    let crosshairEnabled = true; // Start enabled
     window.toggleCrosshair = function() {
-        console.log('🎯 Crosshair toggle not implemented yet');
+        crosshairEnabled = !crosshairEnabled;
+        const crosshair = document.getElementById('crosshair');
+        const btn = document.getElementById('galaxyCrosshairToggle');
+
+        if (crosshair) {
+            crosshair.style.display = crosshairEnabled ? 'block' : 'none';
+        }
+        if (btn) {
+            btn.textContent = `Crosshair: ${crosshairEnabled ? 'ON' : 'OFF'}`;
+        }
+        console.log(`🎯 Crosshair ${crosshairEnabled ? 'enabled' : 'disabled'}`);
     };
 
     window.toggleTooltips = function() {

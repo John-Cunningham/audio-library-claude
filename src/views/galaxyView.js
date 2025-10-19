@@ -428,11 +428,21 @@ export function update(data = {}) {
     if (data.currentFile) {
         currentFileData = data.currentFile;
         highlightCurrentFile();
+
+        // Reconnect audio analyzer when file changes
+        if (window.wavesurfer) {
+            connectAudio(window.wavesurfer);
+        }
     }
 
     if (data.audioFiles) {
         audioFilesData = data.audioFiles;
         recreateParticles();
+
+        // Also reconnect audio after recreating particles (in case wavesurfer is playing)
+        if (window.wavesurfer) {
+            connectAudio(window.wavesurfer);
+        }
     }
 }
 

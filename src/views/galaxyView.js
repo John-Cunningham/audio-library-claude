@@ -260,6 +260,19 @@ let waveFrequency = 0.001;                      // Wave speed
 let waveDirection = { x: 1, y: 0, z: 0 };      // Wave propagation direction
 
 // ============================================================================
+// VISUALIZATION MODES (Exposed to window for menu controls)
+// ============================================================================
+
+window.currentColorMode = 'key';        // Color mode: 'tags', 'key', 'bpm', 'length'
+window.currentXMode = 'bpm';            // X-axis: 'bpm', 'key', 'tags', 'length', 'random'
+window.currentYMode = 'key';            // Y-axis: 'bpm', 'key', 'tags', 'length', 'random'
+window.currentZMode = 'tags';           // Z-axis: 'bpm', 'key', 'tags', 'length', 'random'
+let xAxisScale = 1.0;                   // X-axis scale (internal)
+let yAxisScale = 1.0;                   // Y-axis scale (internal)
+let zAxisScale = 1.0;                   // Z-axis scale (internal)
+window.visibilityDistance = 800;        // Fog/render distance
+
+// ============================================================================
 // CAMERA MOVEMENT (Exposed to window for menu controls)
 // ============================================================================
 
@@ -536,7 +549,7 @@ function setupScene(container) {
     // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
-    scene.fog = new THREE.Fog(0x000000, 10, 800);
+    scene.fog = new THREE.Fog(0x000000, 10, window.visibilityDistance);
 
     // Camera
     camera = new THREE.PerspectiveCamera(
@@ -582,14 +595,15 @@ function setupScene(container) {
  * Create advanced particle system with instanced mesh rendering
  */
 function createParticles() {
+    // Use window variables for config (controlled by options menu)
     const config = {
-        colorMode: 'key',  // Color by musical key
-        xMode: 'bpm',      // X-axis: BPM
-        yMode: 'key',      // Y-axis: Musical key
-        zMode: 'tags',     // Z-axis: Tags
-        xScale: 1.0,
-        yScale: 1.0,
-        zScale: 1.0
+        colorMode: window.currentColorMode,
+        xMode: window.currentXMode,
+        yMode: window.currentYMode,
+        zMode: window.currentZMode,
+        xScale: xAxisScale,
+        yScale: yAxisScale,
+        zScale: zAxisScale
     };
 
     // Clear existing particles array
@@ -1500,6 +1514,9 @@ function loadOptionsMenu() {
 
                 // Update file count display
                 updateFileCount();
+
+                // Wire up additional controls that need special handling
+                wireUpAdditionalControls();
             }, 100); // Small delay to ensure scripts have executed
 
             console.log('✅ Galaxy View options menu loaded successfully');
@@ -1770,8 +1787,19 @@ function wireUpMenuControls() {
 
     // Brightness update
     window.updateBrightness = function() {
-        particleBrightness = window.particleBrightness;
-        recreateParticles();
+        if (particleSystem && particleSystem.material) {
+            particleSystem.material.opacity = window.particleBrightness;
+            particleSystem.material.needsUpdate = true;
+            console.log(`💡 Updated brightness to ${window.particleBrightness}`);
+        }
+    };
+
+    // Visibility distance update
+    window.updateVisibilityDistance = function() {
+        if (scene && scene.fog) {
+            scene.fog.far = window.visibilityDistance;
+            console.log(`👁️ Updated visibility distance to ${window.visibilityDistance}`);
+        }
     };
 
     // Bloom strength (stub - Phase 2E will implement visual effects)
@@ -1841,6 +1869,96 @@ function wireUpMenuControls() {
     };
 
     console.log('✅ Galaxy View controls wired up for options menu');
+}
+
+/**
+ * Wires up additional controls that need special event listeners
+ * Called after menu HTML is loaded and initial wiring is complete
+ */
+function wireUpAdditionalControls() {
+    console.log('🔧 Wiring up additional menu controls...');
+
+    // Visibility distance slider - sync display value when changed
+    const visibilitySlider = document.getElementById('galaxyVisibilityDistance');
+    const visibilityDisplay = document.getElementById('galaxyVisibilityValue');
+    if (visibilitySlider && visibilityDisplay) {
+        visibilitySlider.addEventListener('input', (e) => {
+            window.visibilityDistance = parseInt(e.target.value);
+            visibilityDisplay.textContent = window.visibilityDistance;
+            window.updateVisibilityDistance();
+        });
+        // Set initial value
+        visibilitySlider.value = window.visibilityDistance;
+        visibilityDisplay.textContent = window.visibilityDistance;
+    }
+
+    // Brightness slider - sync display value when changed
+    const brightnessSlider = document.getElementById('galaxyBrightness');
+    const brightnessDisplay = document.getElementById('galaxyBrightnessValue');
+    if (brightnessSlider && brightnessDisplay) {
+        brightnessSlider.addEventListener('input', (e) => {
+            window.particleBrightness = parseFloat(e.target.value);
+            brightnessDisplay.textContent = window.particleBrightness.toFixed(1);
+            window.updateBrightness();
+        });
+        // Set initial value
+        brightnessSlider.value = window.particleBrightness;
+        brightnessDisplay.textContent = window.particleBrightness.toFixed(1);
+    }
+
+    // Audio reactivity strength slider - sync display
+    const audioStrengthSlider = document.getElementById('galaxyAudioReactivity');
+    const audioStrengthDisplay = document.getElementById('galaxyAudioReactivityValue');
+    if (audioStrengthSlider && audioStrengthDisplay) {
+        audioStrengthSlider.addEventListener('input', (e) => {
+            window.audioReactivityStrength = parseFloat(e.target.value);
+            audioStrengthDisplay.textContent = window.audioReactivityStrength;
+        });
+        // Set initial value
+        audioStrengthSlider.value = window.audioReactivityStrength;
+        audioStrengthDisplay.textContent = window.audioReactivityStrength;
+    }
+
+    // Cluster spread slider - sync display
+    const clusterSpreadSlider = document.getElementById('galaxyClusterSpread');
+    const clusterSpreadDisplay = document.getElementById('galaxyClusterSpreadValue');
+    if (clusterSpreadSlider && clusterSpreadDisplay) {
+        clusterSpreadSlider.addEventListener('input', (e) => {
+            window.clusterSpreadOnAudio = parseFloat(e.target.value);
+            clusterSpreadDisplay.textContent = window.clusterSpreadOnAudio;
+        });
+        // Set initial value
+        clusterSpreadSlider.value = window.clusterSpreadOnAudio;
+        clusterSpreadDisplay.textContent = window.clusterSpreadOnAudio;
+    }
+
+    // Move speed slider - sync display
+    const moveSpeedSlider = document.getElementById('galaxyMoveSpeed');
+    const moveSpeedDisplay = document.getElementById('galaxyMoveSpeedValue');
+    if (moveSpeedSlider && moveSpeedDisplay) {
+        moveSpeedSlider.addEventListener('input', (e) => {
+            window.moveSpeed = parseFloat(e.target.value);
+            moveSpeedDisplay.textContent = window.moveSpeed.toFixed(1);
+        });
+        // Set initial value
+        moveSpeedSlider.value = window.moveSpeed;
+        moveSpeedDisplay.textContent = window.moveSpeed.toFixed(1);
+    }
+
+    // Look sensitivity slider - sync display
+    const lookSensSlider = document.getElementById('galaxyLookSensitivity');
+    const lookSensDisplay = document.getElementById('galaxyLookSensitivityValue');
+    if (lookSensSlider && lookSensDisplay) {
+        lookSensSlider.addEventListener('input', (e) => {
+            window.lookSensitivity = parseFloat(e.target.value);
+            lookSensDisplay.textContent = (window.lookSensitivity * 1000).toFixed(1);
+        });
+        // Set initial value
+        lookSensSlider.value = window.lookSensitivity;
+        lookSensDisplay.textContent = (window.lookSensitivity * 1000).toFixed(1);
+    }
+
+    console.log('✅ Additional controls wired up');
 }
 
 /**

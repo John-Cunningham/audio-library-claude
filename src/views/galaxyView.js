@@ -1798,26 +1798,112 @@ function wireUpMenuControls() {
         console.log(`🔍 Search: "${query}" (not implemented yet)`);
     };
 
-    // Brightness update
-    window.updateBrightness = function() {
+    // Control handlers - EXACT from reference file for compatibility with HTML menu
+
+    // Update particle size - matches reference exactly
+    window.updateParticleSize = (value) => {
+        window.particleSize = parseFloat(value);
+        const display = document.getElementById('galaxyParticleSizeValue');
+        if (display) display.textContent = value;
+        // Size is applied in the animation loop via instance matrix scaling
+        console.log('📏 Particle size set to:', window.particleSize);
+    };
+
+    // Update particle brightness - matches reference exactly
+    window.updateParticleBrightness = (value) => {
+        window.particleBrightness = parseFloat(value);
+        const display = document.getElementById('galaxyBrightnessValue');
+        if (display) display.textContent = value;
         if (particleSystem && particleSystem.material) {
             particleSystem.material.opacity = window.particleBrightness;
             particleSystem.material.needsUpdate = true;
-            console.log(`💡 Updated brightness to ${window.particleBrightness}`);
         }
+        console.log('✨ Brightness updated to:', window.particleBrightness);
     };
 
-    // Visibility distance update
-    window.updateVisibilityDistance = function() {
+    // Update visibility distance - matches reference
+    window.updateVisibility = (value) => {
+        window.visibilityDistance = parseFloat(value);
+        const display = document.getElementById('galaxyVisibilityValue');
+        if (display) display.textContent = value;
         if (scene && scene.fog) {
             scene.fog.far = window.visibilityDistance;
-            console.log(`👁️ Updated visibility distance to ${window.visibilityDistance}`);
         }
+        console.log('👁️ Visibility distance updated to:', window.visibilityDistance);
+    };
+
+    // Update sub-particle count - MUST recreate (instance count changes)
+    window.updateSubParticleCount = (value) => {
+        const newCount = parseInt(value);
+        const oldCount = window.particlesPerCluster;
+        console.log(`Updating sub-particle count from ${oldCount} to ${newCount}`);
+        window.particlesPerCluster = newCount;
+        const display = document.getElementById('subParticleCountValue');
+        if (display) display.textContent = value;
+
+        // Must recreate because InstancedMesh requires fixed instance count
+        recreateParticles();
+    };
+
+    // Update cluster spread - matches reference (modifies existing offsets)
+    window.updateClusterSpread = (value) => {
+        window.clusterRadius = parseFloat(value);
+        const display = document.getElementById('clusterSpreadValue');
+        if (display) display.textContent = value;
+
+        // Update existing cluster sub-particle offsets using stored base radius
+        if (particles.length > 0 && particleSystem) {
+            particles.forEach(cluster => {
+                cluster.subParticles.forEach(subParticle => {
+                    // Skip center particles
+                    if (subParticle.isCenterParticle) {
+                        return;
+                    }
+                    // Recalculate offset with new radius using stored baseRadius
+                    const normalized = subParticle.offset.clone().normalize();
+                    subParticle.offset.copy(normalized.multiplyScalar(window.clusterRadius * (subParticle.baseRadius || 1)));
+                });
+            });
+        }
+        console.log('💫 Cluster spread updated to:', value);
+    };
+
+    // Update audio reactivity strength (current file)
+    window.updateAudioStrength = (value) => {
+        window.audioReactivityStrength = parseFloat(value);
+        const display = document.getElementById('audioStrengthValue');
+        if (display) display.textContent = value;
+        console.log('🔊 Audio strength updated to:', window.audioReactivityStrength);
+    };
+
+    // Update global audio reactivity (all particles)
+    window.updateGlobalReactivity = (value) => {
+        globalAudioReactivity = parseFloat(value);
+        window.globalAudioReactivity = globalAudioReactivity;
+        const display = document.getElementById('globalReactivityValue');
+        if (display) display.textContent = value;
+        console.log('🌍 Global audio reactivity updated to:', globalAudioReactivity);
+    };
+
+    // Update particle shape - requires recreation
+    window.updateParticleShape = (value) => {
+        window.particleShape = value;
+        const display = document.getElementById('particleShapeDisplay');
+        if (display) display.textContent = value;
+
+        if (particleSystem && particleSystem.material) {
+            particleSystem.material.map = createParticleTexture(value);
+            particleSystem.material.needsUpdate = true;
+        }
+        console.log('🔷 Particle shape updated to:', value);
     };
 
     // Bloom strength (stub - Phase 2E will implement visual effects)
-    window.updateBloomStrength = function() {
-        console.log('✨ Bloom strength update (visual effects Phase 2E)');
+    window.updateBloomStrength = (value) => {
+        window.bloomStrength = parseFloat(value);
+        const display = document.getElementById('bloomStrengthValue');
+        if (display) display.textContent = value;
+        console.log('✨ Bloom strength set to:', value, '(visual effects Phase 2E - not yet implemented)');
     };
 
     // Preset save/load (stubs)
@@ -1889,34 +1975,10 @@ function wireUpMenuControls() {
  * Called after menu HTML is loaded and initial wiring is complete
  *
  * Most controls work via inline oninput handlers in the HTML.
- * This function only adds missing functionality.
+ * This function only sets initial values for dropdowns.
  */
 function wireUpAdditionalControls() {
     console.log('🔧 Wiring up additional menu controls...');
-
-    // Visibility distance slider - the HTML inline handler doesn't call updateVisibilityDistance()
-    // Find the slider by finding the display span first, then its previous sibling
-    const visibilityDisplay = document.getElementById('galaxyVisibilityValue');
-    if (visibilityDisplay) {
-        // Find the input slider (it's the next element after the label)
-        const label = visibilityDisplay.parentElement;
-        const slider = label ? label.nextElementSibling : null;
-
-        if (slider && slider.tagName === 'INPUT') {
-            // Add updateVisibilityDistance() call to existing oninput handler
-            const originalHandler = slider.oninput;
-            slider.oninput = function(e) {
-                if (originalHandler) originalHandler.call(this, e);
-                window.updateVisibilityDistance();
-            };
-            console.log('✅ Visibility distance slider augmented with updateVisibilityDistance()');
-
-            // Set initial value if needed
-            if (scene && scene.fog) {
-                scene.fog.far = window.visibilityDistance;
-            }
-        }
-    }
 
     // Set initial values for visualization mode dropdowns
     const colorModeSelect = document.getElementById('galaxyColorMode');
@@ -1927,36 +1989,21 @@ function wireUpAdditionalControls() {
     if (colorModeSelect) {
         colorModeSelect.value = window.currentColorMode;
         console.log('  Color mode dropdown found, set to:', window.currentColorMode);
-    } else {
-        console.warn('  ⚠️ Color mode dropdown NOT FOUND');
     }
 
     if (xModeSelect) {
         xModeSelect.value = window.currentXMode;
         console.log('  X axis dropdown found, set to:', window.currentXMode);
-    } else {
-        console.warn('  ⚠️ X axis dropdown NOT FOUND');
     }
 
     if (yModeSelect) {
         yModeSelect.value = window.currentYMode;
         console.log('  Y axis dropdown found, set to:', window.currentYMode);
-    } else {
-        console.warn('  ⚠️ Y axis dropdown NOT FOUND');
     }
 
     if (zModeSelect) {
         zModeSelect.value = window.currentZMode;
         console.log('  Z axis dropdown found, set to:', window.currentZMode);
-    } else {
-        console.warn('  ⚠️ Z axis dropdown NOT FOUND');
-    }
-
-    // Verify window.recreateParticles is available
-    if (typeof window.recreateParticles === 'function') {
-        console.log('  ✅ window.recreateParticles is available');
-    } else {
-        console.error('  ❌ window.recreateParticles is NOT available!');
     }
 
     console.log('✅ Additional controls wired up');

@@ -222,6 +222,20 @@ let densityGradient = 0;          // 0-1, adds more particles near center
 let maxParticleCount = 0;         // Maximum particles limit (0 = unlimited)
 
 // ============================================================================
+// AUDIO ANALYZER VARIABLES
+// ============================================================================
+
+let audioContext = null;           // Web Audio API context
+let analyser = null;               // AnalyserNode for frequency analysis
+let audioDataArray = null;         // Uint8Array for frequency data
+let currentAudioAmplitude = 0;     // Overall amplitude (0-5 range)
+let bassAmplitude = 0;             // Bass frequencies (20-250 Hz)
+let midsAmplitude = 0;             // Mid frequencies (250-2000 Hz)
+let highsAmplitude = 0;            // High frequencies (2000+ Hz)
+let audioFrequencyMode = 'all';    // 'all', 'bass', 'mids', 'highs'
+const AUDIO_DEBUG = false;         // Debug logging (disable for production)
+
+// ============================================================================
 // CAMERA MOVEMENT
 // ============================================================================
 
@@ -337,10 +351,47 @@ export async function init(data = {}) {
     // Setup controls
     setupControls(container);
 
+    // Setup audio analysis connection to global wavesurfer
+    setupAudioConnection();
+
     // Start animation loop
     startAnimation();
 
-    console.log('🎉 Galaxy view Phase 2A initialized!');
+    console.log('🎉 Galaxy view Phase 2B initialized (with audio analyzer)!');
+}
+
+/**
+ * Connect to global wavesurfer for audio analysis
+ */
+function setupAudioConnection() {
+    if (window.wavesurfer) {
+        // If wavesurfer is already loaded and playing, connect now
+        if (window.wavesurfer.isPlaying && window.wavesurfer.isPlaying()) {
+            console.log('🎵 Wavesurfer already playing, connecting audio analyzer...');
+            setupAudioAnalysis(window.wavesurfer);
+        }
+
+        // Listen for when audio starts playing
+        window.wavesurfer.on('play', () => {
+            if (!analyser) {
+                console.log('🎵 Audio started, connecting analyzer...');
+                setupAudioAnalysis(window.wavesurfer);
+            }
+        });
+
+        // Reconnect analyzer when new file loads
+        window.wavesurfer.on('ready', () => {
+            console.log('🎵 New file ready, reconnecting audio analyzer...');
+            cleanupAudioAnalysis();
+            if (window.wavesurfer.isPlaying && window.wavesurfer.isPlaying()) {
+                setupAudioAnalysis(window.wavesurfer);
+            }
+        });
+
+        console.log('✅ Audio connection listeners registered');
+    } else {
+        console.warn('⚠️ window.wavesurfer not found - audio reactivity will not work');
+    }
 }
 
 export function update(data = {}) {
@@ -359,6 +410,9 @@ export function update(data = {}) {
 
 export async function destroy() {
     console.log('Galaxy view destroying...');
+
+    // Cleanup audio analysis
+    cleanupAudioAnalysis();
 
     // Stop animation
     if (animationFrameId) {
@@ -792,6 +846,9 @@ function highlightCurrentFile() {
     particles.forEach(cluster => {
         const isCurrentFile = cluster.file.id === currentFileData.id;
 
+        // Store if this is the active cluster (for audio reactivity)
+        cluster.isPlaying = isCurrentFile;
+
         // Update all subparticles in this cluster
         cluster.subParticles.forEach(subParticle => {
             const idx = subParticle.instanceIndex;
@@ -834,6 +891,277 @@ function highlightCurrentFile() {
     if (particleSystem.instanceColor) {
         particleSystem.instanceColor.needsUpdate = true;
     }
+}
+
+/**
+ * Update particles with audio reactivity
+ * Makes the playing cluster pulse and expand with the music
+ */
+function updateAudioReactivity() {
+    if (!particleSystem || !currentFileData || currentAudioAmplitude === 0) return;
+
+    // Find the playing cluster
+    const playingCluster = particles.find(c => c.isPlaying);
+    if (!playingCluster) return;
+
+    // Calculate audio-based scale multiplier (1.0 to 2.0 based on amplitude)
+    const audioScale = 1.0 + (currentAudioAmplitude * 0.2);
+
+    // Update each subparticle in the playing cluster
+    playingCluster.subParticles.forEach(subParticle => {
+        const idx = subParticle.instanceIndex;
+
+        // Get current matrix
+        const matrix = new THREE.Matrix4();
+        particleSystem.getMatrixAt(idx, matrix);
+
+        // Extract position and scale
+        const position = new THREE.Vector3();
+        const quaternion = new THREE.Quaternion();
+        const scale = new THREE.Vector3();
+        matrix.decompose(position, quaternion, scale);
+
+        // Apply audio-reactive scaling on top of base scale
+        let baseScale;
+        if (subParticle.isCenterParticle) {
+            baseScale = particleSize * subParticleScale * 2.0;
+        } else {
+            baseScale = particleSize * subParticleScale * 1.5;
+        }
+
+        scale.setScalar(baseScale * audioScale);
+
+        // Update matrix
+        matrix.compose(position, quaternion, scale);
+        particleSystem.setMatrixAt(idx, matrix);
+    });
+
+    particleSystem.instanceMatrix.needsUpdate = true;
+}
+
+// ============================================================================
+// AUDIO ANALYZER
+// ============================================================================
+
+/**
+ * Sets up audio analyzer connected to WaveSurfer instance
+ * This taps into WaveSurfer's audio chain without breaking playback
+ */
+function setupAudioAnalysis(wavesurferInstance) {
+    if (!wavesurferInstance) {
+        console.error('❌ Audio Analysis: No WaveSurfer instance provided');
+        return false;
+    }
+
+    try {
+        // Give WaveSurfer a moment to initialize its audio chain
+        setTimeout(() => {
+            // Get the media element from WaveSurfer v7
+            const mediaElement = wavesurferInstance.getMediaElement();
+
+            if (!mediaElement) {
+                console.error('❌ Audio Analysis: No media element found');
+                return false;
+            }
+
+            if (AUDIO_DEBUG) {
+                console.log('📊 Audio Analysis: Media element found:', mediaElement);
+            }
+
+            // Try to get audio context
+            if (!mediaElement.audioContext) {
+                console.error('❌ Audio Analysis: No audioContext on media element');
+
+                // Try alternative approach
+                if (wavesurferInstance.backend && wavesurferInstance.backend.ac) {
+                    audioContext = wavesurferInstance.backend.ac;
+                    console.log('✓ Audio Analysis: Got context from backend');
+                } else {
+                    console.error('❌ Audio Analysis: Could not find audio context');
+                    return false;
+                }
+            } else {
+                audioContext = mediaElement.audioContext;
+            }
+
+            // Get the gain node
+            const gainNode = mediaElement.gainNode;
+
+            if (!audioContext || !gainNode) {
+                console.error('❌ Audio Analysis: Missing audioContext or gainNode');
+                return false;
+            }
+
+            if (AUDIO_DEBUG) {
+                console.log('📊 Audio Analysis: Audio context state:', audioContext.state);
+                console.log('📊 Audio Analysis: Sample rate:', audioContext.sampleRate);
+            }
+
+            // Clean up any existing analyser
+            if (analyser) {
+                try {
+                    analyser.disconnect();
+                    analyser = null;
+                } catch (e) {
+                    // Ignore disconnect errors
+                }
+            }
+
+            // Create new analyser node
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 512;                     // 256 bins for frequency data
+            analyser.smoothingTimeConstant = 0.8;       // Smoothing (0-1)
+            analyser.minDecibels = -90;                 // Minimum power value
+            analyser.maxDecibels = -10;                 // Maximum power value
+
+            // Insert analyser into the audio chain
+            try {
+                // Disconnect gain from destination
+                gainNode.disconnect();
+
+                // Reconnect through analyser
+                gainNode.connect(analyser);
+                analyser.connect(audioContext.destination);
+
+                console.log('✅ Audio Analysis: Analyser connected to audio chain');
+            } catch (error) {
+                console.error('❌ Audio Analysis: Failed to insert analyser:', error);
+
+                // Try to restore original connection if we failed
+                try {
+                    gainNode.connect(audioContext.destination);
+                } catch (e) {
+                    console.error('❌ Audio Analysis: Failed to restore connection');
+                }
+                return false;
+            }
+
+            // Prepare data array for frequency data
+            const bufferLength = analyser.frequencyBinCount;
+            audioDataArray = new Uint8Array(bufferLength);
+
+            console.log('✅ Galaxy View: Audio analysis setup complete');
+
+            // Resume context if suspended (common on mobile/autoplay restrictions)
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    console.log('✅ Audio Analysis: Audio context resumed');
+                }).catch(err => {
+                    console.warn('⚠️ Audio Analysis: Could not resume context:', err);
+                });
+            }
+
+            return true;
+
+        }, 100); // Small delay to ensure WaveSurfer is ready
+
+    } catch (error) {
+        console.error('❌ Audio Analysis setup error:', error);
+        return false;
+    }
+}
+
+/**
+ * Updates audio amplitude values from analyzer
+ * Call this every frame in animation loop
+ */
+function updateAudioAmplitude() {
+    if (!analyser || !audioDataArray) {
+        // No analyser available, set all to 0
+        currentAudioAmplitude = 0;
+        bassAmplitude = 0;
+        midsAmplitude = 0;
+        highsAmplitude = 0;
+        return;
+    }
+
+    // Get frequency data (0-255 for each frequency bin)
+    analyser.getByteFrequencyData(audioDataArray);
+
+    // Calculate frequency ranges based on sample rate
+    const bufferLength = analyser.frequencyBinCount;
+    const sampleRate = audioContext.sampleRate;
+    const nyquist = sampleRate / 2; // Maximum frequency we can represent
+
+    // Calculate bin indices for frequency bands
+    const binWidth = nyquist / bufferLength;
+
+    // Frequency band boundaries
+    const bassEnd = Math.floor(250 / binWidth);    // Bass: 0-250 Hz
+    const midsEnd = Math.floor(2000 / binWidth);   // Mids: 250-2000 Hz
+    // Highs: 2000+ Hz (rest of the bins)
+
+    // Calculate amplitudes for each frequency band
+    let bassSum = 0, midsSum = 0, highsSum = 0;
+    let bassCount = 0, midsCount = 0, highsCount = 0;
+
+    // Bass: 20-250 Hz (skip first bin as it's often DC offset)
+    for (let i = 1; i < bassEnd && i < bufferLength; i++) {
+        bassSum += audioDataArray[i];
+        bassCount++;
+    }
+
+    // Mids: 250-2000 Hz
+    for (let i = bassEnd; i < midsEnd && i < bufferLength; i++) {
+        midsSum += audioDataArray[i];
+        midsCount++;
+    }
+
+    // Highs: 2000+ Hz
+    for (let i = midsEnd; i < bufferLength; i++) {
+        highsSum += audioDataArray[i];
+        highsCount++;
+    }
+
+    // Calculate averages (0-255 range)
+    const bassAvg = bassCount > 0 ? bassSum / bassCount : 0;
+    const midsAvg = midsCount > 0 ? midsSum / midsCount : 0;
+    const highsAvg = highsCount > 0 ? highsSum / highsCount : 0;
+
+    // Normalize to 0-1 range and apply amplification
+    bassAmplitude = Math.min((bassAvg / 128) * 3, 5);
+    midsAmplitude = Math.min((midsAvg / 128) * 3, 5);
+    highsAmplitude = Math.min((highsAvg / 128) * 3, 5);
+
+    // Set overall amplitude based on selected frequency mode
+    switch (audioFrequencyMode) {
+        case 'bass':
+            currentAudioAmplitude = bassAmplitude;
+            break;
+        case 'mids':
+            currentAudioAmplitude = midsAmplitude;
+            break;
+        case 'highs':
+            currentAudioAmplitude = highsAmplitude;
+            break;
+        case 'all':
+        default:
+            // Weighted average - bass has more visual impact
+            currentAudioAmplitude = (bassAmplitude * 0.5 + midsAmplitude * 0.3 + highsAmplitude * 0.2);
+            break;
+    }
+}
+
+/**
+ * Cleans up audio analyzer when switching files or destroying view
+ */
+function cleanupAudioAnalysis() {
+    if (analyser) {
+        try {
+            analyser.disconnect();
+        } catch (e) {
+            // Ignore disconnect errors
+        }
+        analyser = null;
+    }
+
+    audioDataArray = null;
+    currentAudioAmplitude = 0;
+    bassAmplitude = 0;
+    midsAmplitude = 0;
+    highsAmplitude = 0;
+
+    console.log('🧹 Galaxy View: Audio analysis cleaned up');
 }
 
 // ============================================================================
@@ -980,6 +1308,12 @@ function startAnimation() {
         const currentTime = performance.now();
         const delta = (currentTime - lastTime) / 1000;
         lastTime = currentTime;
+
+        // Update audio analysis
+        updateAudioAmplitude();
+
+        // Update audio reactivity (make playing cluster pulse with music)
+        updateAudioReactivity();
 
         // Update movement
         updateMovement(delta);

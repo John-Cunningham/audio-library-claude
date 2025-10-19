@@ -47,29 +47,45 @@ async function loadThreeJS() {
 }
 
 export async function init(data = {}) {
-    console.log('Galaxy view initializing...');
+    console.log('🌌 Galaxy view initializing...');
+    console.log('📊 Data received:', {
+        audioFiles: data.audioFiles ? data.audioFiles.length : 0,
+        currentFile: data.currentFile ? data.currentFile.name : 'none'
+    });
 
     // Load Three.js first
+    console.log('📦 Loading Three.js...');
     await loadThreeJS();
+    console.log('✅ Three.js loaded, version:', THREE.REVISION);
 
     // Initialize Three.js-dependent variables
     mouse = new THREE.Vector2();
     velocity = new THREE.Vector3();
+    console.log('✅ Three.js-dependent variables initialized');
 
     // Store audio files data
     if (data.audioFiles) {
         audioFilesData = data.audioFiles;
+        console.log('📁 Stored', audioFilesData.length, 'audio files');
     }
     if (data.currentFile) {
         currentFileData = data.currentFile;
+        console.log('🎵 Current file:', currentFileData.name);
     }
 
     // Show galaxy container
     const container = document.getElementById('galaxyViewContainer');
     if (!container) {
-        console.error('Galaxy view container not found');
+        console.error('❌ Galaxy view container not found');
         return;
     }
+    console.log('📦 Container found:', container.id);
+    console.log('📐 Container dimensions:', {
+        width: container.clientWidth,
+        height: container.clientHeight,
+        display: container.style.display,
+        position: container.style.position
+    });
 
     container.style.display = 'block';
     container.innerHTML = '';
@@ -103,18 +119,33 @@ export async function init(data = {}) {
     container.appendChild(instructions);
 
     // Setup Three.js scene
+    console.log('🎨 Setting up Three.js scene...');
     setupScene(container);
+    console.log('✅ Scene setup complete');
 
     // Create particles from audio files
+    console.log('✨ Creating particles...');
     createParticles();
+    console.log('✅ Particles created');
 
     // Setup controls
+    console.log('🎮 Setting up controls...');
     setupControls(container);
+    console.log('✅ Controls setup complete');
 
     // Start animation loop
+    console.log('🎬 Starting animation loop...');
     startAnimation();
+    console.log('✅ Animation loop started');
 
-    console.log('Galaxy view initialized with Three.js');
+    console.log('🎉 Galaxy view initialized successfully!');
+    console.log('📊 Final state:', {
+        scene: !!scene,
+        camera: !!camera,
+        renderer: !!renderer,
+        particles: particles.length,
+        animationRunning: !!animationFrameId
+    });
 }
 
 export function update(data = {}) {
@@ -187,11 +218,14 @@ export async function destroy() {
  * Setup Three.js scene
  */
 function setupScene(container) {
+    console.log('  🎨 Creating scene...');
     // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
     scene.fog = new THREE.Fog(0x000000, 10, 800);
+    console.log('  ✅ Scene created');
 
+    console.log('  📷 Creating camera...');
     // Camera
     camera = new THREE.PerspectiveCamera(
         75,
@@ -200,24 +234,32 @@ function setupScene(container) {
         2000
     );
     camera.position.set(0, 50, 200);
+    console.log('  ✅ Camera created at position:', camera.position);
 
+    console.log('  🖼️ Creating renderer...');
     // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
+    console.log('  ✅ Renderer created with size:', container.clientWidth, 'x', container.clientHeight);
+    console.log('  ✅ Renderer canvas appended to container');
+    console.log('  📐 Canvas element:', renderer.domElement, 'size:', renderer.domElement.width, 'x', renderer.domElement.height);
 
     // Raycaster for mouse picking
     raycaster = new THREE.Raycaster();
+    console.log('  ✅ Raycaster created');
 
     // Ambient light
     const ambientLight = new THREE.AmbientLight(0x404040, 2);
     scene.add(ambientLight);
+    console.log('  💡 Ambient light added');
 
     // Directional light
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
     directionalLight.position.set(5, 10, 7.5);
     scene.add(directionalLight);
+    console.log('  💡 Directional light added');
 
     // Handle window resize
     window.addEventListener('resize', () => {
@@ -232,6 +274,8 @@ function setupScene(container) {
  * Create particles from audio files
  */
 function createParticles() {
+    console.log('  ✨ Creating particles from audio files...');
+
     // Clear existing particles
     particles.forEach(p => {
         if (p.geometry) p.geometry.dispose();
@@ -241,11 +285,11 @@ function createParticles() {
     particles = [];
 
     if (!audioFilesData || audioFilesData.length === 0) {
-        console.log('No audio files to visualize');
+        console.warn('  ⚠️ No audio files to visualize');
         return;
     }
 
-    console.log(`Creating ${audioFilesData.length} particles...`);
+    console.log(`  📊 Creating ${audioFilesData.length} particles...`);
 
     audioFilesData.forEach((file, index) => {
         // Position based on BPM and key (simple layout)
@@ -272,9 +316,21 @@ function createParticles() {
 
         scene.add(particle);
         particles.push(particle);
+
+        // Log first few particles
+        if (index < 3) {
+            console.log(`  🔵 Particle ${index}:`, {
+                name: file.name,
+                bpm: bpm,
+                key: file.key,
+                position: { x, y, z },
+                color: getColorForFile(file).getHexString()
+            });
+        }
     });
 
-    console.log(`Created ${particles.length} particles`);
+    console.log(`  ✅ Created ${particles.length} particles and added to scene`);
+    console.log(`  📊 Scene children count:`, scene.children.length);
 }
 
 /**
@@ -443,9 +499,13 @@ function updateMovement(delta) {
  */
 function startAnimation() {
     let lastTime = performance.now();
+    let frameCount = 0;
 
     function animate() {
-        if (!scene || !camera || !renderer) return;
+        if (!scene || !camera || !renderer) {
+            console.error('❌ Animation stopped: missing scene, camera, or renderer');
+            return;
+        }
 
         const currentTime = performance.now();
         const delta = (currentTime - lastTime) / 1000; // seconds
@@ -456,6 +516,18 @@ function startAnimation() {
 
         // Render scene
         renderer.render(scene, camera);
+
+        // Log first frame render
+        if (frameCount === 0) {
+            console.log('  🎬 First frame rendered!');
+            console.log('  📊 Renderer info:', {
+                drawingBufferWidth: renderer.domElement.width,
+                drawingBufferHeight: renderer.domElement.height,
+                particlesInScene: particles.length,
+                cameraPosition: camera.position
+            });
+        }
+        frameCount++;
 
         animationFrameId = requestAnimationFrame(animate);
     }

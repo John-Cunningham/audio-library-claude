@@ -306,30 +306,58 @@ class GalaxyView {
      * Setup listener for audio playback to connect analyzer
      */
     setupAudioPlaybackListener() {
+        // Track the current media element so we can detect when it changes
+        this.lastMediaElement = null;
+
         // Set up interval to check for wavesurfer and auto-connect when audio reactivity is on
         this.audioCheckInterval = setInterval(() => {
+            // Only run if audio reactivity is enabled
+            if (!window.audioReactivityEnabled) {
+                return;
+            }
+
+            // Check if WaveSurfer exists
+            if (!window.wavesurfer) {
+                this.audioConnected = false;
+                this.lastMediaElement = null;
+                return;
+            }
+
+            // Get current media element
+            const currentMedia = window.wavesurfer.media;
+
+            // Check if media element changed (new file loaded)
+            const mediaChanged = currentMedia !== this.lastMediaElement;
+
             // Try to connect if:
-            // 1. Audio reactivity is enabled
-            // 2. We're not already connected
-            // 3. Wavesurfer exists
-            if (window.audioReactivityEnabled && !this.audioConnected && window.wavesurfer) {
+            // 1. Not connected yet, OR
+            // 2. Media element changed (new file loaded)
+            if (!this.audioConnected || mediaChanged) {
+                if (mediaChanged && this.lastMediaElement !== null) {
+                    console.log('[🔄 AUTO-CONNECT] 🎵 New file detected - reconnecting...');
+                    this.audioConnected = false; // Force reconnection
+                }
+
                 console.log('[🔄 AUTO-CONNECT] Attempting audio analyzer connection...');
-                console.log('[🔄 AUTO-CONNECT] Reactivity:', window.audioReactivityEnabled, '| Connected:', this.audioConnected, '| WaveSurfer:', !!window.wavesurfer);
+                console.log('[🔄 AUTO-CONNECT] Reactivity:', window.audioReactivityEnabled, '| Connected:', this.audioConnected, '| WaveSurfer:', !!window.wavesurfer, '| Media changed:', mediaChanged);
+
                 this.setupAudioAnalyzer();
+                this.lastMediaElement = currentMedia;
 
                 if (this.audioConnected) {
                     console.log('[🔄 AUTO-CONNECT] ✅ SUCCESS - Audio analyzer connected!');
                 }
             }
-        }, 1000); // Check every 1 second (more aggressive)
+        }, 1000); // Check every 1 second
 
         // Expose manual reconnect function
         window.reconnectGalaxyAudio = () => {
             console.log('[🔧 MANUAL RECONNECT] User triggered reconnect');
+            this.audioConnected = false; // Force reconnection
             this.setupAudioAnalyzer();
         };
 
-        console.log('[AudioPlayback] ✅ Continuous auto-connect enabled (checks every 1s)');
+        console.log('[AudioPlayback] ✅ Continuous auto-connect enabled (checks every 1s, detects file changes)');
     }
 
     /**

@@ -38,7 +38,7 @@
 
         import * as ViewManager from './viewManager.js';
         import * as LibraryView from '../views/libraryView.js';
-        import * as GalaxyView from '../views/galaxyView.js';
+        import * as GalaxyView from '../views/galaxyViewModule.js';
         import * as SphereView from '../views/sphereView.js';
 
 
@@ -277,6 +277,10 @@
 
             // Expose wavesurfer globally for Galaxy View audio analyzer
             window.wavesurfer = wavesurfer;
+
+            // Setup audio analysis for Galaxy View when wavesurfer is ready
+            wavesurfer.on('ready', setupAudioAnalysis);
+            wavesurfer.on('destroy', stopAudioAnalysis);
 
             if (!parentPlayerComponent) {
                 parentPlayerComponent = new PlayerBarComponent({
@@ -1659,6 +1663,68 @@
 
         console.log('[app.js] ActionRecorder service initialized');
 
+        // ============================================
+        // AUDIO ANALYSIS FOR GALAXY VIEW
+        // ============================================
+        let audioAnalyser = null;
+        let audioDataArray = null;
+        let audioAnimationId = null;
+
+        function setupAudioAnalysis() {
+            if (!wavesurfer || !wavesurfer.backend || !wavesurfer.backend.ac) {
+                console.warn('⚠️ Cannot setup audio analysis - wavesurfer not ready');
+                return;
+            }
+
+            // Create analyser if not exists
+            if (!audioAnalyser) {
+                audioAnalyser = wavesurfer.backend.ac.createAnalyser();
+                audioAnalyser.fftSize = 256;
+                audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+
+                // Connect analyser to wavesurfer's audio graph
+                if (wavesurfer.backend.analyser) {
+                    // If wavesurfer already has an analyser, connect to it
+                    wavesurfer.backend.analyser.connect(audioAnalyser);
+                } else {
+                    // Otherwise connect to the main gain node
+                    wavesurfer.backend.gainNode.connect(audioAnalyser);
+                }
+
+                console.log('✅ Audio analyser created and connected');
+            }
+
+            // Start broadcast loop
+            if (!audioAnimationId) {
+                function broadcastAudioData() {
+                    if (!audioAnalyser || !audioDataArray) return;
+
+                    // Get frequency data
+                    audioAnalyser.getByteFrequencyData(audioDataArray);
+
+                    // Send to Galaxy View if active
+                    const galaxyViewInstance = GalaxyView.getInstance?.();
+                    if (galaxyViewInstance && galaxyViewInstance.isActive) {
+                        galaxyViewInstance.updateAudioData(audioDataArray);
+                    }
+
+                    // Continue loop
+                    audioAnimationId = requestAnimationFrame(broadcastAudioData);
+                }
+
+                broadcastAudioData();
+                console.log('✅ Audio analysis broadcast started');
+            }
+        }
+
+        function stopAudioAnalysis() {
+            if (audioAnimationId) {
+                cancelAnimationFrame(audioAnimationId);
+                audioAnimationId = null;
+                console.log('🛑 Audio analysis broadcast stopped');
+            }
+        }
+
         // Initialize view tabs with data provider for Galaxy View
         ViewManager.initViewTabs(() => {
             // Return current player state for views (e.g., Galaxy View)
@@ -1666,6 +1732,8 @@
             return {
                 currentFile: currentFile || null,
                 audioFiles: audioFiles,  // Full file list for Galaxy View
+                playerStateManager: PlayerState,  // Player state for Galaxy View
+                onFileClick: (file) => loadAudio(file.id),  // File click handler for Galaxy View
                 renderFunction: FileListRenderer.render,
                 renderTagsFunction: renderTags
             };

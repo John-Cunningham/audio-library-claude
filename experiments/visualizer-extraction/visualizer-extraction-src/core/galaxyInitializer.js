@@ -99,8 +99,8 @@ export class GalaxyInitializer {
         window.densityGradient = window.densityGradient ?? 0.0;
         window.bloomStrength = window.bloomStrength ?? 0.0;
 
-        // Audio reactivity
-        window.audioReactivityEnabled = window.audioReactivityEnabled ?? false;
+        // Audio reactivity (default ON)
+        window.audioReactivityEnabled = window.audioReactivityEnabled ?? true;
         window.audioReactivityStrength = window.audioReactivityStrength ?? 1.0;
         window.globalAudioReactivity = window.globalAudioReactivity ?? 0.5;
         window.audioFrequencyMode = window.audioFrequencyMode ?? 'bass';

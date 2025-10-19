@@ -770,6 +770,66 @@ export class GalaxyView {
     }
 
     /**
+     * Set color mode and recreate particles
+     */
+    setColorMode(mode) {
+        this.config.colorMode = mode;
+        this.createParticles();
+        console.log('🎨 Color mode changed to:', mode);
+    }
+
+    /**
+     * Set axis mode and recreate particles
+     */
+    setAxisMode(axis, mode) {
+        if (axis === 'x') {
+            this.config.xAxisMode = mode;
+        } else if (axis === 'y') {
+            this.config.yAxisMode = mode;
+        } else if (axis === 'z') {
+            this.config.zAxisMode = mode;
+        }
+        this.createParticles();
+        console.log(`📐 ${axis.toUpperCase()}-axis mode changed to:`, mode);
+    }
+
+    /**
+     * Set bloom strength
+     */
+    setBloom(value) {
+        this.config.bloomStrength = value;
+        if (this.bloomPass) {
+            this.bloomPass.strength = value;
+        }
+        console.log('✨ Bloom strength set to:', value);
+    }
+
+    /**
+     * Set particle size
+     */
+    setParticleSize(size) {
+        this.config.particleSize = size;
+        // Particle size will be applied in next updateParticles() call
+        console.log('📏 Particle size set to:', size);
+    }
+
+    /**
+     * Set movement speed
+     */
+    setMoveSpeed(speed) {
+        this.config.moveSpeed = speed;
+        console.log('🏃 Movement speed set to:', speed);
+    }
+
+    /**
+     * Set look sensitivity
+     */
+    setLookSensitivity(sensitivity) {
+        this.config.lookSensitivity = sensitivity;
+        console.log('👀 Look sensitivity set to:', sensitivity);
+    }
+
+    /**
      * Clean up resources
      */
     destroy() {

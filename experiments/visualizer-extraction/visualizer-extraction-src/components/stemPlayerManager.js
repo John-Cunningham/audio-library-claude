@@ -15,8 +15,6 @@
  * Extended: 2025-10-18 - Added 5 core lifecycle functions (617 lines)
  */
 
-import { loadAudioIntoWaveSurfer } from '../utils/audioFetch.js';
-
 /**
  * Preload all stem files from database
  * @param {Object} supabase - Supabase client
@@ -311,11 +309,7 @@ export async function loadStems(parentFileId, state, WaveSurfer, autoplay = true
                 console.log(`${stemType} stem ready`);
                 resolve();
             });
-            loadAudioIntoWaveSurfer(stemWS, stems[stemType].file_url, `StemPlayer-${stemType}`)
-                .catch(err => {
-                    console.error(`[StemPlayer] Failed to load ${stemType} stem:`, err);
-                    reject(err);
-                });
+            stemWS.load(stems[stemType].file_url);
         });
     });
 
@@ -439,11 +433,8 @@ export async function preloadMultiStemWavesurfers(fileId, dependencies, state, c
             responsive: true
         });
 
-        // Load the stem file with retry logic
-        loadAudioIntoWaveSurfer(ws, stemFile.file_url, `StemPlayerLegacy-${stemType}`)
-            .catch(err => {
-                console.error(`[StemPlayerLegacy] Failed to load ${stemType} stem:`, err);
-            });
+        // Load the stem file
+        ws.load(stemFile.file_url);
 
         // Mute by default
         ws.setVolume(0);
@@ -724,12 +715,7 @@ export async function initializeMultiStemPlayerWavesurfers(state, dependencies, 
 
             ws._stemFile = stemFile;
             ws._stemType = stemType;
-
-            // Load with retry logic
-            loadAudioIntoWaveSurfer(ws, stemFile.file_url, `StemPlayerIndependent-${stemType}`)
-                .catch(err => {
-                    console.error(`[StemPlayerIndependent] Failed to load ${stemType} stem:`, err);
-                });
+            ws.load(stemFile.file_url);
 
             stemPlayerWavesurfers[stemType] = ws;
             stemPlaybackIndependent[stemType] = true;

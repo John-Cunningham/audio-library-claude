@@ -4,6 +4,7 @@
 import { GalaxyView } from './galaxyView.js';
 
 let galaxyViewInstance = null;
+let audioAnalysisId = null;
 
 /**
  * Initialize galaxy view
@@ -54,7 +55,42 @@ export async function init(data = {}) {
 
     // Show the view
     galaxyViewInstance.show();
+
+    // Expose to window for HTML controls
+    window.galaxyViewInstance = galaxyViewInstance;
+
+    // Start audio analysis
+    startAudioAnalysis();
+
     console.log('✅ Galaxy View Module: Initialization complete');
+}
+
+/**
+ * Start audio analysis for galaxy view reactivity
+ */
+function startAudioAnalysis() {
+    // Stop any existing analysis
+    if (audioAnalysisId) {
+        cancelAnimationFrame(audioAnalysisId);
+    }
+
+    const analysisLoop = () => {
+        const wavesurfer = window.wavesurfer;
+
+        // Only analyze if wavesurfer exists and galaxy view is active
+        if (wavesurfer && wavesurfer.backend && wavesurfer.backend.analyser && galaxyViewInstance && galaxyViewInstance.isActive) {
+            const analyser = wavesurfer.backend.analyser;
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+
+            galaxyViewInstance.updateAudioData(dataArray);
+        }
+
+        audioAnalysisId = requestAnimationFrame(analysisLoop);
+    };
+
+    analysisLoop();
+    console.log('🎵 Audio analysis started for Galaxy View');
 }
 
 /**
@@ -89,6 +125,13 @@ export async function destroy() {
     if (galaxyViewInstance) {
         galaxyViewInstance.hide();
         console.log('✅ Galaxy View hidden');
+    }
+
+    // Stop audio analysis
+    if (audioAnalysisId) {
+        cancelAnimationFrame(audioAnalysisId);
+        audioAnalysisId = null;
+        console.log('🎵 Audio analysis stopped');
     }
 
     // Note: We don't fully destroy the instance to allow faster view switching

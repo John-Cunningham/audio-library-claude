@@ -1037,6 +1037,93 @@
         <!-- Galaxy View Container -->
         <div id="galaxyViewContainer" style="display: none; position: fixed; top: 94px; left: 0; right: 0; bottom: 180px; background: #000;">
             <!-- Three.js canvas will be injected here by galaxyView.js -->
+
+            <!-- Galaxy Options Menu -->
+            <div id="galaxyOptionsMenu" style="position: absolute; top: 10px; left: 10px; background: rgba(15, 15, 15, 0.95); border: 1px solid #333; border-radius: 8px; padding: 15px; color: #fff; font-size: 12px; max-width: 280px; max-height: calc(100% - 20px); overflow-y: auto; z-index: 100;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 8px;">
+                    <h3 style="margin: 0; font-size: 14px;">Galaxy Options</h3>
+                    <button onclick="document.getElementById('galaxyOptionsMenu').style.display='none'" style="background: none; border: none; color: #999; cursor: pointer; font-size: 18px; padding: 0; width: 24px; height: 24px;">&times;</button>
+                </div>
+
+                <!-- Color Mode -->
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px; color: #999;">Color By:</label>
+                    <select id="galaxyColorMode" onchange="window.galaxyViewInstance.setColorMode(this.value)" style="width: 100%; padding: 6px; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; color: #fff; font-size: 12px;">
+                        <option value="tags">Tags (Category)</option>
+                        <option value="bpm">BPM Range</option>
+                        <option value="key">Musical Key</option>
+                        <option value="length">Length (Duration)</option>
+                    </select>
+                </div>
+
+                <!-- X Axis Mode -->
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px; color: #999;">X-Axis (Left/Right):</label>
+                    <select id="galaxyXAxisMode" onchange="window.galaxyViewInstance.setAxisMode('x', this.value)" style="width: 100%; padding: 6px; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; color: #fff; font-size: 12px;">
+                        <option value="bpm" selected>BPM</option>
+                        <option value="key">Musical Key</option>
+                        <option value="tags">Tags (Hash)</option>
+                        <option value="length">Length (Duration)</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+
+                <!-- Y Axis Mode -->
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px; color: #999;">Y-Axis (Up/Down):</label>
+                    <select id="galaxyYAxisMode" onchange="window.galaxyViewInstance.setAxisMode('y', this.value)" style="width: 100%; padding: 6px; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; color: #fff; font-size: 12px;">
+                        <option value="key" selected>Musical Key</option>
+                        <option value="bpm">BPM</option>
+                        <option value="tags">Tags (Hash)</option>
+                        <option value="length">Length (Duration)</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+
+                <!-- Z Axis Mode -->
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px; color: #999;">Z-Axis (Depth):</label>
+                    <select id="galaxyZAxisMode" onchange="window.galaxyViewInstance.setAxisMode('z', this.value)" style="width: 100%; padding: 6px; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; color: #fff; font-size: 12px;">
+                        <option value="tags" selected>Tags (Hash)</option>
+                        <option value="bpm">BPM</option>
+                        <option value="key">Musical Key</option>
+                        <option value="length">Length (Duration)</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+
+                <!-- Bloom -->
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px; color: #999;">Bloom: <span id="bloomValue">0</span></label>
+                    <input type="range" id="bloomSlider" min="0" max="3" step="0.1" value="0" oninput="document.getElementById('bloomValue').textContent=this.value; window.galaxyViewInstance.setBloom(parseFloat(this.value))" style="width: 100%;">
+                </div>
+
+                <!-- Particle Size -->
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px; color: #999;">Particle Size: <span id="particleSizeValue">17.5</span></label>
+                    <input type="range" id="particleSizeSlider" min="1" max="50" step="0.5" value="17.5" oninput="document.getElementById('particleSizeValue').textContent=this.value; window.galaxyViewInstance.setParticleSize(parseFloat(this.value))" style="width: 100%;">
+                </div>
+
+                <!-- Movement Speed -->
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px; color: #999;">Move Speed: <span id="moveSpeedValue">3.0</span></label>
+                    <input type="range" id="moveSpeedSlider" min="0.5" max="10" step="0.5" value="3.0" oninput="document.getElementById('moveSpeedValue').textContent=this.value; window.galaxyViewInstance.setMoveSpeed(parseFloat(this.value))" style="width: 100%;">
+                </div>
+
+                <!-- Look Sensitivity -->
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px; color: #999;">Look Sensitivity: <span id="lookSensValue">0.002</span></label>
+                    <input type="range" id="lookSensSlider" min="0.0005" max="0.01" step="0.0001" value="0.002" oninput="document.getElementById('lookSensValue').textContent=this.value; window.galaxyViewInstance.setLookSensitivity(parseFloat(this.value))" style="width: 100%;">
+                </div>
+
+                <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #333; font-size: 10px; color: #666;">
+                    <p style="margin: 0;">Click anywhere to activate pointer lock</p>
+                    <p style="margin: 4px 0 0;">WASD: Move | Q/E: Up/Down | Shift: Faster</p>
+                </div>
+            </div>
+
+            <!-- Show/Hide Options Button -->
+            <button onclick="document.getElementById('galaxyOptionsMenu').style.display='block'" style="position: absolute; top: 10px; right: 10px; background: rgba(15, 15, 15, 0.9); border: 1px solid #444; border-radius: 6px; color: #fff; padding: 8px 16px; cursor: pointer; font-size: 12px; z-index: 99;">☰ Options</button>
         </div>
 
         <!-- Sphere View Container (placeholder) -->

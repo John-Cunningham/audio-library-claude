@@ -15,8 +15,6 @@
  *   MiniWaveform.destroy(fileId);
  */
 
-import { loadAudioIntoWaveSurfer } from '../utils/audioFetch.js';
-
 // Track mini waveform instances by file ID
 let miniWaveforms = {};
 

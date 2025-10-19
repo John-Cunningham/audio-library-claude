@@ -1734,6 +1734,7 @@ window.saveEditedTags = () => TagEditModal.save(
         supabase
     }
 );
+window.loadAudio = loadAudio;  // ADDED: Expose loadAudio for Galaxy View particle clicks
 window.previousTrack = previousTrack;
 window.playPause = playPause;
 window.nextTrack = nextTrack;

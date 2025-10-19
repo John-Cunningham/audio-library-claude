@@ -124,7 +124,7 @@ const keyColorMap = {
  * @param {Object} data - Initial data (audioFiles, currentFile, etc.)
  */
 export async function init(data = {}) {
-    console.log('🌌 Galaxy view initializing with view manager...');
+    console.log('🌌 Galaxy view initializing...');
     isGalaxyViewActive = true;
 
     // Store audio files data
@@ -180,7 +180,6 @@ export function update(data = {}) {
 
     if (data.currentFile) {
         window.currentFileId = data.currentFile.id;
-        // Highlight current file in particles
     }
 
     if (data.audioFiles) {
@@ -194,6 +193,19 @@ export function update(data = {}) {
  */
 export async function destroy() {
     console.log('Galaxy view destroying...');
+
+    // Hide the galaxy view container
+    const container = document.getElementById('galaxyViewContainer');
+    if (container) {
+        container.style.display = 'none';
+    }
+
+    // Remove options menu container
+    const menuContainer = document.getElementById('galaxyMenuContainer');
+    if (menuContainer) {
+        menuContainer.remove();
+    }
+
     destroyGalaxyView();
 }
 
@@ -601,7 +613,12 @@ function updateParticles() {
  * Connect to global WaveSurfer instance for audio analysis
  */
 function connectToWavesurfer(wavesurfer) {
-    if (!wavesurfer) return;
+    if (!wavesurfer) {
+        console.warn('⚠️ connectToWavesurfer called with null/undefined wavesurfer');
+        return;
+    }
+
+    console.log('🔌 Connecting to WaveSurfer for audio reactivity...');
 
     // Get audio context from wavesurfer
     try {
@@ -610,25 +627,45 @@ function connectToWavesurfer(wavesurfer) {
         if (backend && backend.ac) {
             audioContext = backend.ac;
 
-            // Create analyser
-            analyser = audioContext.createAnalyser();
-            analyser.fftSize = 512;
-            analyser.smoothingTimeConstant = 0.8;
+            // Create or reuse analyser
+            if (!analyser || analyser.context !== audioContext) {
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 512;
+                analyser.smoothingTimeConstant = 0.8;
+                audioDataArray = new Uint8Array(analyser.frequencyBinCount);
+            }
 
             // Try to insert into audio chain
             if (backend.gainNode) {
-                backend.gainNode.disconnect();
+                // Disconnect existing connections to avoid duplicates
+                try {
+                    backend.gainNode.disconnect();
+                } catch (e) {
+                    // Ignore if already disconnected
+                }
+
                 backend.gainNode.connect(analyser);
                 analyser.connect(audioContext.destination);
 
-                audioDataArray = new Uint8Array(analyser.frequencyBinCount);
-                console.log('Connected to WaveSurfer audio');
+                console.log('✅ Connected to WaveSurfer audio successfully');
+            } else {
+                console.warn('⚠️ WaveSurfer backend.gainNode not found');
             }
+        } else {
+            console.warn('⚠️ WaveSurfer backend or audio context not found');
         }
     } catch (e) {
-        console.warn('Could not connect to WaveSurfer:', e);
+        console.error('❌ Could not connect to WaveSurfer:', e);
     }
 }
+
+// Expose function to reconnect audio (useful when file changes)
+window.reconnectGalaxyAudio = function() {
+    if (window.wavesurfer && isGalaxyViewActive) {
+        console.log('🔄 Reconnecting Galaxy View audio...');
+        connectToWavesurfer(window.wavesurfer);
+    }
+};
 
 /**
  * Update audio amplitude from analyser
@@ -921,7 +958,8 @@ function onClick(event) {
 
         if (clickedCluster && window.loadAudio) {
             // Use global loadAudio function to play file
-            window.loadAudio(clickedCluster.file);
+            console.log('🎵 Particle clicked, loading audio:', clickedCluster.file.id || clickedCluster.file.name);
+            window.loadAudio(clickedCluster.file.id || clickedCluster.file);
         }
     }
 }
@@ -1075,7 +1113,23 @@ function loadOptionsMenu() {
                 window.initOptionsMenu2Resize();
             }
 
-            // Define toggleSection function globally for inline onclick handlers
+            // Setup collapsible sections
+            const headers = document.querySelectorAll('#optionsMenu2 h3');
+            headers.forEach(header => {
+                header.style.cursor = 'pointer';
+                // Remove inline onclick to prevent conflicts
+                header.onclick = null;
+                // Add click handler for collapsing
+                header.addEventListener('click', function() {
+                    this.classList.toggle('collapsed');
+                    const content = this.nextElementSibling;
+                    if (content && content.classList.contains('collapsible-content')) {
+                        content.classList.toggle('collapsed');
+                    }
+                });
+            });
+
+            // Expose control functions globally
             window.toggleSection = function(element) {
                 element.classList.toggle('collapsed');
                 const content = element.nextElementSibling;
@@ -1143,18 +1197,6 @@ function destroyGalaxyView() {
     document.removeEventListener('keydown', onKeyDown);
     document.removeEventListener('keyup', onKeyUp);
 
-    // Hide the galaxy view container
-    const container = document.getElementById('galaxyViewContainer');
-    if (container) {
-        container.style.display = 'none';
-    }
-
-    // Remove options menu container
-    const menuContainer = document.getElementById('galaxyMenuContainer');
-    if (menuContainer) {
-        menuContainer.remove();
-    }
-
     console.log('Galaxy view destroyed');
 }
 
@@ -1186,9 +1228,38 @@ if (typeof window !== 'undefined') {
     window.rotationAxis = rotationAxis;
 
     // Expose functions that update these values and recreate particles
-    window.recreateParticles = () => createParticles(window.audioFiles);
-    window.updateBrightness = updateBrightness;
-    window.updateBloomStrength = updateBloomStrength;
+    window.recreateParticles = () => {
+        console.log('🔄 Recreating particles with updated settings...');
+
+        // Sync all local variables from window before recreating
+        particleSize = window.particleSize !== undefined ? window.particleSize : particleSize;
+        particlesPerCluster = window.particlesPerCluster !== undefined ? window.particlesPerCluster : particlesPerCluster;
+        clusterRadius = window.clusterRadius !== undefined ? window.clusterRadius : clusterRadius;
+        particleShape = window.particleShape !== undefined ? window.particleShape : particleShape;
+        particleBrightness = window.particleBrightness !== undefined ? window.particleBrightness : particleBrightness;
+        orbitSpeed = window.orbitSpeed !== undefined ? window.orbitSpeed : orbitSpeed;
+        orbitRadius = window.orbitRadius !== undefined ? window.orbitRadius : orbitRadius;
+        visibilityDistance = window.visibilityDistance !== undefined ? window.visibilityDistance : visibilityDistance;
+        currentColorMode = window.currentColorMode !== undefined ? window.currentColorMode : currentColorMode;
+        currentXMode = window.currentXMode !== undefined ? window.currentXMode : currentXMode;
+        currentYMode = window.currentYMode !== undefined ? window.currentYMode : currentYMode;
+        currentZMode = window.currentZMode !== undefined ? window.currentZMode : currentZMode;
+
+        console.log('Particle size:', particleSize, 'Particles per cluster:', particlesPerCluster, 'Cluster radius:', clusterRadius);
+
+        createParticles(window.audioFiles);
+        updateFileCount();
+    };
+
+    window.updateBrightness = () => {
+        particleBrightness = window.particleBrightness !== undefined ? window.particleBrightness : particleBrightness;
+        updateBrightness();
+    };
+
+    window.updateBloomStrength = () => {
+        bloomStrength = window.bloomStrength !== undefined ? window.bloomStrength : bloomStrength;
+        updateBloomStrength();
+    };
 
     window.galaxyView = {
         render: renderGalaxyView,

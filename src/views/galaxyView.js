@@ -436,6 +436,26 @@ export function update(data = {}) {
     }
 }
 
+/**
+ * Connects audio analyzer to wavesurfer instance
+ * This should be called whenever audio changes (new file loads)
+ * Exported as public API for external control
+ */
+export function connectAudio(wavesurferInstance) {
+    if (!wavesurferInstance) {
+        console.warn('⚠️ connectAudio called with no wavesurfer instance');
+        return;
+    }
+
+    console.log('🔌 Connecting Galaxy View to audio...');
+
+    // Clean up existing analyzer first
+    cleanupAudioAnalysis();
+
+    // Setup new analyzer
+    setupAudioAnalysis(wavesurferInstance);
+}
+
 export async function destroy() {
     console.log('Galaxy view destroying...');
 

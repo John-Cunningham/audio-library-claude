@@ -606,6 +606,8 @@ function createParticles() {
         zScale: zAxisScale
     };
 
+    console.log('✨ createParticles called with config:', config);
+
     // Clear existing particles array
     particles = [];
 
@@ -914,9 +916,17 @@ function getCategoryForFile(file) {
 }
 
 /**
- * Recreate particles (when file list changes)
+ * Recreate particles (when file list changes or visualization settings change)
  */
 function recreateParticles() {
+    console.log('🔄 recreateParticles called');
+    console.log('  Color mode:', window.currentColorMode);
+    console.log('  X axis:', window.currentXMode);
+    console.log('  Y axis:', window.currentYMode);
+    console.log('  Z axis:', window.currentZMode);
+    console.log('  Particle size:', window.particleSize);
+    console.log('  Cluster radius:', window.clusterRadius);
+
     createParticles();
     highlightCurrentFile();
     updateFileCount();
@@ -1535,7 +1545,10 @@ function wireUpMenuControls() {
     // No need to reassign them here - they're already window.audioReactivityStrength etc.
 
     // Expose recreateParticles to window
-    window.recreateParticles = () => recreateParticles();
+    window.recreateParticles = () => {
+        console.log('🌐 window.recreateParticles called from menu');
+        recreateParticles();
+    };
 
     // Global functions expected by options menu HTML
 
@@ -1911,10 +1924,40 @@ function wireUpAdditionalControls() {
     const yModeSelect = document.getElementById('galaxyYAxisMode');
     const zModeSelect = document.getElementById('galaxyZAxisMode');
 
-    if (colorModeSelect) colorModeSelect.value = window.currentColorMode;
-    if (xModeSelect) xModeSelect.value = window.currentXMode;
-    if (yModeSelect) yModeSelect.value = window.currentYMode;
-    if (zModeSelect) zModeSelect.value = window.currentZMode;
+    if (colorModeSelect) {
+        colorModeSelect.value = window.currentColorMode;
+        console.log('  Color mode dropdown found, set to:', window.currentColorMode);
+    } else {
+        console.warn('  ⚠️ Color mode dropdown NOT FOUND');
+    }
+
+    if (xModeSelect) {
+        xModeSelect.value = window.currentXMode;
+        console.log('  X axis dropdown found, set to:', window.currentXMode);
+    } else {
+        console.warn('  ⚠️ X axis dropdown NOT FOUND');
+    }
+
+    if (yModeSelect) {
+        yModeSelect.value = window.currentYMode;
+        console.log('  Y axis dropdown found, set to:', window.currentYMode);
+    } else {
+        console.warn('  ⚠️ Y axis dropdown NOT FOUND');
+    }
+
+    if (zModeSelect) {
+        zModeSelect.value = window.currentZMode;
+        console.log('  Z axis dropdown found, set to:', window.currentZMode);
+    } else {
+        console.warn('  ⚠️ Z axis dropdown NOT FOUND');
+    }
+
+    // Verify window.recreateParticles is available
+    if (typeof window.recreateParticles === 'function') {
+        console.log('  ✅ window.recreateParticles is available');
+    } else {
+        console.error('  ❌ window.recreateParticles is NOT available!');
+    }
 
     console.log('✅ Additional controls wired up');
 }

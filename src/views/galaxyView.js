@@ -245,8 +245,9 @@ window.motionMode = 'collective';               // Current motion mode
 window.orbitSpeed = 0.0000015;                  // Base rotation speed
 window.orbitRadius = 80;                        // Motion amplitude
 let audioReactivityEnabled = true;              // Toggle audio reactivity (internal)
-window.audioReactivityStrength = 40;            // Audio effect strength (0-100)
-let globalAudioReactivity = 4.4;                // Global audio pulse strength (internal)
+window.audioReactivityStrength = 400;           // Audio effect strength (0-1000, 10x increase)
+let globalAudioReactivity = 0;                  // Global audio pulse strength (0 = only playing file reacts)
+window.globalAudioReactivity = 0;               // Expose to window for menu control
 window.clusterSpreadOnAudio = 20;               // How much clusters expand with audio
 let hoveredCluster = null;                      // Currently hovered cluster (internal)
 let hoverScale = 1.5;                           // Scale multiplier on hover (internal)
@@ -1244,7 +1245,8 @@ function updateParticleAnimation(deltaTime) {
                 if (isCurrentFile) {
                     scale *= (1.0 + currentAudioAmplitude * window.audioReactivityStrength * 0.01);
                 } else {
-                    scale *= (1.0 + currentAudioAmplitude * globalAudioReactivity * 0.005);
+                    // Use window.globalAudioReactivity for non-playing files
+                    scale *= (1.0 + currentAudioAmplitude * window.globalAudioReactivity * 0.005);
                 }
             }
 
@@ -1646,6 +1648,15 @@ function wireUpMenuControls() {
         console.log(`🎯 Crosshair ${crosshairEnabled ? 'enabled' : 'disabled'}`);
     };
 
+    // Show crosshair by default when Galaxy View initializes
+    setTimeout(() => {
+        const crosshair = document.getElementById('crosshair');
+        if (crosshair && crosshairEnabled) {
+            crosshair.style.display = 'block';
+            console.log('🎯 Crosshair shown on init');
+        }
+    }, 200);
+
     window.toggleTooltips = function() {
         console.log('💬 Tooltips toggle not implemented yet');
     };
@@ -1967,11 +1978,10 @@ function wireUpMenuControls() {
 
     // Update global audio reactivity (all particles)
     window.updateGlobalReactivity = (value) => {
-        globalAudioReactivity = parseFloat(value);
-        window.globalAudioReactivity = globalAudioReactivity;
+        window.globalAudioReactivity = parseFloat(value);
         const display = document.getElementById('globalReactivityValue');
         if (display) display.textContent = value;
-        console.log('🌍 Global audio reactivity updated to:', globalAudioReactivity);
+        console.log('🌍 Global audio reactivity updated to:', window.globalAudioReactivity);
     };
 
     // Update particle shape - requires recreation

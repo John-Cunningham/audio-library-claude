@@ -242,7 +242,7 @@ const AUDIO_DEBUG = false;            // Debug logging (internal)
 let animationTime = 0;                          // Global animation timer (internal)
 let motionEnabled = true;                       // Toggle all motion on/off (internal)
 window.motionMode = 'collective';               // Current motion mode
-window.orbitSpeed = 0.0000015;                  // Base rotation speed
+window.orbitSpeed = 0.0015;                     // Base rotation speed (50 * 0.00003 = moderate motion)
 window.orbitRadius = 80;                        // Motion amplitude
 let audioReactivityEnabled = true;              // Toggle audio reactivity (internal)
 window.audioReactivityStrength = 400;           // Audio effect strength (0-1000, 10x increase)
@@ -1875,10 +1875,12 @@ function wireUpMenuControls() {
 
     // Motion speed/radius controls
     window.updateMotionSpeed = function(value) {
-        window.orbitSpeed = parseFloat(value) * 0.000001;  // Convert slider value to orbit speed
+        // Convert slider value (0-100) to orbit speed
+        // At 0: no motion. At 50: default speed. At 100: 2x speed
+        window.orbitSpeed = parseFloat(value) * 0.00003;  // Much larger multiplier for visible motion
         const speedDisplay = document.getElementById('galaxyMotionSpeedValue');
         if (speedDisplay) speedDisplay.textContent = value;
-        console.log(`🔄 Motion speed: ${value}`);
+        console.log(`🔄 Motion speed set to: ${value} (orbitSpeed: ${window.orbitSpeed})`);
     };
 
     window.updateMotionRadius = function(value) {

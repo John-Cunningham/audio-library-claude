@@ -606,11 +606,11 @@ export class GalaxyView {
         // Speed modifier
         const speed = this.keys.shift ? this.config.moveSpeed * 2 : this.config.moveSpeed;
 
-        // WASD movement
-        if (this.keys['w']) this.velocity.add(forward.clone().multiplyScalar(speed));
-        if (this.keys['s']) this.velocity.add(forward.clone().multiplyScalar(-speed));
-        if (this.keys['a']) this.velocity.add(right.clone().multiplyScalar(-speed));
-        if (this.keys['d']) this.velocity.add(right.clone().multiplyScalar(speed));
+        // WASD movement (W = forward, S = backward, A = left, D = right)
+        if (this.keys['w']) this.velocity.add(forward.clone().multiplyScalar(-speed)); // Forward (negative Z in Three.js)
+        if (this.keys['s']) this.velocity.add(forward.clone().multiplyScalar(speed));  // Backward
+        if (this.keys['a']) this.velocity.add(right.clone().multiplyScalar(-speed));   // Left
+        if (this.keys['d']) this.velocity.add(right.clone().multiplyScalar(speed));    // Right
         if (this.keys['q']) this.velocity.y += speed; // Up
         if (this.keys['e']) this.velocity.y -= speed; // Down
 

@@ -1682,16 +1682,12 @@
                 audioAnalyser.fftSize = 256;
                 audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
 
-                // Connect analyser to wavesurfer's audio graph
-                if (wavesurfer.backend.analyser) {
-                    // If wavesurfer already has an analyser, connect to it
-                    wavesurfer.backend.analyser.connect(audioAnalyser);
-                } else {
-                    // Otherwise connect to the main gain node
-                    wavesurfer.backend.gainNode.connect(audioAnalyser);
-                }
+                // TAP into the audio signal without breaking the chain
+                // This creates a parallel connection for analysis only
+                wavesurfer.backend.gainNode.connect(audioAnalyser);
+                // Note: Don't connect analyser to destination - it's just a tap for reading data
 
-                console.log('✅ Audio analyser created and connected');
+                console.log('✅ Audio analyser created and connected (tap mode)');
             }
 
             // Start broadcast loop

@@ -206,65 +206,65 @@ let animationFrameId = null;
 let isPointerLocked = false;
 
 // ============================================================================
-// PARTICLE SYSTEM VARIABLES
+// PARTICLE SYSTEM VARIABLES (Exposed to window for menu controls)
 // ============================================================================
 
-let particleSystem = null;        // THREE.InstancedMesh for all particles
-let particles = [];               // Array of cluster objects
-let particlesPerCluster = 48;     // Number of sub-particles per file
-let particleSize = 5;              // Base size of particles
-let subParticleScale = 0.3;       // Sub-particles are smaller than main
-let clusterRadius = 10;            // Spread radius for sub-particles
-let particleShape = 'circle';      // Shape: 'circle', 'square', 'disc', 'ring'
-let particleBrightness = 0.8;      // Base particle brightness/opacity
-let subParticleShape = 'default';  // Cluster shape: 'default', 'sphere', 'spiked'
-let densityGradient = 0;          // 0-1, adds more particles near center
-let maxParticleCount = 0;         // Maximum particles limit (0 = unlimited)
+let particleSystem = null;               // THREE.InstancedMesh (internal)
+let particles = [];                      // Array of cluster objects (internal)
+window.particlesPerCluster = 48;         // Number of sub-particles per file
+window.particleSize = 5;                 // Base size of particles
+let subParticleScale = 0.3;             // Sub-particles are smaller (internal)
+window.clusterRadius = 10;               // Spread radius for sub-particles
+window.particleShape = 'circle';         // Shape: 'circle', 'square', 'disc', 'ring'
+window.particleBrightness = 0.8;         // Base particle brightness/opacity
+let subParticleShape = 'default';       // Cluster shape (internal)
+let densityGradient = 0;                // 0-1, adds more particles near center (internal)
+let maxParticleCount = 0;               // Maximum particles limit (internal)
 
 // ============================================================================
-// AUDIO ANALYZER VARIABLES
+// AUDIO ANALYZER VARIABLES (Exposed to window for menu controls)
 // ============================================================================
 
-let audioContext = null;           // Web Audio API context
-let analyser = null;               // AnalyserNode for frequency analysis
-let audioDataArray = null;         // Uint8Array for frequency data
-let currentAudioAmplitude = 0;     // Overall amplitude (0-5 range)
-let bassAmplitude = 0;             // Bass frequencies (20-250 Hz)
-let midsAmplitude = 0;             // Mid frequencies (250-2000 Hz)
-let highsAmplitude = 0;            // High frequencies (2000+ Hz)
-let audioFrequencyMode = 'all';    // 'all', 'bass', 'mids', 'highs'
-const AUDIO_DEBUG = false;         // Debug logging (disable for production)
+let audioContext = null;              // Web Audio API context (internal)
+let analyser = null;                  // AnalyserNode for frequency analysis (internal)
+let audioDataArray = null;            // Uint8Array for frequency data (internal)
+let currentAudioAmplitude = 0;        // Overall amplitude (0-5 range) (internal)
+let bassAmplitude = 0;                // Bass frequencies (20-250 Hz) (internal)
+let midsAmplitude = 0;                // Mid frequencies (250-2000 Hz) (internal)
+let highsAmplitude = 0;               // High frequencies (2000+ Hz) (internal)
+window.audioFrequencyMode = 'all';    // 'all', 'bass', 'mids', 'highs'
+const AUDIO_DEBUG = false;            // Debug logging (internal)
 
 // ============================================================================
-// ANIMATION & MOTION VARIABLES
+// ANIMATION & MOTION VARIABLES (Exposed to window for menu controls)
 // ============================================================================
 
-let animationTime = 0;              // Global animation timer
-let motionEnabled = true;           // Toggle all motion on/off
-let motionMode = 'collective';      // Current motion mode
-let orbitSpeed = 0.0000015;         // Base rotation speed
-let orbitRadius = 80;               // Motion amplitude
-let audioReactivityEnabled = true;  // Toggle audio reactivity
-let audioReactivityStrength = 40;   // Audio effect strength (0-100)
-let globalAudioReactivity = 4.4;    // Global audio pulse strength
-let clusterSpreadOnAudio = 20;      // How much clusters expand with audio
-let hoveredCluster = null;          // Currently hovered cluster for effects
-let hoverScale = 1.5;               // Scale multiplier on hover
-let hoverSlowdown = 10;             // Time slowdown factor on hover (1-100)
-let mouseInteractionEnabled = true; // Enable mouse effects
-let hiddenCategories = new Set();   // Hidden file categories
+let animationTime = 0;                          // Global animation timer (internal)
+let motionEnabled = true;                       // Toggle all motion on/off (internal)
+window.motionMode = 'collective';               // Current motion mode
+window.orbitSpeed = 0.0000015;                  // Base rotation speed
+window.orbitRadius = 80;                        // Motion amplitude
+let audioReactivityEnabled = true;              // Toggle audio reactivity (internal)
+window.audioReactivityStrength = 40;            // Audio effect strength (0-100)
+let globalAudioReactivity = 4.4;                // Global audio pulse strength (internal)
+window.clusterSpreadOnAudio = 20;               // How much clusters expand with audio
+let hoveredCluster = null;                      // Currently hovered cluster (internal)
+let hoverScale = 1.5;                           // Scale multiplier on hover (internal)
+let hoverSlowdown = 10;                         // Time slowdown factor (internal)
+let mouseInteractionEnabled = true;             // Enable mouse effects (internal)
+let hiddenCategories = new Set();               // Hidden file categories (internal)
 
-// Wave motion parameters
-let waveAmplitude = 50;             // Wave height
-let waveFrequency = 0.001;          // Wave speed
-let waveDirection = { x: 1, y: 0, z: 0 }; // Wave propagation direction
+// Wave motion parameters (internal)
+let waveAmplitude = 50;                         // Wave height
+let waveFrequency = 0.001;                      // Wave speed
+let waveDirection = { x: 1, y: 0, z: 0 };      // Wave propagation direction
 
 // ============================================================================
-// CAMERA MOVEMENT
+// CAMERA MOVEMENT (Exposed to window for menu controls)
 // ============================================================================
 
-let moveSpeed = 5.0;
-let lookSensitivity = 0.002;
+window.moveSpeed = 5.0;
+window.lookSensitivity = 0.002;
 let keys = {};
 let velocity = null;
 let pitch = 0;
@@ -604,8 +604,8 @@ function createParticles() {
     const visibleFiles = audioFilesData.filter(f => !f._hiddenFromParticles);
 
     // Calculate particles needed
-    const densityAddition = Math.floor(densityGradient * particlesPerCluster);
-    const maxParticlesPerCluster = particlesPerCluster + densityAddition;
+    const densityAddition = Math.floor(densityGradient * window.particlesPerCluster);
+    const maxParticlesPerCluster = window.particlesPerCluster + densityAddition;
     let totalParticlesNeeded = visibleFiles.length * maxParticlesPerCluster;
 
     // Apply particle limit if set
@@ -623,9 +623,9 @@ function createParticles() {
 
     // Create material with texture
     const material = new THREE.MeshBasicMaterial({
-        map: createParticleTexture(particleShape),
+        map: createParticleTexture(window.particleShape),
         transparent: true,
-        opacity: particleBrightness,
+        opacity: window.particleBrightness,
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
         depthWrite: false
@@ -705,13 +705,13 @@ function createParticles() {
                     radiusVariation = 0.5 + seededRandom(seed * 3) * 0.5;
                 }
 
-                offsetX = clusterRadius * Math.sin(phi) * Math.cos(theta) * radiusVariation;
-                offsetY = clusterRadius * Math.sin(phi) * Math.sin(theta) * radiusVariation;
-                offsetZ = clusterRadius * Math.cos(phi) * radiusVariation;
+                offsetX = window.clusterRadius * Math.sin(phi) * Math.cos(theta) * radiusVariation;
+                offsetY = window.clusterRadius * Math.sin(phi) * Math.sin(theta) * radiusVariation;
+                offsetZ = window.clusterRadius * Math.cos(phi) * radiusVariation;
             }
 
             // Calculate distance from center
-            const actualDistance = Math.sqrt(offsetX * offsetX + offsetY * offsetY + offsetZ * offsetZ) / clusterRadius;
+            const actualDistance = Math.sqrt(offsetX * offsetX + offsetY * offsetY + offsetZ * offsetZ) / window.clusterRadius;
 
             // Sub-particle data with orbit properties for animation
             const subParticle = {
@@ -738,7 +738,7 @@ function createParticles() {
                 centerPos.y + offsetY,
                 centerPos.z + offsetZ
             );
-            dummy.scale.setScalar(particleSize * subParticleScale);
+            dummy.scale.setScalar(window.particleSize * subParticleScale);
             dummy.updateMatrix();
 
             particleSystem.setMatrixAt(instanceIndex, dummy.matrix);
@@ -927,9 +927,9 @@ function highlightCurrentFile() {
             // Make playing file bigger and brighter
             if (isCurrentFile) {
                 if (subParticle.isCenterParticle) {
-                    scale.setScalar(particleSize * subParticleScale * 2.0); // 2x larger
+                    scale.setScalar(window.particleSize * subParticleScale * 2.0); // 2x larger
                 } else {
-                    scale.setScalar(particleSize * subParticleScale * 1.5); // 1.5x larger
+                    scale.setScalar(window.particleSize * subParticleScale * 1.5); // 1.5x larger
                 }
 
                 // Brighter color
@@ -939,7 +939,7 @@ function highlightCurrentFile() {
                 particleSystem.setColorAt(idx, color);
             } else {
                 // Reset to normal size
-                scale.setScalar(particleSize * subParticleScale);
+                scale.setScalar(window.particleSize * subParticleScale);
             }
 
             // Update matrix
@@ -1007,35 +1007,35 @@ function updateParticleAnimation(deltaTime) {
         let clusterOffsetX = 0, clusterOffsetY = 0, clusterOffsetZ = 0;
 
         if (motionEnabled) {
-            switch (motionMode) {
+            switch (window.motionMode) {
                 case 'collective':
-                    clusterOffsetX = Math.sin(clusterTime * orbitSpeed * 1000) * orbitRadius;
-                    clusterOffsetY = Math.sin(clusterTime * orbitSpeed * 1500) * orbitRadius * 0.5;
-                    clusterOffsetZ = Math.cos(clusterTime * orbitSpeed * 1000) * orbitRadius;
+                    clusterOffsetX = Math.sin(clusterTime * window.orbitSpeed * 1000) * window.orbitRadius;
+                    clusterOffsetY = Math.sin(clusterTime * window.orbitSpeed * 1500) * window.orbitRadius * 0.5;
+                    clusterOffsetZ = Math.cos(clusterTime * window.orbitSpeed * 1000) * window.orbitRadius;
                     break;
 
                 case 'individual':
                     const seed = clusterIndex * 1000;
-                    clusterOffsetX = Math.sin(clusterTime * orbitSpeed * 1000 + seed) * orbitRadius;
-                    clusterOffsetY = Math.cos(clusterTime * orbitSpeed * 800 + seed * 1.5) * orbitRadius * 0.7;
-                    clusterOffsetZ = Math.sin(clusterTime * orbitSpeed * 1200 + seed * 0.5) * orbitRadius;
+                    clusterOffsetX = Math.sin(clusterTime * window.orbitSpeed * 1000 + seed) * window.orbitRadius;
+                    clusterOffsetY = Math.cos(clusterTime * window.orbitSpeed * 800 + seed * 1.5) * window.orbitRadius * 0.7;
+                    clusterOffsetZ = Math.sin(clusterTime * window.orbitSpeed * 1200 + seed * 0.5) * window.orbitRadius;
                     break;
 
                 case 'random':
-                    const t = clusterTime * orbitSpeed * 500;
+                    const t = clusterTime * window.orbitSpeed * 500;
                     const noise1 = Math.sin(t + clusterIndex) * Math.cos(t * 1.3 + clusterIndex * 2);
                     const noise2 = Math.sin(t * 0.7 + clusterIndex * 3) * Math.cos(t * 1.1);
                     const noise3 = Math.cos(t * 0.9 + clusterIndex * 1.5) * Math.sin(t * 1.2);
-                    clusterOffsetX = noise1 * orbitRadius;
-                    clusterOffsetY = noise2 * orbitRadius;
-                    clusterOffsetZ = noise3 * orbitRadius;
+                    clusterOffsetX = noise1 * window.orbitRadius;
+                    clusterOffsetY = noise2 * window.orbitRadius;
+                    clusterOffsetZ = noise3 * window.orbitRadius;
                     break;
 
                 case 'audio':
                     if (audioReactivityEnabled && currentAudioAmplitude > 0) {
-                        const audioScale = currentAudioAmplitude * audioReactivityStrength * 0.1;
+                        const audioScale = currentAudioAmplitude * window.audioReactivityStrength * 0.1;
                         clusterOffsetX = Math.sin(clusterIndex * 0.5) * audioScale;
-                        clusterOffsetY = currentAudioAmplitude * audioReactivityStrength * 0.5;
+                        clusterOffsetY = currentAudioAmplitude * window.audioReactivityStrength * 0.5;
                         clusterOffsetZ = Math.cos(clusterIndex * 0.5) * audioScale;
                     }
                     break;
@@ -1063,11 +1063,11 @@ function updateParticleAnimation(deltaTime) {
             let z = cluster.centerPosition.z + clusterOffsetZ;
 
             // Individual sub-particle motion (within cluster)
-            if (motionEnabled && motionMode !== 'none') {
+            if (motionEnabled && window.motionMode !== 'none') {
                 const orbitTime = clusterTime * 0.0001;
                 const phase = subParticle.orbitPhase;
 
-                if (motionMode === 'individual' || motionMode === 'random') {
+                if (window.motionMode === 'individual' || window.motionMode === 'random') {
                     const axis = subParticle.randomOrbitAxis;
                     const speed = subParticle.randomOrbitSpeed * orbitTime;
 
@@ -1097,15 +1097,15 @@ function updateParticleAnimation(deltaTime) {
 
             // Audio reactivity - expand/contract clusters
             if (audioReactivityEnabled && currentAudioAmplitude > 0 && !subParticle.isCenterParticle) {
-                const audioExpansion = 1.0 + currentAudioAmplitude * clusterSpreadOnAudio * 0.01;
+                const audioExpansion = 1.0 + currentAudioAmplitude * window.clusterSpreadOnAudio * 0.01;
 
                 let expansionFactor = audioExpansion;
 
-                if (audioFrequencyMode === 'bass' && bassAmplitude > 0) {
-                    expansionFactor = 1.0 + bassAmplitude * clusterSpreadOnAudio * 0.01 *
+                if (window.audioFrequencyMode === 'bass' && bassAmplitude > 0) {
+                    expansionFactor = 1.0 + bassAmplitude * window.clusterSpreadOnAudio * 0.01 *
                                      (1.0 + subParticle.distanceFromCenter);
-                } else if (audioFrequencyMode === 'highs' && highsAmplitude > 0) {
-                    expansionFactor = 1.0 + highsAmplitude * clusterSpreadOnAudio * 0.01 *
+                } else if (window.audioFrequencyMode === 'highs' && highsAmplitude > 0) {
+                    expansionFactor = 1.0 + highsAmplitude * window.clusterSpreadOnAudio * 0.01 *
                                      (2.0 - subParticle.distanceFromCenter);
                 }
 
@@ -1122,14 +1122,14 @@ function updateParticleAnimation(deltaTime) {
             dummy.position.set(x, y, z);
 
             // Calculate scale with various effects
-            let scale = particleSize * subParticleScale;
+            let scale = window.particleSize * subParticleScale;
 
             // Audio pulse effect
             if (audioReactivityEnabled && audioPlaying) {
                 const isCurrentFile = currentFileId && cluster.file.id === currentFileId;
 
                 if (isCurrentFile) {
-                    scale *= (1.0 + currentAudioAmplitude * audioReactivityStrength * 0.01);
+                    scale *= (1.0 + currentAudioAmplitude * window.audioReactivityStrength * 0.01);
                 } else {
                     scale *= (1.0 + currentAudioAmplitude * globalAudioReactivity * 0.005);
                 }
@@ -1345,7 +1345,7 @@ function updateAudioAmplitude() {
     highsAmplitude = Math.min((highsAvg / 128) * 3, 5);
 
     // Set overall amplitude based on selected frequency mode
-    switch (audioFrequencyMode) {
+    switch (window.audioFrequencyMode) {
         case 'bass':
             currentAudioAmplitude = bassAmplitude;
             break;
@@ -1395,7 +1395,7 @@ function cleanupAudioAnalysis() {
 function setMotionMode(mode) {
     const validModes = ['none', 'collective', 'individual', 'random', 'audio', 'wave'];
     if (validModes.includes(mode)) {
-        motionMode = mode;
+        window.motionMode = mode;
         console.log(`🎭 Motion mode set to: ${mode}`);
     }
 }
@@ -1500,16 +1500,8 @@ function loadOptionsMenu() {
  * Wires up options menu controls to Galaxy View variables and functions
  */
 function wireUpMenuControls() {
-    // Expose variables directly to window (for inline event handlers in HTML)
-    window.audioReactivityStrength = audioReactivityStrength;
-    window.audioFrequencyMode = audioFrequencyMode;
-    window.moveSpeed = moveSpeed;
-    window.lookSensitivity = lookSensitivity;
-    window.particleSize = particleSize;
-    window.particleBrightness = particleBrightness;
-    window.particlesPerCluster = particlesPerCluster;
-    window.clusterRadius = clusterRadius;
-    window.particleShape = particleShape;
+    // Variables are already exposed to window (see variable declarations above)
+    // No need to reassign them here - they're already window.audioReactivityStrength etc.
 
     // Expose recreateParticles to window
     window.recreateParticles = () => recreateParticles();
@@ -1739,17 +1731,17 @@ function wireUpMenuControls() {
 
     // Motion speed/radius controls
     window.updateMotionSpeed = function(value) {
-        orbitSpeed = parseFloat(value) * 0.000001;  // Convert slider value to orbit speed
+        window.orbitSpeed = parseFloat(value) * 0.000001;  // Convert slider value to orbit speed
         const speedDisplay = document.getElementById('galaxyMotionSpeedValue');
         if (speedDisplay) speedDisplay.textContent = value;
         console.log(`🔄 Motion speed: ${value}`);
     };
 
     window.updateMotionRadius = function(value) {
-        orbitRadius = parseFloat(value);
+        window.orbitRadius = parseFloat(value);
         const radiusDisplay = document.getElementById('galaxyMotionRadiusValue');
         if (radiusDisplay) radiusDisplay.textContent = value;
-        console.log(`🔄 Motion radius: ${orbitRadius}`);
+        console.log(`🔄 Motion radius: ${window.orbitRadius}`);
     };
 
     // Stem offset (stub - not applicable to Galaxy View)
@@ -1880,8 +1872,8 @@ function onMouseMove(event) {
         const movementX = event.movementX || 0;
         const movementY = event.movementY || 0;
 
-        yaw -= movementX * lookSensitivity;
-        pitch -= movementY * lookSensitivity;
+        yaw -= movementX * window.lookSensitivity;
+        pitch -= movementY * window.lookSensitivity;
 
         // Limit pitch to prevent flipping
         pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
@@ -1953,7 +1945,7 @@ function updateMovement(delta) {
 
     // Check if Shift is held (sprint mode)
     const isSprinting = keys['ShiftLeft'] || keys['ShiftRight'];
-    const currentSpeed = isSprinting ? moveSpeed * 2.5 : moveSpeed;
+    const currentSpeed = isSprinting ? window.moveSpeed * 2.5 : window.moveSpeed;
 
     // WASD movement
     if (keys['KeyW']) velocity.add(forward);

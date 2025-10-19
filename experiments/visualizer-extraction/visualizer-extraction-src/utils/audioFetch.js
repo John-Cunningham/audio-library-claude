@@ -22,15 +22,18 @@ export async function fetchAudioWithRetry(url, maxRetries = 3, context = 'AudioF
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            console.log(`[${context}] 📡 Fetch attempt ${attempt}/${maxRetries} for ${filename}`);
+            // Only log for main player, not mini waveforms (reduce spam)
+            if (context !== 'MiniWaveform' || attempt > 1) {
+                console.log(`[${context}] 📡 Fetch attempt ${attempt}/${maxRetries} for ${filename}`);
+            }
 
             // Try fetch with cache bypass on retries
+            // CRITICAL: 5 second timeout (not 30!) to prevent blocking
             const response = await fetch(url, {
                 mode: 'cors',
                 cache: attempt > 1 ? 'reload' : 'default',
                 credentials: 'omit',
-                // Add signal for timeout (30 seconds)
-                signal: AbortSignal.timeout(30000)
+                signal: AbortSignal.timeout(5000) // 5 seconds, not 30!
             });
 
             if (!response.ok) {
@@ -38,25 +41,37 @@ export async function fetchAudioWithRetry(url, maxRetries = 3, context = 'AudioF
             }
 
             const blob = await response.blob();
-            console.log(`[${context}] ✅ Successfully fetched ${filename} (attempt ${attempt})`);
+
+            // Only log success for main player, not mini waveforms
+            if (context !== 'MiniWaveform') {
+                console.log(`[${context}] ✅ Successfully fetched ${filename} (attempt ${attempt})`);
+            }
             return blob;
 
         } catch (error) {
             lastError = error;
 
-            // Log different messages for different error types
-            if (error.name === 'AbortError') {
-                console.warn(`[${context}] ⏱️ Fetch timeout on attempt ${attempt}`);
-            } else if (error.message.includes('QUIC')) {
-                console.warn(`[${context}] 🔌 QUIC protocol error on attempt ${attempt} (known browser issue)`);
-            } else {
-                console.warn(`[${context}] ⚠️ Fetch attempt ${attempt} failed:`, error.message);
+            // Only log errors for main player or on final attempt
+            if (context !== 'MiniWaveform' || attempt === maxRetries) {
+                if (error.name === 'AbortError') {
+                    console.warn(`[${context}] ⏱️ Fetch timeout on attempt ${attempt}`);
+                } else if (error.message.includes('QUIC')) {
+                    console.warn(`[${context}] 🔌 QUIC protocol error on attempt ${attempt}`);
+                } else {
+                    console.warn(`[${context}] ⚠️ Fetch attempt ${attempt} failed:`, error.message);
+                }
             }
 
-            // Wait before retry (exponential backoff: 1s, 2s, 4s...)
+            // Wait before retry - SHORTER delays to prevent blocking
             if (attempt < maxRetries) {
-                const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-                console.log(`[${context}] 🔄 Retrying in ${delay}ms...`);
+                // Mini waveforms: very fast retry (200ms, 400ms)
+                // Main player: normal retry (500ms, 1000ms)
+                const baseDelay = context === 'MiniWaveform' ? 200 : 500;
+                const delay = baseDelay * attempt;
+
+                if (context !== 'MiniWaveform') {
+                    console.log(`[${context}] 🔄 Retrying in ${delay}ms...`);
+                }
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
         }

@@ -86,13 +86,15 @@ export function renderAll(files) {
             console.error('[MiniWaveform] Error:', err);
         });
 
-        // Load audio with retry logic to handle QUIC protocol errors
-        loadAudioIntoWaveSurfer(miniWave, file.file_url, 'MiniWaveform')
-            .catch(err => {
-                // Silently ignore AbortError - these are expected during rapid re-renders
-                if (err.name === 'AbortError') return;
-                console.error('[MiniWaveform] Failed to load waveform:', err);
-            });
+        // Load audio with minimal retry for mini waveforms (they're not critical)
+        // Just try direct load - if it fails, waveform won't render but app continues
+        miniWave.load(file.file_url).catch(err => {
+            // Silently ignore all errors for mini waveforms - they're just decorative
+            if (err.name !== 'AbortError') {
+                // Only log on console if you want to debug
+                // console.warn('[MiniWaveform] Failed to load:', file.name);
+            }
+        });
 
         // Make it interactive - click to play from that position
         miniWave.on('click', (relativeX) => {

@@ -136,6 +136,9 @@ export class GalaxyView {
         // Raycaster for click detection
         this.raycaster = new THREE.Raycaster();
 
+        // Add crosshair
+        this.addCrosshair();
+
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         this.scene.add(ambientLight);
@@ -150,6 +153,43 @@ export class GalaxyView {
 
         // Stars background
         this.addStarsBackground();
+    }
+
+    /**
+     * Add crosshair at center of screen
+     */
+    addCrosshair() {
+        const crosshairSize = 20;
+        const crosshairThickness = 2;
+        const crosshairColor = 0xffffff;
+        const crosshairOpacity = 0.6;
+
+        // Create crosshair geometry
+        const geometry = new THREE.BufferGeometry();
+        const vertices = new Float32Array([
+            // Horizontal line
+            -crosshairSize, 0, 0,
+            crosshairSize, 0, 0,
+            // Vertical line
+            0, -crosshairSize, 0,
+            0, crosshairSize, 0,
+        ]);
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+
+        const material = new THREE.LineBasicMaterial({
+            color: crosshairColor,
+            opacity: crosshairOpacity,
+            transparent: true,
+            linewidth: crosshairThickness
+        });
+
+        const crosshair = new THREE.LineSegments(geometry, material);
+
+        // Position crosshair in front of camera (moves with camera)
+        this.crosshair = crosshair;
+        this.camera.add(this.crosshair);
+        this.crosshair.position.set(0, 0, -50); // 50 units in front of camera
     }
 
     /**
@@ -684,7 +724,22 @@ export class GalaxyView {
 
                 // Update instance matrix
                 dummy.position.set(finalX, finalY, finalZ);
-                dummy.scale.setScalar(this.config.particleSize * (isPlaying ? 1.2 : 1.0));
+
+                // Audio-reactive particle size
+                let sizeMultiplier = 1.0;
+                if (isPlaying) {
+                    // Playing file gets base 1.2x + audio reactive scaling
+                    if (this.config.audioReactivity && this.currentAudioAmplitude > 0) {
+                        sizeMultiplier = 1.2 + (this.currentAudioAmplitude * 0.4); // More pronounced pulsing
+                    } else {
+                        sizeMultiplier = 1.2;
+                    }
+                } else if (this.config.audioReactivity && this.currentAudioAmplitude > 0) {
+                    // Non-playing files get subtle pulsing
+                    sizeMultiplier = 1.0 + (this.currentAudioAmplitude * 0.1);
+                }
+
+                dummy.scale.setScalar(this.config.particleSize * sizeMultiplier);
                 dummy.updateMatrix();
                 this.particleSystem.setMatrixAt(subParticle.instanceIndex, dummy.matrix);
             });
@@ -827,6 +882,210 @@ export class GalaxyView {
     setLookSensitivity(sensitivity) {
         this.config.lookSensitivity = sensitivity;
         console.log('👀 Look sensitivity set to:', sensitivity);
+    }
+
+    /**
+     * Save current configuration as a preset
+     * @param {string} name - Preset name
+     */
+    savePreset(name) {
+        if (!name || !name.trim()) {
+            console.warn('⚠️ Preset name is required');
+            return false;
+        }
+
+        const presetData = {
+            // Particle settings
+            particleSize: this.config.particleSize,
+            particlesPerCluster: this.config.particlesPerCluster,
+            clusterRadius: this.config.clusterRadius,
+
+            // Motion settings
+            moveSpeed: this.config.moveSpeed,
+            lookSensitivity: this.config.lookSensitivity,
+            orbitSpeed: this.config.orbitSpeed,
+            orbitRadius: this.config.orbitRadius,
+
+            // Visual settings
+            visibilityDistance: this.config.visibilityDistance,
+            bloomStrength: this.config.bloomStrength,
+
+            // Audio settings
+            audioReactivity: this.config.audioReactivity,
+
+            // Visualization modes
+            colorMode: this.config.colorMode,
+            xAxisMode: this.config.xAxisMode,
+            yAxisMode: this.config.yAxisMode,
+            zAxisMode: this.config.zAxisMode
+        };
+
+        localStorage.setItem(`galaxyPreset_${name}`, JSON.stringify(presetData));
+        console.log(`💾 Saved preset: ${name}`, presetData);
+
+        return true;
+    }
+
+    /**
+     * Load a saved preset
+     * @param {string} name - Preset name
+     */
+    loadPreset(name) {
+        if (!name) {
+            console.warn('⚠️ Preset name is required');
+            return false;
+        }
+
+        const saved = localStorage.getItem(`galaxyPreset_${name}`);
+        if (!saved) {
+            console.warn(`⚠️ Preset "${name}" not found`);
+            return false;
+        }
+
+        try {
+            const presetData = JSON.parse(saved);
+            console.log(`📂 Loading preset: ${name}`, presetData);
+
+            // Apply particle settings
+            if (presetData.particleSize !== undefined) {
+                this.config.particleSize = presetData.particleSize;
+            }
+            if (presetData.particlesPerCluster !== undefined) {
+                this.config.particlesPerCluster = presetData.particlesPerCluster;
+            }
+            if (presetData.clusterRadius !== undefined) {
+                this.config.clusterRadius = presetData.clusterRadius;
+            }
+
+            // Apply motion settings
+            if (presetData.moveSpeed !== undefined) {
+                this.config.moveSpeed = presetData.moveSpeed;
+            }
+            if (presetData.lookSensitivity !== undefined) {
+                this.config.lookSensitivity = presetData.lookSensitivity;
+            }
+            if (presetData.orbitSpeed !== undefined) {
+                this.config.orbitSpeed = presetData.orbitSpeed;
+            }
+            if (presetData.orbitRadius !== undefined) {
+                this.config.orbitRadius = presetData.orbitRadius;
+            }
+
+            // Apply visual settings
+            if (presetData.visibilityDistance !== undefined) {
+                this.config.visibilityDistance = presetData.visibilityDistance;
+                if (this.scene && this.scene.fog) {
+                    this.scene.fog.far = presetData.visibilityDistance;
+                }
+            }
+            if (presetData.bloomStrength !== undefined) {
+                this.config.bloomStrength = presetData.bloomStrength;
+                if (this.bloomPass) {
+                    this.bloomPass.strength = presetData.bloomStrength;
+                }
+            }
+
+            // Apply audio settings
+            if (presetData.audioReactivity !== undefined) {
+                this.config.audioReactivity = presetData.audioReactivity;
+            }
+
+            // Apply visualization modes (these require particle recreation)
+            let needsRecreation = false;
+            if (presetData.colorMode && presetData.colorMode !== this.config.colorMode) {
+                this.config.colorMode = presetData.colorMode;
+                needsRecreation = true;
+            }
+            if (presetData.xAxisMode && presetData.xAxisMode !== this.config.xAxisMode) {
+                this.config.xAxisMode = presetData.xAxisMode;
+                needsRecreation = true;
+            }
+            if (presetData.yAxisMode && presetData.yAxisMode !== this.config.yAxisMode) {
+                this.config.yAxisMode = presetData.yAxisMode;
+                needsRecreation = true;
+            }
+            if (presetData.zAxisMode && presetData.zAxisMode !== this.config.zAxisMode) {
+                this.config.zAxisMode = presetData.zAxisMode;
+                needsRecreation = true;
+            }
+
+            // Recreate particles if visualization modes changed
+            if (needsRecreation) {
+                this.createParticles();
+            }
+
+            console.log(`✅ Loaded preset: ${name}`);
+            return true;
+
+        } catch (error) {
+            console.error(`❌ Error loading preset "${name}":`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Delete a saved preset
+     * @param {string} name - Preset name
+     */
+    deletePreset(name) {
+        if (!name) {
+            console.warn('⚠️ Preset name is required');
+            return false;
+        }
+
+        const key = `galaxyPreset_${name}`;
+        if (!localStorage.getItem(key)) {
+            console.warn(`⚠️ Preset "${name}" not found`);
+            return false;
+        }
+
+        localStorage.removeItem(key);
+        console.log(`🗑️ Deleted preset: ${name}`);
+        return true;
+    }
+
+    /**
+     * Get list of all saved presets
+     * @returns {Array<string>} Array of preset names
+     */
+    getPresetList() {
+        const presets = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('galaxyPreset_')) {
+                const name = key.replace('galaxyPreset_', '');
+                presets.push(name);
+            }
+        }
+        return presets.sort();
+    }
+
+    /**
+     * Populate preset dropdown with saved presets
+     * @param {string} dropdownId - ID of the select element
+     */
+    populatePresetDropdown(dropdownId = 'presetSelect') {
+        const dropdown = document.getElementById(dropdownId);
+        if (!dropdown) {
+            console.warn(`⚠️ Dropdown element #${dropdownId} not found`);
+            return;
+        }
+
+        // Clear existing options except the first (placeholder)
+        dropdown.innerHTML = '<option value="">-- Select Preset --</option>';
+
+        // Get all presets
+        const presets = this.getPresetList();
+
+        // Add preset options
+        presets.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            dropdown.appendChild(option);
+        });
+
+        console.log(`📋 Populated preset dropdown with ${presets.length} presets`);
     }
 
     /**

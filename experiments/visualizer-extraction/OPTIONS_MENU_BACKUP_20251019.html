@@ -1,0 +1,689 @@
+<!-- === OPTIONS MENU UI MODULE === -->
+<!-- Collapsible options panel for controlling visualization settings -->
+<!-- Can be integrated into existing UI or used standalone -->
+
+<!-- STYLES -->
+<style>
+    /* === Galaxy Options Menu Styles === */
+    .galaxy-options-menu {
+        position: fixed;
+        right: 20px;
+        top: 20px;
+        width: 320px;
+        max-height: calc(100vh - 40px);
+        background: linear-gradient(135deg, rgba(15, 15, 25, 0.95), rgba(25, 20, 40, 0.95));
+        border: 1px solid rgba(102, 126, 234, 0.3);
+        border-radius: 12px;
+        overflow: hidden;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        transition: all 0.3s ease;
+    }
+
+    .galaxy-options-menu.collapsed {
+        width: 60px;
+        height: 60px;
+    }
+
+    /* Header with toggle button */
+    .galaxy-menu-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 15px;
+        background: rgba(102, 126, 234, 0.1);
+        border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .galaxy-menu-header:hover {
+        background: rgba(102, 126, 234, 0.15);
+    }
+
+    .galaxy-menu-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .galaxy-menu-toggle {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+        transition: transform 0.3s;
+    }
+
+    .galaxy-menu-header.collapsed .galaxy-menu-toggle {
+        transform: rotate(-90deg);
+    }
+
+    /* Menu content container */
+    .galaxy-menu-content {
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+        padding: 10px;
+        opacity: 1;
+        transition: opacity 0.3s;
+    }
+
+    .galaxy-menu-content.collapsed {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    /* Collapsible sections */
+    .galaxy-menu-section {
+        margin-bottom: 15px;
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .galaxy-section-header {
+        padding: 10px 12px;
+        background: rgba(102, 126, 234, 0.05);
+        cursor: pointer;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .galaxy-section-header:hover {
+        background: rgba(102, 126, 234, 0.1);
+    }
+
+    .galaxy-section-toggle {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.5);
+        transition: transform 0.3s;
+    }
+
+    .galaxy-section-header.collapsed .galaxy-section-toggle {
+        transform: rotate(-90deg);
+    }
+
+    .galaxy-section-content {
+        padding: 10px 12px;
+        max-height: 500px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .galaxy-section-content.collapsed {
+        max-height: 0;
+        padding: 0 12px;
+    }
+
+    /* Form controls */
+    .galaxy-control-row {
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .galaxy-control-label {
+        flex: 1;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .galaxy-control-value {
+        font-size: 10px;
+        color: rgba(102, 126, 234, 0.8);
+        min-width: 30px;
+        text-align: right;
+    }
+
+    /* Sliders */
+    .galaxy-slider {
+        flex: 1;
+        -webkit-appearance: none;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+        outline: none;
+    }
+
+    .galaxy-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        background: #667eea;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    .galaxy-slider::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        background: #667eea;
+        border-radius: 50%;
+        cursor: pointer;
+        border: none;
+    }
+
+    /* Select dropdowns */
+    .galaxy-select {
+        flex: 1;
+        padding: 6px 8px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(102, 126, 234, 0.3);
+        border-radius: 4px;
+        color: #fff;
+        font-size: 11px;
+        outline: none;
+        cursor: pointer;
+    }
+
+    .galaxy-select:hover {
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .galaxy-select:focus {
+        border-color: #667eea;
+    }
+
+    /* Buttons */
+    .galaxy-button {
+        padding: 8px 12px;
+        background: rgba(102, 126, 234, 0.2);
+        border: 1px solid rgba(102, 126, 234, 0.4);
+        border-radius: 6px;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        width: 100%;
+    }
+
+    .galaxy-button:hover {
+        background: rgba(102, 126, 234, 0.3);
+        border-color: #667eea;
+        transform: translateY(-1px);
+    }
+
+    .galaxy-button:active {
+        transform: translateY(0);
+    }
+
+    .galaxy-button.active {
+        background: rgba(102, 126, 234, 0.4);
+        border-color: #667eea;
+    }
+
+    /* Button group */
+    .galaxy-button-group {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+
+    .galaxy-button-group .galaxy-button {
+        flex: 1;
+    }
+
+    /* Scrollbar styling */
+    .galaxy-menu-content::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .galaxy-menu-content::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .galaxy-menu-content::-webkit-scrollbar-thumb {
+        background: rgba(102, 126, 234, 0.3);
+        border-radius: 3px;
+    }
+
+    .galaxy-menu-content::-webkit-scrollbar-thumb:hover {
+        background: rgba(102, 126, 234, 0.5);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .galaxy-options-menu {
+            width: calc(100vw - 40px);
+            right: 20px;
+        }
+    }
+</style>
+
+<!-- HTML STRUCTURE -->
+<div id="galaxyOptionsMenu" class="galaxy-options-menu">
+    <!-- Header -->
+    <div class="galaxy-menu-header" onclick="toggleGalaxyMenu()">
+        <div class="galaxy-menu-title">
+            <span>🌌</span>
+            <span id="galaxyMenuTitleText">Galaxy Options</span>
+        </div>
+        <div class="galaxy-menu-toggle">▼</div>
+    </div>
+
+    <!-- Content -->
+    <div class="galaxy-menu-content" id="galaxyMenuContent">
+
+        <!-- Motion Section -->
+        <div class="galaxy-menu-section">
+            <div class="galaxy-section-header" onclick="toggleSection('motion')">
+                <span>Motion & Animation</span>
+                <span class="galaxy-section-toggle">▼</span>
+            </div>
+            <div class="galaxy-section-content" id="motionSection">
+                <!-- Motion Mode -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">Motion Mode</label>
+                    <select class="galaxy-select" id="motionModeSelect" onchange="setMotionMode(this.value)">
+                        <option value="none">None (Static)</option>
+                        <option value="collective" selected>Collective</option>
+                        <option value="individual">Individual</option>
+                        <option value="random">Random</option>
+                        <option value="audio">Audio Driven</option>
+                        <option value="wave">Wave</option>
+                    </select>
+                </div>
+
+                <!-- Orbit Speed -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">
+                        Speed
+                        <span class="galaxy-control-value" id="orbitSpeedValue">1.5</span>
+                    </label>
+                    <input type="range" class="galaxy-slider" id="orbitSpeedSlider"
+                           min="0" max="10" step="0.1" value="1.5"
+                           oninput="updateOrbitSpeed(this.value)">
+                </div>
+
+                <!-- Orbit Radius -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">
+                        Radius
+                        <span class="galaxy-control-value" id="orbitRadiusValue">80</span>
+                    </label>
+                    <input type="range" class="galaxy-slider" id="orbitRadiusSlider"
+                           min="0" max="200" step="5" value="80"
+                           oninput="updateOrbitRadius(this.value)">
+                </div>
+
+                <!-- Toggle Motion Button -->
+                <button class="galaxy-button active" id="motionToggleBtn" onclick="toggleMotionButton()">
+                    Motion: ON
+                </button>
+            </div>
+        </div>
+
+        <!-- Audio Reactivity Section -->
+        <div class="galaxy-menu-section">
+            <div class="galaxy-section-header" onclick="toggleSection('audio')">
+                <span>Audio Reactivity</span>
+                <span class="galaxy-section-toggle">▼</span>
+            </div>
+            <div class="galaxy-section-content" id="audioSection">
+                <!-- Frequency Mode -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">Frequency</label>
+                    <select class="galaxy-select" id="freqModeSelect" onchange="setAudioFrequencyMode(this.value)">
+                        <option value="all" selected>All</option>
+                        <option value="bass">Bass</option>
+                        <option value="mids">Mids</option>
+                        <option value="highs">Highs</option>
+                    </select>
+                </div>
+
+                <!-- Reactivity Strength -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">
+                        Strength
+                        <span class="galaxy-control-value" id="reactivityValue">40</span>
+                    </label>
+                    <input type="range" class="galaxy-slider" id="reactivitySlider"
+                           min="0.5" max="200" step="0.5" value="40"
+                           oninput="updateReactivity(this.value)">
+                </div>
+
+                <!-- Cluster Spread -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">
+                        Spread
+                        <span class="galaxy-control-value" id="spreadValue">20</span>
+                    </label>
+                    <input type="range" class="galaxy-slider" id="spreadSlider"
+                           min="0.5" max="200" step="0.5" value="20"
+                           oninput="updateSpread(this.value)">
+                </div>
+
+                <!-- Toggle Audio Button -->
+                <button class="galaxy-button active" id="audioToggleBtn" onclick="toggleAudioButton()">
+                    Audio React: ON
+                </button>
+            </div>
+        </div>
+
+        <!-- Visual Settings Section -->
+        <div class="galaxy-menu-section">
+            <div class="galaxy-section-header collapsed" onclick="toggleSection('visual')">
+                <span>Visual Settings</span>
+                <span class="galaxy-section-toggle">▼</span>
+            </div>
+            <div class="galaxy-section-content collapsed" id="visualSection">
+                <!-- Particle Size -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">
+                        Size
+                        <span class="galaxy-control-value" id="sizeValue">5</span>
+                    </label>
+                    <input type="range" class="galaxy-slider" id="sizeSlider"
+                           min="1" max="20" step="0.1" value="5"
+                           oninput="updateParticleSize(this.value)">
+                </div>
+
+                <!-- Brightness -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">
+                        Brightness
+                        <span class="galaxy-control-value" id="brightnessValue">0.8</span>
+                    </label>
+                    <input type="range" class="galaxy-slider" id="brightnessSlider"
+                           min="0.1" max="10.0" step="0.05" value="0.1"
+                           oninput="updateBrightness(this.value)">
+                </div>
+
+                <!-- Particle Shape -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">Shape</label>
+                    <select class="galaxy-select" id="shapeSelect" onchange="updateParticleShape(this.value)">
+                        <option value="circle" selected>Circle</option>
+                        <option value="square">Square</option>
+                        <option value="disc">Disc</option>
+                        <option value="ring">Ring</option>
+                    </select>
+                </div>
+
+                <!-- Cluster Shape -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">Cluster</label>
+                    <select class="galaxy-select" id="clusterShapeSelect" onchange="updateClusterShape(this.value)">
+                        <option value="default" selected>Organic</option>
+                        <option value="sphere">Sphere</option>
+                        <option value="spiked">Spiked</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Axis Configuration Section -->
+        <div class="galaxy-menu-section">
+            <div class="galaxy-section-header collapsed" onclick="toggleSection('axes')">
+                <span>Axis Configuration</span>
+                <span class="galaxy-section-toggle">▼</span>
+            </div>
+            <div class="galaxy-section-content collapsed" id="axesSection">
+                <!-- Color Mode -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">Color</label>
+                    <select class="galaxy-select" id="colorModeSelect" onchange="updateColorMode(this.value)">
+                        <option value="tags" selected>Tags</option>
+                        <option value="key">Musical Key</option>
+                        <option value="bpm">BPM</option>
+                        <option value="length">Length</option>
+                    </select>
+                </div>
+
+                <!-- X Axis -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">X Axis</label>
+                    <select class="galaxy-select" id="xAxisSelect" onchange="updateAxisMode('x', this.value)">
+                        <option value="bpm" selected>BPM</option>
+                        <option value="key">Key</option>
+                        <option value="tags">Tags</option>
+                        <option value="length">Length</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+
+                <!-- Y Axis -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">Y Axis</label>
+                    <select class="galaxy-select" id="yAxisSelect" onchange="updateAxisMode('y', this.value)">
+                        <option value="key" selected>Key</option>
+                        <option value="bpm">BPM</option>
+                        <option value="tags">Tags</option>
+                        <option value="length">Length</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+
+                <!-- Z Axis -->
+                <div class="galaxy-control-row">
+                    <label class="galaxy-control-label">Z Axis</label>
+                    <select class="galaxy-select" id="zAxisSelect" onchange="updateAxisMode('z', this.value)">
+                        <option value="tags" selected>Tags</option>
+                        <option value="bpm">BPM</option>
+                        <option value="key">Key</option>
+                        <option value="length">Length</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions Section -->
+        <div class="galaxy-menu-section">
+            <div class="galaxy-section-header collapsed" onclick="toggleSection('actions')">
+                <span>Actions</span>
+                <span class="galaxy-section-toggle">▼</span>
+            </div>
+            <div class="galaxy-section-content collapsed" id="actionsSection">
+                <div class="galaxy-button-group">
+                    <button class="galaxy-button" onclick="resetCamera()">Reset Camera</button>
+                    <button class="galaxy-button" onclick="recreateParticlesButton()">Rebuild</button>
+                </div>
+                <div class="galaxy-button-group">
+                    <button class="galaxy-button" onclick="savePreset()">Save Preset</button>
+                    <button class="galaxy-button" onclick="loadPreset()">Load Preset</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- JAVASCRIPT -->
+<script>
+// === Galaxy Options Menu JavaScript ===
+
+// Menu state
+let galaxyMenuCollapsed = false;
+let sectionStates = {
+    motion: true,
+    audio: true,
+    visual: false,
+    axes: false,
+    actions: false
+};
+
+/**
+ * Toggle main menu collapse
+ */
+function toggleGalaxyMenu() {
+    const menu = document.getElementById('galaxyOptionsMenu');
+    const header = document.querySelector('.galaxy-menu-header');
+    const content = document.getElementById('galaxyMenuContent');
+    const titleText = document.getElementById('galaxyMenuTitleText');
+
+    galaxyMenuCollapsed = !galaxyMenuCollapsed;
+
+    if (galaxyMenuCollapsed) {
+        menu.classList.add('collapsed');
+        header.classList.add('collapsed');
+        content.classList.add('collapsed');
+        titleText.style.display = 'none';
+    } else {
+        menu.classList.remove('collapsed');
+        header.classList.remove('collapsed');
+        content.classList.remove('collapsed');
+        titleText.style.display = 'inline';
+    }
+}
+
+/**
+ * Toggle section collapse
+ */
+function toggleSection(sectionName) {
+    const header = event.currentTarget;
+    const section = document.getElementById(sectionName + 'Section');
+
+    sectionStates[sectionName] = !sectionStates[sectionName];
+
+    if (sectionStates[sectionName]) {
+        header.classList.remove('collapsed');
+        section.classList.remove('collapsed');
+    } else {
+        header.classList.add('collapsed');
+        section.classList.add('collapsed');
+    }
+}
+
+// === Control Update Functions ===
+// These connect to your main application
+
+function updateOrbitSpeed(value) {
+    orbitSpeed = parseFloat(value) * 0.000001;
+    document.getElementById('orbitSpeedValue').textContent = value;
+}
+
+function updateOrbitRadius(value) {
+    orbitRadius = parseFloat(value);
+    document.getElementById('orbitRadiusValue').textContent = value;
+}
+
+function updateReactivity(value) {
+    audioReactivityStrength = parseFloat(value);
+    document.getElementById('reactivityValue').textContent = value;
+    setAudioReactivity({ strength: audioReactivityStrength });
+}
+
+function updateSpread(value) {
+    clusterSpreadOnAudio = parseFloat(value);
+    document.getElementById('spreadValue').textContent = value;
+    setAudioReactivity({ clusterSpread: clusterSpreadOnAudio });
+}
+
+function updateParticleSize(value) {
+    particleSize = parseFloat(value);
+    document.getElementById('sizeValue').textContent = value;
+    // Trigger particle recreation if needed
+    if (typeof recreateParticles === 'function') {
+        recreateParticles(audioFiles, scene, getCurrentConfig());
+    }
+}
+
+function updateBrightness(value) {
+    particleBrightness = parseFloat(value);
+    document.getElementById('brightnessValue').textContent = value;
+    if (typeof updateBrightness === 'function') {
+        updateBrightness(particleBrightness);
+    }
+}
+
+function updateParticleShape(value) {
+    particleShape = value;
+    // Recreate particles with new shape
+    if (typeof recreateParticles === 'function') {
+        recreateParticles(audioFiles, scene, getCurrentConfig());
+    }
+}
+
+function updateClusterShape(value) {
+    subParticleShape = value;
+    // Recreate particles with new cluster shape
+    if (typeof recreateParticles === 'function') {
+        recreateParticles(audioFiles, scene, getCurrentConfig());
+    }
+}
+
+function updateColorMode(value) {
+    currentColorMode = value;
+    // Recreate particles with new colors
+    if (typeof recreateParticles === 'function') {
+        recreateParticles(audioFiles, scene, getCurrentConfig());
+    }
+}
+
+function updateAxisMode(axis, value) {
+    switch(axis) {
+        case 'x': currentXMode = value; break;
+        case 'y': currentYMode = value; break;
+        case 'z': currentZMode = value; break;
+    }
+    // Recreate particles with new positions
+    if (typeof recreateParticles === 'function') {
+        recreateParticles(audioFiles, scene, getCurrentConfig());
+    }
+}
+
+function toggleMotionButton() {
+    const btn = document.getElementById('motionToggleBtn');
+    const enabled = toggleMotion();
+    btn.textContent = `Motion: ${enabled ? 'ON' : 'OFF'}`;
+    btn.classList.toggle('active', enabled);
+}
+
+function toggleAudioButton() {
+    const btn = document.getElementById('audioToggleBtn');
+    audioReactivityEnabled = !audioReactivityEnabled;
+    btn.textContent = `Audio React: ${audioReactivityEnabled ? 'ON' : 'OFF'}`;
+    btn.classList.toggle('active', audioReactivityEnabled);
+    setAudioReactivity({ enabled: audioReactivityEnabled });
+}
+
+function recreateParticlesButton() {
+    if (typeof recreateParticles === 'function') {
+        recreateParticles(audioFiles, scene, getCurrentConfig());
+    }
+}
+
+// Helper to get current configuration
+function getCurrentConfig() {
+    return {
+        colorMode: currentColorMode || 'tags',
+        xMode: currentXMode || 'bpm',
+        yMode: currentYMode || 'key',
+        zMode: currentZMode || 'tags',
+        xScale: 1.0,
+        yScale: 1.0,
+        zScale: 1.0
+    };
+}
+
+// Initialize menu on load
+window.addEventListener('DOMContentLoaded', () => {
+    // Set initial values from globals
+    if (typeof orbitSpeed !== 'undefined') {
+        document.getElementById('orbitSpeedSlider').value = orbitSpeed * 1000000;
+        document.getElementById('orbitSpeedValue').textContent = orbitSpeed * 1000000;
+    }
+    if (typeof orbitRadius !== 'undefined') {
+        document.getElementById('orbitRadiusSlider').value = orbitRadius;
+        document.getElementById('orbitRadiusValue').textContent = orbitRadius;
+    }
+    if (typeof motionMode !== 'undefined') {
+        document.getElementById('motionModeSelect').value = motionMode;
+    }
+    // ... set other initial values
+});
+
+</script>

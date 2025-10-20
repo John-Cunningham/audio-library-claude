@@ -38,6 +38,222 @@ class GalaxyView {
     }
 
     /**
+     * Populate Galaxy File Browser - File List
+     */
+    populateGalaxyFileList() {
+        const container = document.getElementById('galaxyFileList');
+        if (!container) return;
+
+        const particles = this.particleSystem?.particles || [];
+        const searchFilteredFileIds = window.searchFilteredFileIds || new Set();
+
+        let visibleFiles = [];
+        if (searchFilteredFileIds.size > 0) {
+            visibleFiles = particles.map(p => p.file).filter(f => searchFilteredFileIds.has(f.id));
+        } else {
+            visibleFiles = particles.map(p => p.file);
+        }
+
+        if (visibleFiles.length === 0) {
+            container.innerHTML = '<div style="color: rgba(255,255,255,0.4); font-size: 10px; padding: 8px;">No files loaded</div>';
+            return;
+        }
+
+        visibleFiles.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        let html = '';
+        visibleFiles.forEach(file => {
+            const tags = file.tags_array || file.tags || [];
+            const category = tags.length > 0 ? tags[0] : 'Uncategorized';
+            const color = window.getColorForCategory ? window.getColorForCategory(category) : { hue: 200, sat: 0.5 };
+            const hexColor = `hsl(${color.hue}, ${color.sat * 100}%, 60%)`;
+
+            html += `
+                <div style="display: flex; align-items: center; padding: 4px 6px; margin-bottom: 2px; background: rgba(255,255,255,0.02); border-radius: 3px; cursor: pointer; font-size: 10px; color: rgba(255,255,255,0.9);"
+                     onclick="if(window.loadAudio) window.loadAudio('${file.id}', true);"
+                     onmouseover="this.style.background='rgba(102,126,234,0.2)';"
+                     onmouseout="this.style.background='rgba(255,255,255,0.02)';">
+                    <div style="width: 8px; height: 8px; border-radius: 50%; background: ${hexColor}; margin-right: 6px;"></div>
+                    <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${file.name}</div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    /**
+     * Populate Galaxy File Browser - Tag Legend (Colors section)
+     * Generates color legend directly since tagLegendContent may not exist
+     */
+    populateGalaxyTagLegend() {
+        const container = document.getElementById('galaxyTagLegend');
+        if (!container) return;
+
+        // Get all unique categories from loaded files
+        const audioFiles = window.audioFiles || [];
+        const categories = new Map();
+
+        audioFiles.forEach(file => {
+            const tags = file.tags_array || file.tags || [];
+            const category = tags.length > 0 ? tags[0] : 'Uncategorized';
+            if (!categories.has(category)) {
+                const colorData = window.getColorForCategory ? window.getColorForCategory(category) : { hue: 200, sat: 0.5 };
+                categories.set(category, colorData);
+            }
+        });
+
+        console.log(`📊 Found ${categories.size} categories:`, Array.from(categories.keys()));
+        console.log(`🎨 Color data sample:`, Array.from(categories.entries()).slice(0, 3));
+
+        // Generate HTML for each category
+        let html = '';
+        Array.from(categories.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([category, colorData]) => {
+            const color = `hsl(${colorData.hue}, ${colorData.sat * 100}%, 60%)`;
+            html += `
+                <div class="tag-legend-item" data-category="${category}" style="display: flex; align-items: center; padding: 4px 6px; margin-bottom: 2px; background: rgba(255,255,255,0.02); border-radius: 3px; cursor: pointer; font-size: 10px;">
+                    <div class="tag-legend-color" style="width: 12px; height: 12px; border-radius: 50%; background: ${color}; margin-right: 8px; flex-shrink: 0;"></div>
+                    <div class="tag-legend-name" style="flex: 1; color: rgba(255,255,255,0.9);">${category}</div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+
+        // Add click handlers to make categories toggleable
+        const items = container.querySelectorAll('.tag-legend-item');
+        items.forEach(item => {
+            const category = item.dataset.category;
+            if (!category) return;
+
+            const colorDot = item.querySelector('.tag-legend-color');
+            const nameDiv = item.querySelector('.tag-legend-name');
+
+            if (colorDot && nameDiv) {
+                // Create toggle function for both dot and name
+                const toggleVisibility = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    if (window.hiddenCategories.has(category)) {
+                        // Show category
+                        window.hiddenCategories.delete(category);
+                        colorDot.style.opacity = '1';
+                        colorDot.style.filter = 'none';
+                    } else {
+                        // Hide category
+                        window.hiddenCategories.add(category);
+                        colorDot.style.opacity = '0.3';
+                        colorDot.style.filter = 'grayscale(100%)';
+                    }
+
+                    // Update main legend too (sync visual state)
+                    const mainLegendItems = document.querySelectorAll('#tagLegendContent .tag-legend-item');
+                    mainLegendItems.forEach(mainItem => {
+                        if (mainItem.dataset.category === category) {
+                            const mainColorDot = mainItem.querySelector('.tag-legend-color');
+                            if (mainColorDot) {
+                                if (window.hiddenCategories.has(category)) {
+                                    mainColorDot.style.opacity = '0.3';
+                                    mainColorDot.style.filter = 'grayscale(100%)';
+                                } else {
+                                    mainColorDot.style.opacity = '1';
+                                    mainColorDot.style.filter = 'none';
+                                }
+                            }
+                        }
+                    });
+
+                    // Update particle visibility in Galaxy View
+                    if (this.particleSystem && this.particleSystem.updateParticleVisibility) {
+                        this.particleSystem.updateParticleVisibility();
+                    }
+                };
+
+                // Attach click handlers to both dot and name
+                colorDot.addEventListener('click', toggleVisibility);
+                nameDiv.addEventListener('click', toggleVisibility);
+
+                // Initialize visual state if category is already hidden
+                if (window.hiddenCategories && window.hiddenCategories.has(category)) {
+                    colorDot.style.opacity = '0.3';
+                    colorDot.style.filter = 'grayscale(100%)';
+                }
+            }
+        });
+    }
+
+    /**
+     * Populate Galaxy File Browser - Tags List
+     * Copied exactly from visualizer_V37_for_extraction.html:3629
+     */
+    populateGalaxyTagsList() {
+        const container = document.getElementById('galaxyTagsList');
+        if (!container) return;
+
+        // Get visible files based on search and filters
+        const searchFilteredFileIds = window.searchFilteredFileIds || new Set();
+        let visibleFiles = [];
+        if (searchFilteredFileIds.size > 0) {
+            visibleFiles = (window.audioFiles || []).filter(f => searchFilteredFileIds.has(f.id));
+        } else {
+            const particles = this.particleSystem?.particles || [];
+            visibleFiles = particles.map(p => p.file);
+        }
+
+        // Collect all unique tags from visible files
+        const tagCounts = new Map();
+        visibleFiles.forEach(file => {
+            if (file.tags && Array.isArray(file.tags)) {
+                file.tags.forEach(tag => {
+                    tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+                });
+            }
+        });
+
+        if (tagCounts.size === 0) {
+            container.innerHTML = '<div style="color: rgba(255,255,255,0.4); font-size: 10px; padding: 4px;">No tags found</div>';
+            return;
+        }
+
+        // Sort tags by count (descending) then alphabetically
+        const sortedTags = Array.from(tagCounts.entries()).sort((a, b) => {
+            if (b[1] !== a[1]) return b[1] - a[1]; // Sort by count descending
+            return a[0].localeCompare(b[0]); // Then alphabetically
+        });
+
+        let html = '<div style="display: flex; flex-wrap: wrap; gap: 4px;">';
+        sortedTags.forEach(([tag, count]) => {
+            html += `
+                <div style="display: inline-flex; align-items: center; padding: 3px 8px; background: rgba(102,126,234,0.2); border: 1px solid rgba(102,126,234,0.4); border-radius: 12px; cursor: pointer; font-size: 9px;"
+                     onclick="if(window.handleTagClick) window.handleTagClick('${tag.replace(/'/g, "\\'")}');"
+                     onmouseover="this.style.background='rgba(102,126,234,0.3)';"
+                     onmouseout="this.style.background='rgba(102,126,234,0.2)';">
+                    <span>${tag}</span>
+                    <span style="margin-left: 4px; color: rgba(255,255,255,0.5);">(${count})</span>
+                </div>
+            `;
+        });
+        html += '</div>';
+
+        container.innerHTML = html;
+    }
+
+    /**
+     * Update Galaxy File Count display
+     */
+    updateGalaxyFileCount() {
+        const galaxyFileCount = document.getElementById('galaxyFileCount');
+        if (!galaxyFileCount) return;
+
+        const particles = this.particleSystem?.particles || [];
+        const searchFilteredFileIds = window.searchFilteredFileIds || new Set();
+        const visibleCount = searchFilteredFileIds.size > 0 ? searchFilteredFileIds.size : particles.length;
+        const totalCount = (window.audioFiles || []).length;
+        galaxyFileCount.textContent = `${visibleCount} visible (${totalCount} total)`;
+    }
+
+    /**
      * Initialize and render the galaxy view
      * @param {HTMLElement} container - Container to render into
      */
@@ -71,6 +287,13 @@ class GalaxyView {
         if (window.audioFiles && window.audioFiles.length > 0) {
             console.log('🌌 Loading', window.audioFiles.length, 'files into Galaxy View');
             this.particleSystem.createParticles(window.audioFiles);
+
+            // Populate File Browser UI
+            this.populateGalaxyFileList();
+            this.populateGalaxyTagLegend();
+            this.populateGalaxyTagsList();
+            this.updateGalaxyFileCount();
+            console.log('🌌 File Browser UI populated');
         } else {
             console.warn('⚠️ No audio files found to display in Galaxy View');
         }
@@ -87,12 +310,16 @@ class GalaxyView {
     initScene() {
         // Scene setup
         this.scene = new THREE.Scene();
-        this.scene.fog = new THREE.Fog(0x000000, 100, window.visibilityDistance || 900);
+        // Fog settings copied from reference (line 3356): near=10, far=visibilityDistance
+        this.scene.fog = new THREE.Fog(0x000000, 10, window.visibilityDistance || 900);
 
         // Camera setup
         const aspect = this.container.clientWidth / this.container.clientHeight;
         this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 2000);
-        this.camera.position.set(0, 10, 30);
+        // Position camera further back to see particle cloud spread (-100 to +100)
+        this.camera.position.set(0, 50, 200);
+        // Point camera at center of particle cloud
+        this.camera.lookAt(0, 0, 0);
 
         // Expose camera and scene globally (needed by controls)
         window.camera = this.camera;
@@ -109,9 +336,9 @@ class GalaxyView {
         const renderScene = new THREE.RenderPass(this.scene, this.camera);
         this.bloomPass = new THREE.UnrealBloomPass(
             new THREE.Vector2(window.innerWidth, window.innerHeight),
-            window.bloomStrength || 0.5,  // bloom strength
-            0.4,  // radius
-            0.85  // threshold
+            window.bloomStrength || 0.0,  // bloom strength (starts at 0)
+            0.8,  // radius (increased for more spread)
+            0.1  // threshold (lowered so particles can bloom)
         );
         this.composer.addPass(renderScene);
         this.composer.addPass(this.bloomPass);
@@ -357,6 +584,12 @@ class GalaxyView {
             this.setupAudioAnalyzer();
         };
 
+        // Expose File Browser population functions
+        window.populateGalaxyFileList = () => this.populateGalaxyFileList();
+        window.populateGalaxyTagLegend = () => this.populateGalaxyTagLegend();
+        window.populateGalaxyTagsList = () => this.populateGalaxyTagsList();
+        window.updateGalaxyFileCount = () => this.updateGalaxyFileCount();
+
         console.log('[AudioPlayback] ✅ Continuous auto-connect enabled (checks every 1s, detects file changes)');
     }
 
@@ -423,6 +656,25 @@ class GalaxyView {
             // Initialize preset list
             if (window.updatePresetList) {
                 window.updatePresetList();
+            }
+
+            // Populate menu with current values (sets toggle button states)
+            if (window.populateGalaxyMenu) {
+                window.populateGalaxyMenu();
+            }
+
+            // Load default preset if set (copied from visualizer_V37_for_extraction.html:9065)
+            const defaultPreset = localStorage.getItem('visualizerDefaultPreset');
+            if (defaultPreset) {
+                const presets = JSON.parse(localStorage.getItem('visualizerPresets') || '{}');
+                if (presets[defaultPreset]) {
+                    console.log(`Loading default preset: ${defaultPreset}`);
+                    if (window.loadPreset) {
+                        window.loadPreset(defaultPreset);
+                    }
+                    const select = document.getElementById('presetSelect');
+                    if (select) select.value = defaultPreset;
+                }
             }
 
         } catch (error) {
@@ -517,12 +769,22 @@ class GalaxyView {
      * Update particle animations
      */
     updateParticles() {
-        if (!window.particles || !window.particleSystem) return;
+        if (!window.particles || !window.particleSystem) {
+            // Only log once to avoid spam
+            if (!this._particleUpdateWarningLogged) {
+                console.warn('⚠️ updateParticles: particles or particleSystem not found', {
+                    particles: !!window.particles,
+                    particleSystem: !!window.particleSystem
+                });
+                this._particleUpdateWarningLogged = true;
+            }
+            return;
+        }
 
         const dummy = new THREE.Object3D();
         const time = this.animationTime;
-        const orbitSpeed = window.orbitSpeed || 0.0015;
-        const orbitRadius = window.orbitRadius || 80;
+        const orbitSpeed = window.orbitSpeed !== undefined ? window.orbitSpeed : 0.0015;
+        const orbitRadius = window.orbitRadius !== undefined ? window.orbitRadius : 80;
 
         // Audio reactivity - calculate current amplitude
         let audioAmplitude = 0;
@@ -600,8 +862,9 @@ class GalaxyView {
             }
         }
 
-        // Crosshair hover detection
+        // Crosshair hover detection - check individual sub-particles
         let hoveredCluster = null;
+        let hoveredFileName = null;
         if (window.mouseInteractionEnabled && window.isPointerLocked) {
             // Ray from camera center (crosshair position)
             const rayOrigin = this.camera.position.clone();
@@ -611,23 +874,36 @@ class GalaxyView {
             let closestDistance = Infinity;
             const hoverThreshold = window.particleSize * 2;
 
+            // Check each sub-particle in each cluster
             window.particles.forEach(cluster => {
-                const distanceToCluster = rayOrigin.distanceTo(cluster.centerPosition);
+                cluster.subParticles.forEach(subParticle => {
+                    // Use stored world position from animation loop (or fallback)
+                    const worldPos = subParticle.worldPosition || cluster.centerPosition.clone().add(subParticle.offset);
+                    const distanceToParticle = rayOrigin.distanceTo(worldPos);
 
-                // Check if ray intersects cluster
-                const toCluster = cluster.centerPosition.clone().sub(rayOrigin);
-                const projection = toCluster.dot(rayDirection);
+                    // Check if ray intersects this sub-particle
+                    const toParticle = worldPos.clone().sub(rayOrigin);
+                    const projection = toParticle.dot(rayDirection);
 
-                if (projection > 0) {
-                    const closestPoint = rayOrigin.clone().add(rayDirection.clone().multiplyScalar(projection));
-                    const clusterDistance = closestPoint.distanceTo(cluster.centerPosition);
+                    if (projection > 0) {
+                        const closestPoint = rayOrigin.clone().add(rayDirection.clone().multiplyScalar(projection));
+                        const particleDistance = closestPoint.distanceTo(worldPos);
 
-                    if (clusterDistance < hoverThreshold && distanceToCluster < closestDistance) {
-                        closestDistance = distanceToCluster;
-                        hoveredCluster = cluster;
+                        if (particleDistance < hoverThreshold && distanceToParticle < closestDistance) {
+                            closestDistance = distanceToParticle;
+                            hoveredCluster = cluster;
+                            hoveredFileName = cluster.file?.name || 'Unknown';
+                        }
                     }
-                }
+                });
             });
+        }
+
+        // Update tooltip
+        if (hoveredCluster && window.tooltipsEnabled !== false) {
+            this.showFileTooltip(hoveredCluster);
+        } else {
+            this.hideFileTooltip();
         }
 
         // Update hover effects and audio reactivity for all clusters
@@ -643,12 +919,36 @@ class GalaxyView {
 
             // Apply audio reactivity
             if (window.audioReactivityEnabled && audioAmplitude > 0) {
-                // Global reactivity - all particles react to audio
-                const globalReactivity = window.globalAudioReactivity || 0.5;
-                const targetScale = 1.0 + (audioAmplitude * globalReactivity);
+                // Check if this cluster is the currently playing file
+                const isPlayingFile = window.currentFileId && cluster.file && cluster.file.id === window.currentFileId;
 
-                // Smooth interpolation
-                cluster.audioScale += (targetScale - cluster.audioScale) * 0.15;
+                // Debug logging (only for first cluster to avoid console spam)
+                if (clusterIndex === 0 && Math.random() < 0.01) {
+                    console.log('[Audio Reactivity Debug]', {
+                        currentFileId: window.currentFileId,
+                        clusterFileId: cluster.file?.id,
+                        isPlayingFile: isPlayingFile,
+                        pulseStrength: window.audioReactivityStrength,
+                        globalReactivity: window.globalAudioReactivity
+                    });
+                }
+
+                if (isPlayingFile) {
+                    // Playing file uses pulse strength (audioReactivityStrength)
+                    const pulseStrength = window.audioReactivityStrength !== undefined ? window.audioReactivityStrength : 1.0;
+                    const targetScale = 1.0 + (audioAmplitude * pulseStrength);
+                    cluster.audioScale += (targetScale - cluster.audioScale) * 0.15;
+                } else {
+                    // All other particles use global reactivity (only if > 0)
+                    const globalReactivity = window.globalAudioReactivity !== undefined ? window.globalAudioReactivity : 0.5;
+                    if (globalReactivity > 0) {
+                        const targetScale = 1.0 + (audioAmplitude * globalReactivity);
+                        cluster.audioScale += (targetScale - cluster.audioScale) * 0.15;
+                    } else {
+                        // If global reactivity is 0, return to normal scale
+                        cluster.audioScale += (1.0 - cluster.audioScale) * 0.1;
+                    }
+                }
             } else {
                 // Return to normal scale
                 cluster.audioScale += (1.0 - cluster.audioScale) * 0.1;
@@ -679,6 +979,29 @@ class GalaxyView {
         });
 
         window.particles.forEach((cluster, clusterIndex) => {
+            // Handle hover time slowdown - maintain continuity
+            const isHovered = (cluster === hoveredCluster);
+
+            // Calculate delta time since last frame
+            const deltaTime = cluster.lastRealTime !== null ? (time - cluster.lastRealTime) : 0;
+            cluster.lastRealTime = time;
+
+            // Initialize custom time if needed
+            if (cluster.customTime === null) {
+                cluster.customTime = time;
+            }
+
+            // Advance custom time based on hover state
+            if (isHovered && window.mouseInteractionEnabled && window.hoverSlowdown < 1) {
+                // Hovering: advance at slow speed
+                cluster.customTime += deltaTime * window.hoverSlowdown;
+            } else {
+                // Not hovering: advance at normal speed
+                cluster.customTime += deltaTime;
+            }
+
+            const clusterTime = cluster.customTime;
+
             // Calculate animated cluster center position based on rotation mode
             let animatedCenter = cluster.centerPosition.clone();
 
@@ -687,53 +1010,71 @@ class GalaxyView {
 
                 switch (window.rotationMode) {
                     case 'collective':
-                        // All particles rotate together as a sphere around origin
-                        const rotationAngle = time * orbitSpeed;
+                        // COLLECTIVE: All clusters rotate together as a sphere around origin
+                        // Amplitude controls how far particles rotate from their base positions
+                        const angle = clusterTime * orbitSpeed * 1000;
+                        const amplitudeScale = orbitRadius * 0.1;
 
-                        switch (window.rotationAxis) {
-                            case 'y':
-                                animatedCenter.x = basePos.x * Math.cos(rotationAngle) - basePos.z * Math.sin(rotationAngle);
-                                animatedCenter.z = basePos.x * Math.sin(rotationAngle) + basePos.z * Math.cos(rotationAngle);
-                                break;
-                            case 'x':
-                                animatedCenter.y = basePos.y * Math.cos(rotationAngle) - basePos.z * Math.sin(rotationAngle);
-                                animatedCenter.z = basePos.y * Math.sin(rotationAngle) + basePos.z * Math.cos(rotationAngle);
-                                break;
-                            case 'z':
-                                animatedCenter.x = basePos.x * Math.cos(rotationAngle) - basePos.y * Math.sin(rotationAngle);
-                                animatedCenter.y = basePos.x * Math.sin(rotationAngle) + basePos.y * Math.cos(rotationAngle);
-                                break;
-                            case 'all':
-                                // Rotate around all axes
-                                const angle = time * orbitSpeed * 0.5;
-                                animatedCenter.applyAxisAngle(new THREE.Vector3(1, 0, 0), angle);
-                                animatedCenter.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle * 0.7);
-                                animatedCenter.applyAxisAngle(new THREE.Vector3(0, 0, 1), angle * 0.5);
-                                break;
+                        // Start with base position
+                        let centerX = basePos.x;
+                        let centerY = basePos.y;
+                        let centerZ = basePos.z;
+
+                        if (window.rotationAxis === 'y' || window.rotationAxis === 'all') {
+                            const cosY = Math.cos(angle);
+                            const sinY = Math.sin(angle);
+                            const tempX = (basePos.x * amplitudeScale) * cosY - (basePos.z * amplitudeScale) * sinY;
+                            const tempZ = (basePos.x * amplitudeScale) * sinY + (basePos.z * amplitudeScale) * cosY;
+                            centerX = tempX;
+                            centerZ = tempZ;
                         }
+
+                        if (window.rotationAxis === 'x' || window.rotationAxis === 'all') {
+                            const cosX = Math.cos(angle * 0.7);
+                            const sinX = Math.sin(angle * 0.7);
+                            const tempY = (centerY * amplitudeScale) * cosX - centerZ * sinX;
+                            const tempZ = (centerY * amplitudeScale) * sinX + centerZ * cosX;
+                            centerY = tempY;
+                            centerZ = tempZ;
+                        }
+
+                        if (window.rotationAxis === 'z' || window.rotationAxis === 'all') {
+                            const cosZ = Math.cos(angle * 0.5);
+                            const sinZ = Math.sin(angle * 0.5);
+                            const tempX = centerX * cosZ - (centerY * amplitudeScale) * sinZ;
+                            const tempY = centerX * sinZ + (centerY * amplitudeScale) * cosZ;
+                            centerX = tempX;
+                            centerY = tempY;
+                        }
+
+                        animatedCenter.set(centerX, centerY, centerZ);
                         break;
 
                     case 'spiral':
-                        // Spiral galaxy - speed varies by distance from center
-                        const distFromCenter = Math.sqrt(basePos.x * basePos.x + basePos.z * basePos.z);
-                        const spiralSpeed = orbitSpeed * (1 + distFromCenter * 0.005);
-                        const spiralAngle = time * spiralSpeed + clusterIndex * 0.1;
+                        // SPIRAL: Galaxy arm rotation with drift based on amplitude
+                        const dx = basePos.x;
+                        const dz = basePos.z;
+                        const distFromCenter = Math.sqrt(dx * dx + dz * dz);
+                        const currentAngle = Math.atan2(dz, dx);
+                        const spiralAngle = currentAngle + (clusterTime * orbitSpeed * 1000 * (1 + distFromCenter * 0.01));
 
-                        animatedCenter.x = basePos.x * Math.cos(spiralAngle) - basePos.z * Math.sin(spiralAngle);
-                        animatedCenter.z = basePos.x * Math.sin(spiralAngle) + basePos.z * Math.cos(spiralAngle);
-                        // Add slight vertical wave
-                        animatedCenter.y = basePos.y + Math.sin(spiralAngle * 2) * 5;
+                        const spiralX = Math.cos(spiralAngle) * distFromCenter;
+                        const spiralZ = Math.sin(spiralAngle) * distFromCenter;
+                        const driftX = (spiralX - dx) * (orbitRadius * 0.01);
+                        const driftZ = (spiralZ - dz) * (orbitRadius * 0.01);
+
+                        animatedCenter.x = basePos.x + driftX;
+                        animatedCenter.z = basePos.z + driftZ;
+                        animatedCenter.y = basePos.y;
                         break;
 
                     case 'individual':
-                        // Each particle orbits independently
-                        const phase = clusterIndex * 0.5;
-                        const orbitAngle = time * orbitSpeed + phase;
-                        const radius = orbitRadius * (0.5 + Math.random() * 0.5);
-
-                        animatedCenter.x = basePos.x + Math.cos(orbitAngle) * radius * 0.1;
-                        animatedCenter.y = basePos.y + Math.sin(orbitAngle * 0.7) * radius * 0.1;
-                        animatedCenter.z = basePos.z + Math.sin(orbitAngle) * radius * 0.1;
+                        // INDIVIDUAL: Each cluster orbits around its own base position
+                        // Amplitude controls orbit size directly
+                        const offset = clusterIndex * 0.1;
+                        animatedCenter.x = basePos.x + Math.sin(clusterTime * orbitSpeed * 1000 + offset) * orbitRadius;
+                        animatedCenter.z = basePos.z + Math.cos(clusterTime * orbitSpeed * 1000 + offset) * orbitRadius;
+                        animatedCenter.y = basePos.y + Math.sin(clusterTime * orbitSpeed * 800 + offset * 0.7) * (orbitRadius * 0.3);
                         break;
                 }
             }
@@ -743,10 +1084,28 @@ class GalaxyView {
                 // Calculate animated position
                 let animatedOffset = subParticle.offset.clone();
 
+                // Apply audio reactivity: expand sub-particles from center based on audio amplitude
+                if (!subParticle.isCenterParticle && window.audioReactivityEnabled && audioAmplitude > 0) {
+                    const isPlayingFile = window.currentFileId && cluster.file && cluster.file.id === window.currentFileId;
+                    let audioExpansion = 0;
+
+                    if (isPlayingFile) {
+                        // Playing file uses pulse strength
+                        const pulseStrength = window.audioReactivityStrength !== undefined ? window.audioReactivityStrength : 1.0;
+                        audioExpansion = audioAmplitude * pulseStrength * 0.5;
+                    } else if (window.globalAudioReactivity > 0) {
+                        // Other files use global reactivity
+                        audioExpansion = audioAmplitude * window.globalAudioReactivity * 0.5;
+                    }
+
+                    // Scale the offset outward based on audio
+                    animatedOffset.multiplyScalar(1.0 + audioExpansion);
+                }
+
                 if (!subParticle.isCenterParticle && window.motionEnabled) {
-                    // Apply animation based on motion path
-                    const subTime = time * window.subParticleAnimationSpeed;
-                    const motionScale = window.subParticleMotionSpeed * 0.1;
+                    // Apply animation based on motion path (use cluster's slowed time)
+                    const subTime = clusterTime * window.subParticleAnimationSpeed;
+                    const motionScale = window.subParticleMotionSpeed * 2.0;
 
                     switch (window.subParticleMotionPath) {
                         case 'circular':
@@ -774,10 +1133,26 @@ class GalaxyView {
                 // Apply position (animated center + offset)
                 dummy.position.copy(animatedCenter).add(animatedOffset);
 
+                // Store world position for click detection and hover
+                subParticle.worldPosition = dummy.position.clone();
+
                 // Apply scale
-                const baseScale = subParticle.isCenterParticle ?
-                    window.particleSize * window.mainToSubSizeRatio :
-                    window.particleSize * window.subParticleScale;
+                // Main/Sub Size Ratio: 1.0 = same size, higher = center particle larger
+                let baseScale;
+                if (subParticle.isCenterParticle) {
+                    baseScale = window.particleSize * window.subParticleScale * window.mainToSubSizeRatio;
+                } else {
+                    baseScale = window.particleSize * window.subParticleScale;
+                }
+
+                // Apply size gradient based on distance from center particle
+                if (!subParticle.isCenterParticle && window.sizeGradient > 0) {
+                    // Calculate normalized distance (0 = at center, 1 = max radius)
+                    const distanceFromCenter = subParticle.baseRadius; // Already normalized 0.2-1.0
+                    // Apply gradient: closer particles = larger, distant particles = smaller
+                    const sizeMultiplier = 1.0 - (distanceFromCenter * window.sizeGradient * 0.5);
+                    baseScale *= Math.max(0.1, sizeMultiplier); // Clamp to prevent invisible particles
+                }
 
                 const scale = baseScale * cluster.audioScale * (1 + cluster.hoverEffect) * (cluster.sizeMultiplier || 1.0);
                 dummy.scale.set(scale, scale, 1);
@@ -802,6 +1177,57 @@ class GalaxyView {
         window.particleSystem.instanceMatrix.needsUpdate = true;
         if (window.particleSystem.instanceColor) {
             window.particleSystem.instanceColor.needsUpdate = true;
+        }
+    }
+
+    /**
+     * Show file tooltip
+     */
+    showFileTooltip(cluster) {
+        const tooltip = document.getElementById('fileTooltip');
+        const tooltipTitle = document.getElementById('tooltipTitle');
+        const tooltipMetadata = document.getElementById('tooltipMetadata');
+        const tooltipTags = document.getElementById('tooltipTags');
+
+        if (!tooltip || !cluster?.file) return;
+
+        tooltipTitle.textContent = cluster.file.name;
+
+        let metadata = '';
+        if (cluster.file.id) {
+            const cleanId = cluster.file.id.toString().replace(/^audio_files_/, '');
+            metadata += `ID: ${cleanId}`;
+        }
+        if (cluster.file.bpm) metadata += (metadata ? ' • ' : '') + `${cluster.file.bpm} BPM`;
+        if (cluster.file.key) metadata += (metadata ? ' • ' : '') + cluster.file.key;
+        tooltipMetadata.textContent = metadata;
+
+        // Tags
+        tooltipTags.innerHTML = '';
+        const tags = cluster.file.tags_array || cluster.file.tags || [];
+        if (tags.length > 0) {
+            tags.forEach(tag => {
+                const chip = document.createElement('div');
+                chip.className = 'tag-chip';
+                chip.textContent = tag;
+                tooltipTags.appendChild(chip);
+            });
+        }
+
+        tooltip.classList.add('active');
+        // Position at center-right
+        tooltip.style.left = '55%';
+        tooltip.style.top = '50%';
+        tooltip.style.transform = 'translateY(-50%)';
+    }
+
+    /**
+     * Hide file tooltip
+     */
+    hideFileTooltip() {
+        const tooltip = document.getElementById('fileTooltip');
+        if (tooltip) {
+            tooltip.classList.remove('active');
         }
     }
 

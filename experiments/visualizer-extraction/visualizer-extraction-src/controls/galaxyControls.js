@@ -11,9 +11,16 @@ export function toggleCrosshair() {
     const btn = document.getElementById('crosshairToggleBtn');
     const galaxyBtn = document.getElementById('galaxyCrosshairToggle');
 
-    crosshair.style.display = window.crosshairEnabled ? 'block' : 'none';
-    if (btn) btn.textContent = `Crosshair: ${window.crosshairEnabled ? 'ON' : 'OFF'}`;
-    if (galaxyBtn) galaxyBtn.textContent = `Crosshair: ${window.crosshairEnabled ? 'ON' : 'OFF'}`;
+    if (crosshair) crosshair.style.display = window.crosshairEnabled ? 'block' : 'none';
+
+    if (btn) {
+        btn.textContent = `Crosshair: ${window.crosshairEnabled ? 'ON' : 'OFF'}`;
+        btn.classList.toggle('active', window.crosshairEnabled);
+    }
+    if (galaxyBtn) {
+        galaxyBtn.textContent = `Crosshair: ${window.crosshairEnabled ? 'ON' : 'OFF'}`;
+        galaxyBtn.classList.toggle('active', window.crosshairEnabled);
+    }
 }
 
 export function toggleInfoWindow() {
@@ -21,14 +28,19 @@ export function toggleInfoWindow() {
     const infoWindow = document.getElementById('infoWindow');
     const galaxyBtn = document.getElementById('galaxyInfoToggle');
 
-    if (window.infoWindowEnabled) {
-        infoWindow.classList.add('visible');
-        if (window.updateInfoWindow) window.updateInfoWindow();
-    } else {
-        infoWindow.classList.remove('visible');
+    if (infoWindow) {
+        if (window.infoWindowEnabled) {
+            infoWindow.classList.add('visible');
+            if (window.updateInfoWindow) window.updateInfoWindow();
+        } else {
+            infoWindow.classList.remove('visible');
+        }
     }
 
-    if (galaxyBtn) galaxyBtn.textContent = `Info Window: ${window.infoWindowEnabled ? 'ON' : 'OFF'}`;
+    if (galaxyBtn) {
+        galaxyBtn.textContent = `Info Window: ${window.infoWindowEnabled ? 'ON' : 'OFF'}`;
+        galaxyBtn.classList.toggle('active', window.infoWindowEnabled);
+    }
 }
 
 export function toggleMoveJoystick() {
@@ -39,7 +51,10 @@ export function toggleMoveJoystick() {
     if (moveJoystick) {
         moveJoystick.style.display = window.moveJoystickEnabled ? 'block' : 'none';
     }
-    if (galaxyBtn) galaxyBtn.textContent = `Move Joystick: ${window.moveJoystickEnabled ? 'ON' : 'OFF'}`;
+    if (galaxyBtn) {
+        galaxyBtn.textContent = `Move Joystick: ${window.moveJoystickEnabled ? 'ON' : 'OFF'}`;
+        galaxyBtn.classList.toggle('active', window.moveJoystickEnabled);
+    }
 }
 
 export function toggleLookJoystick() {
@@ -50,7 +65,10 @@ export function toggleLookJoystick() {
     if (lookJoystick) {
         lookJoystick.style.display = window.lookJoystickEnabled ? 'flex' : 'none';
     }
-    if (galaxyBtn) galaxyBtn.textContent = `Look Joystick: ${window.lookJoystickEnabled ? 'ON' : 'OFF'}`;
+    if (galaxyBtn) {
+        galaxyBtn.textContent = `Look Joystick: ${window.lookJoystickEnabled ? 'ON' : 'OFF'}`;
+        galaxyBtn.classList.toggle('active', window.lookJoystickEnabled);
+    }
 }
 
 export function togglePlayButton() {
@@ -61,13 +79,30 @@ export function togglePlayButton() {
     if (playBtn) {
         playBtn.style.display = window.playButtonEnabled ? 'flex' : 'none';
     }
-    if (galaxyBtn) galaxyBtn.textContent = `Play Button: ${window.playButtonEnabled ? 'ON' : 'OFF'}`;
+    if (galaxyBtn) {
+        galaxyBtn.textContent = `Play Button: ${window.playButtonEnabled ? 'ON' : 'OFF'}`;
+        galaxyBtn.classList.toggle('active', window.playButtonEnabled);
+    }
 }
 
 export function toggleTooltips() {
     window.tooltipsEnabled = !window.tooltipsEnabled;
-    const btn = document.getElementById('galaxyTooltipsToggle');
-    if (btn) btn.textContent = `Tooltips: ${window.tooltipsEnabled ? 'ON' : 'OFF'}`;
+    const btn = document.getElementById('tooltipToggleBtn');
+    if (btn) {
+        btn.textContent = `Tooltips: ${window.tooltipsEnabled ? 'ON' : 'OFF'}`;
+        btn.classList.toggle('active', window.tooltipsEnabled);
+    }
+
+    const galaxyBtn = document.getElementById('galaxyTooltipToggle');
+    if (galaxyBtn) {
+        galaxyBtn.textContent = `Tooltips: ${window.tooltipsEnabled ? 'ON' : 'OFF'}`;
+        galaxyBtn.classList.toggle('active', window.tooltipsEnabled);
+    }
+
+    // Hide tooltip if disabling
+    if (!window.tooltipsEnabled) {
+        if (window.hideFileTooltip) window.hideFileTooltip();
+    }
 }
 
 // Database Selection
@@ -704,6 +739,73 @@ export function toggleColorLegend() {
     }
 }
 
+// Populate Galaxy Menu with current values
+// Copied from visualizer_V37_for_extraction.html:3567
+export function populateGalaxyMenu() {
+    // Sync visualization mode selects
+    const galaxyColorMode = document.getElementById('galaxyColorMode');
+    if (galaxyColorMode && window.currentColorMode) galaxyColorMode.value = window.currentColorMode;
+
+    const galaxyXAxisMode = document.getElementById('galaxyXAxisMode');
+    if (galaxyXAxisMode && window.currentXMode) galaxyXAxisMode.value = window.currentXMode;
+
+    const galaxyYAxisMode = document.getElementById('galaxyYAxisMode');
+    if (galaxyYAxisMode && window.currentYMode) galaxyYAxisMode.value = window.currentYMode;
+
+    const galaxyZAxisMode = document.getElementById('galaxyZAxisMode');
+    if (galaxyZAxisMode && window.currentZMode) galaxyZAxisMode.value = window.currentZMode;
+
+    // Sync control toggles
+    const galaxyCrosshairToggle = document.getElementById('galaxyCrosshairToggle');
+    if (galaxyCrosshairToggle) {
+        const crosshairEnabled = window.crosshairEnabled !== undefined ? window.crosshairEnabled : true;
+        galaxyCrosshairToggle.textContent = `Crosshair: ${crosshairEnabled ? 'ON' : 'OFF'}`;
+        galaxyCrosshairToggle.classList.toggle('active', crosshairEnabled);
+    }
+
+    const galaxyTooltipToggle = document.getElementById('galaxyTooltipToggle');
+    if (galaxyTooltipToggle) {
+        const tooltipsEnabled = window.tooltipsEnabled !== undefined ? window.tooltipsEnabled : true;
+        galaxyTooltipToggle.textContent = `Tooltips: ${tooltipsEnabled ? 'ON' : 'OFF'}`;
+        galaxyTooltipToggle.classList.toggle('active', tooltipsEnabled);
+    }
+
+    const galaxyInfoToggle = document.getElementById('galaxyInfoToggle');
+    if (galaxyInfoToggle) {
+        const infoWindowEnabled = window.infoWindowEnabled !== undefined ? window.infoWindowEnabled : false;
+        galaxyInfoToggle.textContent = `Info Window: ${infoWindowEnabled ? 'ON' : 'OFF'}`;
+        galaxyInfoToggle.classList.toggle('active', infoWindowEnabled);
+    }
+
+    const galaxyMoveJoystickToggle = document.getElementById('galaxyMoveJoystickToggle');
+    if (galaxyMoveJoystickToggle) {
+        const moveJoystickEnabled = window.moveJoystickEnabled !== undefined ? window.moveJoystickEnabled : true;
+        galaxyMoveJoystickToggle.textContent = `Move Joystick: ${moveJoystickEnabled ? 'ON' : 'OFF'}`;
+        galaxyMoveJoystickToggle.classList.toggle('active', moveJoystickEnabled);
+    }
+
+    const galaxyLookJoystickToggle = document.getElementById('galaxyLookJoystickToggle');
+    if (galaxyLookJoystickToggle) {
+        const lookJoystickEnabled = window.lookJoystickEnabled !== undefined ? window.lookJoystickEnabled : true;
+        galaxyLookJoystickToggle.textContent = `Look Joystick: ${lookJoystickEnabled ? 'ON' : 'OFF'}`;
+        galaxyLookJoystickToggle.classList.toggle('active', lookJoystickEnabled);
+    }
+
+    const galaxyPlayButtonToggle = document.getElementById('galaxyPlayButtonToggle');
+    if (galaxyPlayButtonToggle) {
+        const playButtonEnabled = window.playButtonEnabled !== undefined ? window.playButtonEnabled : true;
+        galaxyPlayButtonToggle.textContent = `Play Button: ${playButtonEnabled ? 'ON' : 'OFF'}`;
+        galaxyPlayButtonToggle.classList.toggle('active', playButtonEnabled);
+    }
+
+    // Populate file browser sections
+    if (window.populateGalaxyTagLegend) window.populateGalaxyTagLegend();
+    if (window.populateGalaxyPresetList) window.populateGalaxyPresetList();
+    if (window.populateGalaxyTagsList) window.populateGalaxyTagsList();
+    if (window.populateGalaxyFileList) window.populateGalaxyFileList();
+    if (window.updateGalaxyFileCount) window.updateGalaxyFileCount();
+}
+
 // Export all functions to window for global access
 export function initializeControls() {
     // Expose all control functions to window
@@ -761,6 +863,7 @@ export function initializeControls() {
     window.showAllCategories = showAllCategories;
     window.hideAllCategories = hideAllCategories;
     window.toggleHideAll = toggleHideAll;
+    window.populateGalaxyMenu = populateGalaxyMenu;
     window.toggleControlsHint = toggleControlsHint;
     window.toggleKeyboardCommands = toggleKeyboardCommands;
     window.toggleModeControls = toggleModeControls;
@@ -779,6 +882,17 @@ export function initializeControls() {
         if (window.handleGalaxySearch) {
             window.handleGalaxySearch(value);
         }
+    };
+
+    // Preset Management Functions
+    window.setDefaultPreset = () => {
+        const presetName = document.getElementById('presetSelect')?.value;
+        if (!presetName) {
+            alert('Please select a preset first');
+            return;
+        }
+        localStorage.setItem('visualizerDefaultPreset', presetName);
+        alert(`"${presetName}" set as default preset`);
     };
 
     console.log('Galaxy Controls initialized - all functions exposed to window');

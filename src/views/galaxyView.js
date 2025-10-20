@@ -756,8 +756,8 @@ export class GalaxyView {
                     finalY = basePos.y;
                     finalZ = basePos.z;
                 } else {
-                    // Orbital motion
-                    const time = clusterAnimationTime * 1000;
+                    // Orbital motion (V37 pattern: use orbitSpeed as multiplier)
+                    const time = clusterAnimationTime * this.config.orbitSpeed * 1000;
                     const orbitRadius = this.config.orbitRadius * 0.05;
 
                     const orbitX = Math.sin(time + subParticle.orbitPhase) * orbitRadius;
@@ -843,8 +843,9 @@ export class GalaxyView {
 
         this.animationId = requestAnimationFrame(() => this.animate());
 
-        // Increment animation time
-        this.animationTime += this.config.orbitSpeed;
+        // Increment animation time (constant 0.01 per frame, matching V37)
+        // orbitSpeed is used as multiplier in calculations (line 631), not as time increment
+        this.animationTime += 0.01;
 
         // Update camera movement
         this.updateMovement();

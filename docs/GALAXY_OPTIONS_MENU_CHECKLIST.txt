@@ -1,0 +1,306 @@
+GALAXY OPTIONS MENU - IMPLEMENTATION CHECKLIST
+Generated: 2025-10-19
+==============================================
+
+PHASE 1: CRITICAL VALUE FIXES (10 minutes)
+==========================================
+[ ] 1. Fix Speed slider max value
+    Location: index.html line ~1256
+    Change: max="0.01" → max="0.00003"
+    Change: step="0.0001" → step="0.0000001"
+    Change: value="0.0015" → value="0.0000015"
+
+[ ] 2. Fix Amplitude slider max value
+    Location: index.html line ~1266
+    Change: max="1000" → max="100"
+
+[ ] 3. Fix Cluster Spread max value
+    Location: index.html line ~1277
+    Change: max="1000" → max="20"
+    Change: step="0.5" → step="0.1"
+
+[ ] 4. Fix Particles Per Cluster max value
+    Location: index.html line ~1284
+    Change: max="150" → max="50"
+
+[ ] 5. Fix Visibility Distance default value
+    Location: index.html line ~1245
+    Change: value="2000" → value="900"
+
+[ ] TEST: Verify all 5 controls work with new ranges
+
+
+PHASE 2: GALAXY DYNAMICS SECTION (60 minutes)
+==============================================
+Add after line ~1269 (after Amplitude slider):
+
+[ ] 6. Add Rotation Mode dropdown
+    ID: rotationMode
+    Handler: updateRotationMode(this.value)
+    Options: collective, spiral, individual
+
+[ ] 7. Add Rotation Axis dropdown
+    ID: rotationAxis
+    Handler: updateRotationAxis(this.value)
+    Options: y, x, z, all
+
+[ ] 8. Add Particle Size slider
+    ID: sizeSlider
+    Range: 0.5 to 100, step 0.5, default 17.5
+    Display: sizeValue
+    Handler: updateParticleSize(this.value)
+
+[ ] 9. Add Particle Brightness slider
+    ID: brightnessSlider
+    Range: 0.1 to 10.0, step 0.1, default 0.8
+    Display: brightnessValue
+    Handler: updateParticleBrightness(this.value)
+
+[ ] 10. Add Visibility Distance slider
+    ID: visibilitySlider
+    Range: 100 to 2000, step 50, default 900
+    Display: visibilityValue
+    Handler: updateVisibility(this.value)
+
+[ ] 11. Add Particle Shape dropdown
+    Handler: updateParticleShape(this.value)
+    Options: circle, square, disc, ring
+
+[ ] 12. Add X-Axis Scale slider
+    ID: xAxisScaleSlider
+    Range: 0.1 to 3.0, step 0.1, default 1.0
+    Display: xAxisScaleValue
+    Handler: updateXAxisScale(this.value)
+
+[ ] 13. Add Y-Axis Scale slider
+    ID: yAxisScaleSlider
+    Range: 0.1 to 3.0, step 0.1, default 1.0
+    Display: yAxisScaleValue
+    Handler: updateYAxisScale(this.value)
+
+[ ] 14. Add Z-Axis Scale slider
+    ID: zAxisScaleSlider
+    Range: 0.1 to 3.0, step 0.1, default 1.0
+    Display: zAxisScaleValue
+    Handler: updateZAxisScale(this.value)
+
+[ ] 15. Add Motion Toggle button
+    ID: motionToggle
+    Handler: toggleMotion()
+    Text: "Motion: ON"
+
+[ ] TEST: Verify all Galaxy Dynamics controls appear
+
+
+PHASE 3: SUB-PARTICLE DYNAMICS SECTION (45 minutes)
+====================================================
+Add after line ~1287 (after Particles Per Cluster):
+
+[ ] 16. Add Sub-Particle Size slider
+    ID: subParticleSizeSlider
+    Range: 0.05 to 1.0, step 0.05, default 0.3
+    Display: subParticleSizeValue
+    Handler: updateSubParticleSize(this.value)
+
+[ ] 17. Add Main/Sub Size Ratio slider
+    ID: mainToSubRatioSlider
+    Range: 1.0 to 10.0, step 0.5, default 2.0
+    Display: mainToSubRatioValue
+    Handler: updateMainToSubRatio(this.value)
+
+[ ] 18. Add Sub-Particle Distance slider
+    ID: subParticleMotionSlider
+    Range: 0 to 50, step 0.5, default 3.6
+    Display: subParticleMotionValue
+    Handler: updateSubParticleMotion(this.value)
+
+[ ] 19. Add Sub-Particle Speed slider
+    ID: subParticleSpeedSlider
+    Range: 0.1 to 25.0, step 0.5, default 0.5
+    Display: subParticleSpeedValue
+    Handler: updateSubParticleSpeed(this.value)
+
+[ ] 20. Add Motion Path dropdown
+    ID: motionPathSelect
+    Handler: updateMotionPath(this.value)
+    Options: natural, ring, sphere, figure8, random, static
+
+[ ] 21. Add Cluster Shape dropdown
+    ID: subParticleShapeSelect
+    Handler: updateSubParticleShape(this.value)
+    Options: default, sphere, spiked
+
+[ ] TEST: Verify all Sub-Particle controls appear
+
+
+PHASE 4: VISUAL GRADIENTS SECTION (15 minutes)
+===============================================
+Add before line ~1294 (before Bloom/Glow):
+
+[ ] 22. Add Size Gradient slider
+    ID: sizeGradientSlider
+    Range: 0 to 2, step 0.1, default 0
+    Display: sizeGradientValue
+    Handler: updateSizeGradient(this.value)
+    Helper: "0 = uniform, 2 = extreme gradient"
+
+[ ] 23. Add Density Gradient slider
+    ID: densityGradientSlider
+    Range: 0 to 1, step 0.1, default 0
+    Display: densityGradientValue
+    Handler: updateDensityGradient(this.value)
+    Helper: "0 = uniform, 1 = dense center, sparse outer"
+
+[ ] TEST: Verify Visual Gradients controls appear
+
+
+PHASE 5: AUDIO REACTIVITY SECTION (30 minutes)
+===============================================
+Add before line ~1306 (before Global Reactivity):
+
+[ ] 24. Add Current Amplitude display
+    ID: audioAmplitudeDisplay
+    Initial value: "0.00"
+    Color: #667eea
+
+[ ] 25. Add Frequency Band displays (grid)
+    IDs: bassAmplitudeDisplay, midsAmplitudeDisplay, highsAmplitudeDisplay
+    Initial values: "0.00"
+    Colors: #f87171, #fbbf24, #60a5fa
+
+[ ] 26. Add Frequency Range dropdown
+    ID: frequencyModeSelect
+    Handler: updateFrequencyMode(this.value)
+    Options: all, bass, mids, highs
+
+[ ] 27. Add Pulse Strength slider
+    ID: audioStrengthSlider
+    Range: 0 to 100, step 1, default 40
+    Display: audioStrengthValue
+    Handler: updateAudioStrength(this.value)
+
+[ ] TEST: Verify Audio Reactivity controls appear
+
+
+PHASE 6: CROSSHAIR HOVER SECTION (5 minutes)
+=============================================
+Add after line ~1336 (after Hover Scale):
+
+[ ] 28. Add Crosshair Hover toggle button
+    ID: mouseInteractionToggle
+    Handler: toggleMouseInteraction()
+    Text: "Crosshair Hover: ON"
+
+[ ] TEST: Verify Crosshair Hover toggle appears
+
+
+PHASE 7: PRESETS ENHANCEMENTS (30 minutes)
+===========================================
+Replace existing Presets section (lines ~1341-1362):
+
+[ ] 29. Add Save Camera Position checkbox
+    ID: saveCameraCheckbox
+    Default: checked
+
+[ ] 30. Add Set as Default Preset button
+    Handler: setDefaultPreset()
+
+[ ] 31. Add Import/Export section
+    Export button: exportPresetsAsJSON()
+    Import button: uses presetImportFile input
+    File input ID: presetImportFile
+
+[ ] 32. Add Cloud Sync section
+    Upload button: syncPresetsToCloud()
+    Download button: loadPresetsFromCloud()
+    Status display ID: cloudSyncStatus
+
+[ ] TEST: Verify all Presets features appear
+
+
+PHASE 8: JAVASCRIPT FUNCTIONS (120 minutes)
+============================================
+Extract from V37 and implement:
+
+Galaxy Dynamics Functions:
+[ ] 33. updateRotationMode(value)
+[ ] 34. updateRotationAxis(value)
+[ ] 35. updateParticleSize(value)
+[ ] 36. updateParticleBrightness(value)
+[ ] 37. updateVisibility(value)
+[ ] 38. updateParticleShape(value)
+[ ] 39. updateXAxisScale(value)
+[ ] 40. updateYAxisScale(value)
+[ ] 41. updateZAxisScale(value)
+[ ] 42. toggleMotion()
+
+Sub-Particle Dynamics Functions:
+[ ] 43. updateSubParticleSize(value)
+[ ] 44. updateMainToSubRatio(value)
+[ ] 45. updateSubParticleMotion(value)
+[ ] 46. updateSubParticleSpeed(value)
+[ ] 47. updateMotionPath(value)
+[ ] 48. updateSubParticleShape(value)
+
+Visual Gradients Functions:
+[ ] 49. updateSizeGradient(value)
+[ ] 50. updateDensityGradient(value)
+
+Audio Reactivity Functions:
+[ ] 51. updateFrequencyMode(value)
+[ ] 52. updateAudioStrength(value)
+[ ] 53. Add audio amplitude update logic to animation loop
+
+Crosshair Hover Functions:
+[ ] 54. toggleMouseInteraction()
+
+Presets Functions:
+[ ] 55. setDefaultPreset()
+[ ] 56. exportPresetsAsJSON()
+[ ] 57. importPresetsFromJSON(event)
+[ ] 58. syncPresetsToCloud()
+[ ] 59. loadPresetsFromCloud()
+
+[ ] TEST: Verify all functions work correctly
+
+
+PHASE 9: FINAL TESTING (60 minutes)
+====================================
+[ ] 60. Test all value fixes work correctly
+[ ] 61. Test all Galaxy Dynamics controls
+[ ] 62. Test all Sub-Particle Dynamics controls
+[ ] 63. Test all Visual Gradients controls
+[ ] 64. Test all Audio Reactivity controls
+[ ] 65. Test Crosshair Hover controls
+[ ] 66. Test Presets save/load
+[ ] 67. Test Presets import/export
+[ ] 68. Test Cloud Sync (if implemented)
+[ ] 69. Test that values persist after page reload
+[ ] 70. Test that controls work in all views (Library, Galaxy, Sphere)
+
+
+COMPLETION SUMMARY
+==================
+Total items: 70
+Estimated time: 6-7 hours
+
+Critical fixes: Items 1-5 (10 minutes)
+HTML additions: Items 6-32 (2 hours)
+Function implementations: Items 33-59 (2 hours)
+Testing: Items 60-70 (1 hour)
+
+Files modified:
+- /Users/jcc/Resilio Sync/JC Cloud/Developer/audio-library-claude/index.html
+
+Files to reference:
+- /Users/jcc/Resilio Sync/JC Cloud/Developer/audio-library-claude/experiments/visualizer-extraction/visualizer_V37_for_extraction.html
+- /Users/jcc/Resilio Sync/JC Cloud/Developer/audio-library-claude/docs/GALAXY_OPTIONS_MENU_COMPARISON_REPORT.md
+- /Users/jcc/Resilio Sync/JC Cloud/Developer/audio-library-claude/docs/GALAXY_OPTIONS_MENU_QUICK_FIX_LIST.md
+
+
+NOTES
+=====
+- All HTML to add is in GALAXY_OPTIONS_MENU_COMPARISON_REPORT.md
+- All functions are in V37 starting around line 5000+
+- Test after each phase to catch errors early
+- Start with Phase 1 (critical fixes) - only 10 minutes!

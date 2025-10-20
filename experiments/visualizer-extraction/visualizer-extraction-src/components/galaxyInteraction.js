@@ -177,7 +177,8 @@ export class GalaxyInteraction {
 
         window.particles.forEach(cluster => {
             cluster.subParticles.forEach(subParticle => {
-                const worldPos = cluster.centerPosition.clone().add(subParticle.offset);
+                // Use stored world position from animation loop
+                const worldPos = subParticle.worldPosition || cluster.centerPosition.clone().add(subParticle.offset);
                 const distance = rayOrigin.distanceTo(worldPos);
 
                 // Check if ray intersects particle (simplified sphere check)
@@ -188,7 +189,7 @@ export class GalaxyInteraction {
                     const closestPoint = rayOrigin.clone().add(rayDirection.clone().multiplyScalar(projection));
                     const particleDistance = closestPoint.distanceTo(worldPos);
 
-                    const particleRadius = window.particleSize * 0.5;
+                    const particleRadius = window.particleSize * 2.0; // Increased for easier clicking
                     if (particleDistance < particleRadius && distance < closestDistance) {
                         closestDistance = distance;
                         closestFile = cluster.file;

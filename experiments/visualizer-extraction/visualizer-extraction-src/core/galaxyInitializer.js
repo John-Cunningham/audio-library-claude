@@ -108,7 +108,7 @@ export class GalaxyInitializer {
 
         // Crosshair hover effects
         window.mouseInteractionEnabled = window.mouseInteractionEnabled ?? true;
-        window.hoverSlowdown = window.hoverSlowdown ?? 1.0;
+        window.hoverSlowdown = window.hoverSlowdown ?? 0.1; // 10% default speed
         window.hoverScale = window.hoverScale ?? 2.0;
 
         // Database & search

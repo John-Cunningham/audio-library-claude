@@ -44,6 +44,11 @@ export function renderAll(files) {
         return;
     }
 
+    // TEMPORARY: Disable mini waveform loading to improve performance
+    // TODO: Re-enable after investigating Supabase QUIC issues
+    console.log('[MiniWaveform] Mini waveforms temporarily disabled for performance');
+    return;
+
     files.forEach(file => {
         const container = document.getElementById(`miniwave-${file.id}`);
         if (!container) return;

@@ -50,7 +50,12 @@ export class GalaxyParticleSystem {
      * Create particles from audio files
      */
     createParticles(audioFiles) {
-        if (!this.scene) return;
+        if (!this.scene) {
+            console.error('❌ createParticles: scene is null!');
+            return;
+        }
+
+        console.log(`🌟 createParticles called with ${audioFiles.length} files`);
 
         // Clear existing particles
         this.clearParticles();
@@ -68,16 +73,18 @@ export class GalaxyParticleSystem {
 
         // Create geometry and material
         const geometry = new THREE.PlaneGeometry(1, 1);
-        const texture = this.createParticleTexture(this.particleShape);
 
+        // TEMPORARY FIX: Use simple material without texture (like test InstancedMesh)
+        // The texture was causing particles to not render
         const material = new THREE.MeshBasicMaterial({
-            map: texture,
+            color: 0xffffff,  // White base color (will be tinted by setColorAt)
             transparent: true,
-            opacity: this.particleBrightness,
-            blending: THREE.AdditiveBlending,
-            side: THREE.DoubleSide,
-            depthWrite: false
+            opacity: 1.0,  // Full opacity (was this.particleBrightness = 0.8)
+            side: THREE.DoubleSide
+            // Removed: map (texture), blending, depthWrite
         });
+
+        console.log('🎨 Using simple material (no texture) to fix visibility');
 
         // Create instanced mesh
         this.particleSystem = new THREE.InstancedMesh(geometry, material, totalParticles);
@@ -91,6 +98,11 @@ export class GalaxyParticleSystem {
         audioFiles.forEach((file, fileIndex) => {
             const position = this.calculateFilePosition(file, fileIndex);
             const fileColor = this.getColorForFile(file);
+
+            // Debug first 3 particles
+            if (fileIndex < 3) {
+                console.log(`Particle ${fileIndex}: position (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}), color:`, fileColor);
+            }
 
             const cluster = {
                 file: file,
@@ -152,6 +164,94 @@ export class GalaxyParticleSystem {
         }
 
         this.scene.add(this.particleSystem);
+
+        console.log(`✅ Created ${this.particles.length} particle clusters (${instanceIndex} total particles)`);
+        console.log(`✅ Particle system added to scene:`, this.particleSystem);
+        console.log(`✅ First particle position:`, this.particles[0]?.centerPosition);
+        console.log(`✅ Particle size:`, this.particleSize);
+        console.log(`✅ Particle brightness:`, this.particleBrightness);
+        console.log(`✅ Camera position:`, window.camera?.position);
+
+        // Add TEST particles at specific positions to debug visibility
+        const testPositions = [
+            { pos: [0, 0, 0], color: 0xff0000, label: 'Center (0,0,0) RED' },
+            { pos: [50, 0, 0], color: 0x00ff00, label: 'Right (50,0,0) GREEN' },
+            { pos: [-50, 0, 0], color: 0x0000ff, label: 'Left (-50,0,0) BLUE' },
+            { pos: [0, 50, 0], color: 0xffff00, label: 'Up (0,50,0) YELLOW' },
+            { pos: [0, -50, 0], color: 0xff00ff, label: 'Down (0,-50,0) MAGENTA' },
+            { pos: [0, 0, 50], color: 0x00ffff, label: 'Forward (0,0,50) CYAN' }
+        ];
+
+        testPositions.forEach(({pos, color, label}) => {
+            const geo = new THREE.PlaneGeometry(20, 20);
+            const mat = new THREE.MeshBasicMaterial({
+                color: color,
+                transparent: true,
+                opacity: 1.0,
+                side: THREE.DoubleSide
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(pos[0], pos[1], pos[2]);
+            this.scene.add(mesh);
+            console.log(`🎨 TEST: ${label}`);
+        });
+
+        // Also create a simple Mesh version of first particle to test if InstancedMesh is the issue
+        const simpleGeo = new THREE.PlaneGeometry(this.particleSize, this.particleSize);
+        const simpleMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 1.0,
+            side: THREE.DoubleSide
+        });
+        const simpleMesh = new THREE.Mesh(simpleGeo, simpleMat);
+        const firstPos = this.particles[0]?.centerPosition;
+        if (firstPos) {
+            simpleMesh.position.copy(firstPos);
+            this.scene.add(simpleMesh);
+            console.log(`⭐ SIMPLE MESH TEST: White particle at first particle position (${firstPos.x.toFixed(1)}, ${firstPos.y.toFixed(1)}, ${firstPos.z.toFixed(1)})`);
+        }
+
+        // TEST: Create a small InstancedMesh with 3 particles using EXACT same material as test squares
+        console.log('🔬 Creating test InstancedMesh with 3 instances...');
+        const testInstancedGeo = new THREE.PlaneGeometry(15, 15);
+        const testInstancedMat = new THREE.MeshBasicMaterial({
+            color: 0xFFFFFF,  // White
+            transparent: true,
+            opacity: 1.0,
+            side: THREE.DoubleSide
+            // NO texture, NO blending - just like the working test squares
+        });
+        const testInstancedMesh = new THREE.InstancedMesh(testInstancedGeo, testInstancedMat, 3);
+        testInstancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+        const testDummy = new THREE.Object3D();
+        const testColor = new THREE.Color(0xFFFFFF);
+
+        // Place 3 instances at known positions
+        const testInstancePositions = [
+            [0, 0, -50],   // Behind center
+            [30, 30, 0],   // Upper right
+            [-30, -30, 0]  // Lower left
+        ];
+
+        testInstancePositions.forEach((pos, i) => {
+            testDummy.position.set(pos[0], pos[1], pos[2]);
+            testDummy.scale.set(1, 1, 1);
+            testDummy.updateMatrix();
+            testInstancedMesh.setMatrixAt(i, testDummy.matrix);
+            testInstancedMesh.setColorAt(i, testColor);
+            console.log(`  Instance ${i}: (${pos[0]}, ${pos[1]}, ${pos[2]})`);
+        });
+
+        testInstancedMesh.instanceMatrix.needsUpdate = true;
+        if (testInstancedMesh.instanceColor) {
+            testInstancedMesh.instanceColor.needsUpdate = true;
+        }
+
+        this.scene.add(testInstancedMesh);
+        console.log('✅ Test InstancedMesh added to scene');
+        window.testInstancedMesh = testInstancedMesh;
 
         // Expose to window for controls
         window.particles = this.particles;
@@ -278,6 +378,27 @@ export class GalaxyParticleSystem {
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 break;
 
+            case 'disc':
+                // Solid disc with soft edges
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius * 0.9, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.fill();
+                break;
+
+            case 'ring':
+                // Ring/donut shape
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalCompositeOperation = 'source-over';
+                break;
+
             case 'diamond':
                 ctx.save();
                 ctx.translate(centerX, centerY);
@@ -354,10 +475,9 @@ export class GalaxyParticleSystem {
         // Update material if needed
         if (this.particleSystem && this.particleSystem.material) {
             if (settings.particleBrightness !== undefined) {
-                // Clamp brightness to valid opacity range (0-1)
-                const opacity = Math.max(0, Math.min(1, this.particleBrightness));
-                this.particleSystem.material.opacity = opacity;
-                console.log('[ParticleSystem] Updated brightness:', this.particleBrightness, '→ opacity:', opacity);
+                // Don't clamp - Three.js supports opacity > 1.0 with additive blending for glow effect
+                this.particleSystem.material.opacity = this.particleBrightness;
+                console.log('[ParticleSystem] Updated brightness/opacity:', this.particleBrightness);
             }
 
             if (settings.particleShape !== undefined) {

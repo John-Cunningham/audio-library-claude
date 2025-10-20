@@ -36,7 +36,10 @@ export class GalaxyView {
             orbitRadius: options.orbitRadius || 80,
             visibilityDistance: options.visibilityDistance || 900,
             audioReactivity: options.audioReactivity !== false,
+            globalAudioReactivity: options.globalAudioReactivity || 4.4,
             bloomStrength: options.bloomStrength || 0,
+            hoverSlowdown: options.hoverSlowdown || 0.1,
+            hoverScale: options.hoverScale || 1.0,
             colorMode: options.colorMode || 'tags',
             xAxisMode: options.xAxisMode || 'bpm',
             yAxisMode: options.yAxisMode || 'key',
@@ -1086,6 +1089,120 @@ export class GalaxyView {
         });
 
         console.log(`📋 Populated preset dropdown with ${presets.length} presets`);
+    }
+
+    // ============================================================================
+    // GALAXY CONTROLS - UI Control Methods
+    // ============================================================================
+
+    /**
+     * Update orbit speed
+     */
+    updateMotionSpeed(value) {
+        this.config.orbitSpeed = parseFloat(value);
+        const elem = document.getElementById('speedValue');
+        if (elem) elem.textContent = (value * 100).toFixed(1);
+    }
+
+    /**
+     * Update orbit radius (amplitude of motion)
+     */
+    updateMotionRadius(value) {
+        this.config.orbitRadius = parseFloat(value);
+        const elem = document.getElementById('radiusValue');
+        if (elem) elem.textContent = value;
+    }
+
+    /**
+     * Update cluster spread (radius of sub-particle cluster)
+     */
+    updateClusterSpread(value) {
+        this.config.clusterRadius = parseFloat(value);
+        const elem = document.getElementById('clusterSpreadValue');
+        if (elem) elem.textContent = value;
+
+        // Update existing clusters' sub-particle offsets
+        if (this.particles.length > 0 && this.particleSystem) {
+            this.particles.forEach(cluster => {
+                cluster.subParticles.forEach(subParticle => {
+                    // Scale the offset based on new cluster radius
+                    const currentRadius = Math.sqrt(
+                        subParticle.offset.x ** 2 +
+                        subParticle.offset.y ** 2 +
+                        subParticle.offset.z ** 2
+                    );
+                    if (currentRadius > 0) {
+                        const scale = this.config.clusterRadius / currentRadius;
+                        subParticle.offset.multiplyScalar(scale);
+                    }
+                });
+            });
+        }
+    }
+
+    /**
+     * Update number of sub-particles per cluster
+     */
+    updateSubParticleCount(value) {
+        const newCount = parseInt(value);
+        this.config.particlesPerCluster = newCount;
+        const elem = document.getElementById('subParticleCountValue');
+        if (elem) elem.textContent = value;
+
+        // Recreate particles with new count
+        this.createParticles();
+    }
+
+    /**
+     * Update bloom strength
+     */
+    updateBloomStrength(value) {
+        this.config.bloomStrength = parseFloat(value);
+        const elem = document.getElementById('bloomStrengthValue');
+        if (elem) elem.textContent = value;
+
+        if (this.bloomPass) {
+            this.bloomPass.strength = this.config.bloomStrength;
+        }
+    }
+
+    /**
+     * Update global audio reactivity
+     */
+    updateGlobalReactivity(value) {
+        this.config.globalAudioReactivity = parseFloat(value);
+        const elem = document.getElementById('globalReactivityValue');
+        if (elem) elem.textContent = value;
+    }
+
+    /**
+     * Toggle audio reactivity on/off
+     */
+    toggleAudioReactivity() {
+        this.config.audioReactivity = !this.config.audioReactivity;
+        const btn = document.getElementById('audioReactivityToggle');
+        if (btn) {
+            btn.textContent = `Audio Reactivity: ${this.config.audioReactivity ? 'ON' : 'OFF'}`;
+            btn.style.background = this.config.audioReactivity ? 'rgba(102,126,234,0.3)' : 'rgba(255,255,255,0.1)';
+        }
+    }
+
+    /**
+     * Update hover slowdown (speed when hovering)
+     */
+    updateHoverSpeed(value) {
+        this.config.hoverSlowdown = parseFloat(value) / 100; // Convert percentage to decimal
+        const elem = document.getElementById('hoverSpeedValue');
+        if (elem) elem.textContent = value;
+    }
+
+    /**
+     * Update hover scale (size when hovering)
+     */
+    updateHoverScale(value) {
+        this.config.hoverScale = parseFloat(value);
+        const elem = document.getElementById('hoverScaleValue');
+        if (elem) elem.textContent = value;
     }
 
     /**

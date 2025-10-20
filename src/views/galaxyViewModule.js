@@ -306,3 +306,115 @@ window.populatePresetDropdown = function() {
 
     galaxyViewInstance.populatePresetDropdown();
 };
+
+// ============================================================================
+// GALAXY CONTROLS - Global functions for HTML controls
+// ============================================================================
+
+/**
+ * Update motion speed (orbit speed)
+ * Called by HTML slider: oninput="updateMotionSpeed(this.value)"
+ */
+window.updateMotionSpeed = function(value) {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    galaxyViewInstance.updateMotionSpeed(value);
+};
+
+/**
+ * Update motion radius (orbit radius)
+ * Called by HTML slider: oninput="updateMotionRadius(this.value)"
+ */
+window.updateMotionRadius = function(value) {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    galaxyViewInstance.updateMotionRadius(value);
+};
+
+/**
+ * Update cluster spread
+ * Called by HTML slider: oninput="updateClusterSpread(this.value)"
+ */
+window.updateClusterSpread = function(value) {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    galaxyViewInstance.updateClusterSpread(value);
+};
+
+/**
+ * Update sub-particle count
+ * Called by HTML slider: oninput="updateSubParticleCount(this.value)"
+ */
+window.updateSubParticleCount = function(value) {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    galaxyViewInstance.updateSubParticleCount(value);
+};
+
+/**
+ * Update bloom strength
+ * Called by HTML slider: oninput="updateBloomStrength(this.value)"
+ */
+window.updateBloomStrength = function(value) {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    galaxyViewInstance.updateBloomStrength(value);
+};
+
+/**
+ * Update global audio reactivity
+ * Called by HTML slider: oninput="updateGlobalReactivity(this.value)"
+ */
+window.updateGlobalReactivity = function(value) {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    galaxyViewInstance.updateGlobalReactivity(value);
+};
+
+/**
+ * Toggle audio reactivity on/off
+ * Called by HTML button: onclick="toggleAudioReactivity()"
+ */
+window.toggleAudioReactivity = function() {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    galaxyViewInstance.toggleAudioReactivity();
+};
+
+/**
+ * Update hover speed (hover slowdown effect)
+ * Called by HTML slider: oninput="updateHoverSpeed(this.value)"
+ */
+window.updateHoverSpeed = function(value) {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    galaxyViewInstance.updateHoverSpeed(value);
+};
+
+/**
+ * Update hover scale (particle size on hover)
+ * Called by HTML slider: oninput="updateHoverScale(this.value)"
+ */
+window.updateHoverScale = function(value) {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    galaxyViewInstance.updateHoverScale(value);
+};

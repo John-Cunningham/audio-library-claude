@@ -1241,8 +1241,8 @@
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>
                     <div class="mode-section">
-                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Visibility Distance: <span id="galaxyVisibilityValue">2000</span></label>
-                        <input type="range" min="100" max="2000" step="50" value="2000"
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Visibility Distance: <span id="galaxyVisibilityValue">900</span></label>
+                        <input type="range" min="100" max="2000" step="50" value="900"
                                oninput="visibilityDistance = parseInt(this.value); document.getElementById('galaxyVisibilityValue').textContent = this.value;"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>
@@ -1253,17 +1253,17 @@
                 <div class="collapsible-content collapsed" style="display: none; margin-bottom: 8px;">
                     <div class="mode-section" style="margin-bottom: 8px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Speed: <span id="speedValue">0.150</span></label>
-                        <input type="range" id="speedSlider" min="0" max="0.01" step="0.0001" value="0.0015"
+                        <input type="range" id="speedSlider" min="0" max="0.00003" step="0.0000001" value="0.0000015"
                                oninput="updateMotionSpeed(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
-                        <input type="number" id="speedInput" min="0" max="0.01" step="0.0001" value="0.0015"
+                        <input type="number" id="speedInput" min="0" max="0.00003" step="0.0000001" value="0.0000015"
                                oninput="updateMotionSpeedDirect(this.value)"
                                style="width: 100%; margin-top: 5px; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
                     </div>
 
                     <div class="mode-section" style="margin-bottom: 8px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Amplitude: <span id="radiusValue">80</span></label>
-                        <input type="range" id="radiusSlider" min="0" max="1000" step="1" value="80"
+                        <input type="range" id="radiusSlider" min="0" max="100" step="1" value="80"
                                oninput="updateMotionRadius(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>
@@ -1274,14 +1274,14 @@
                 <div class="collapsible-content collapsed" style="display: none; margin-bottom: 8px;">
                     <div class="mode-section" style="margin-bottom: 8px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Cluster Spread: <span id="clusterSpreadValue">10.0</span></label>
-                        <input type="range" id="clusterSpreadSlider" min="0.1" max="1000" step="0.5" value="10.0"
+                        <input type="range" id="clusterSpreadSlider" min="0.1" max="20" step="0.1" value="10.0"
                                oninput="updateClusterSpread(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>
 
                     <div class="mode-section" style="margin-bottom: 8px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Particles Per Cluster: <span id="subParticleCountValue">48</span></label>
-                        <input type="range" id="subParticleCountSlider" min="3" max="150" step="1" value="48"
+                        <input type="range" id="subParticleCountSlider" min="3" max="50" step="1" value="48"
                                oninput="updateSubParticleCount(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>

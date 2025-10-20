@@ -771,6 +771,24 @@ export class GalaxyView {
         this.bassAmplitude = bassSlice.reduce((a, b) => a + b, 0) / bassSlice.length / 128;
         this.midsAmplitude = midsSlice.reduce((a, b) => a + b, 0) / midsSlice.length / 128;
         this.highsAmplitude = highsSlice.reduce((a, b) => a + b, 0) / highsSlice.length / 128;
+
+        // Update UI displays
+        this.updateAudioReactivityDisplays();
+    }
+
+    /**
+     * Update audio reactivity display elements in UI
+     */
+    updateAudioReactivityDisplays() {
+        const currentAmpElem = document.getElementById('audioAmplitudeDisplay');
+        const bassElem = document.getElementById('bassAmplitudeDisplay');
+        const midsElem = document.getElementById('midsAmplitudeDisplay');
+        const highsElem = document.getElementById('highsAmplitudeDisplay');
+
+        if (currentAmpElem) currentAmpElem.textContent = this.currentAudioAmplitude.toFixed(2);
+        if (bassElem) bassElem.textContent = this.bassAmplitude.toFixed(2);
+        if (midsElem) midsElem.textContent = this.midsAmplitude.toFixed(2);
+        if (highsElem) highsElem.textContent = this.highsAmplitude.toFixed(2);
     }
 
     /**
@@ -1205,6 +1223,28 @@ export class GalaxyView {
         this.config.hoverScale = parseFloat(value);
         const elem = document.getElementById('hoverScaleValue');
         if (elem) elem.textContent = value;
+    }
+
+    /**
+     * Update particle settings (called by control functions)
+     * @param {Object} settings - Settings object with properties to update
+     */
+    updateParticleSettings(settings = {}) {
+        // This method is called by various control functions
+        // Most settings are already handled by individual update methods
+        // This acts as a general-purpose update handler for any additional settings
+
+        // Log what settings are being updated (helpful for debugging)
+        if (Object.keys(settings).length > 0) {
+            console.log('🎛️ Particle settings updated:', settings);
+        }
+
+        // Apply any config updates
+        Object.keys(settings).forEach(key => {
+            if (this.config.hasOwnProperty(key)) {
+                this.config[key] = settings[key];
+            }
+        });
     }
 
     /**

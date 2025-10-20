@@ -418,3 +418,177 @@ window.updateHoverScale = function(value) {
     }
     galaxyViewInstance.updateHoverScale(value);
 };
+
+// ============================================================================
+// TOGGLE CONTROLS - Global functions for HTML toggle buttons
+// ============================================================================
+
+/**
+ * Toggle crosshair visibility
+ * Called by HTML button: onclick="toggleCrosshair()"
+ */
+window.toggleCrosshair = function() {
+    // TODO: Implement crosshair toggle in GalaxyView class
+    console.log('toggleCrosshair() called - stub function');
+};
+
+/**
+ * Toggle tooltips visibility
+ * Called by HTML button: onclick="toggleTooltips()"
+ */
+window.toggleTooltips = function() {
+    // TODO: Implement tooltips toggle in GalaxyView class
+    console.log('toggleTooltips() called - stub function');
+};
+
+/**
+ * Toggle info window visibility
+ * Called by HTML button: onclick="toggleInfoWindow()"
+ */
+window.toggleInfoWindow = function() {
+    // TODO: Implement info window toggle in GalaxyView class
+    console.log('toggleInfoWindow() called - stub function');
+};
+
+/**
+ * Toggle fullscreen mode
+ * Called by HTML button: onclick="toggleFullscreen()"
+ */
+window.toggleFullscreen = function() {
+    const container = document.getElementById('galaxyViewContainer');
+    if (!container) return;
+
+    if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(err => {
+            console.error('Error attempting to enable fullscreen:', err);
+        });
+    } else {
+        document.exitFullscreen();
+    }
+};
+
+/**
+ * Toggle move joystick visibility
+ * Called by HTML button: onclick="toggleMoveJoystick()"
+ */
+window.toggleMoveJoystick = function() {
+    // TODO: Implement move joystick toggle in GalaxyView class
+    console.log('toggleMoveJoystick() called - stub function');
+};
+
+/**
+ * Toggle look joystick visibility
+ * Called by HTML button: onclick="toggleLookJoystick()"
+ */
+window.toggleLookJoystick = function() {
+    // TODO: Implement look joystick toggle in GalaxyView class
+    console.log('toggleLookJoystick() called - stub function');
+};
+
+/**
+ * Toggle play button visibility
+ * Called by HTML button: onclick="togglePlayButton()"
+ */
+window.togglePlayButton = function() {
+    // TODO: Implement play button toggle in GalaxyView class
+    console.log('togglePlayButton() called - stub function');
+};
+
+// ============================================================================
+// FILE BROWSER CONTROLS - Global functions for HTML controls
+// ============================================================================
+
+/**
+ * Toggle galaxy database source (audio files vs stems)
+ * Called by HTML checkbox: onclick="toggleGalaxyDbSource('audioFiles', event)"
+ */
+window.toggleGalaxyDbSource = function(source, event) {
+    if (event) event.stopPropagation();
+    // TODO: Implement database source toggle in GalaxyView class
+    console.log(`toggleGalaxyDbSource(${source}) called - stub function`);
+};
+
+/**
+ * Show all categories
+ * Called by HTML button: onclick="showAllCategories()"
+ */
+window.showAllCategories = function() {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    // TODO: Implement show all categories in GalaxyView class
+    console.log('showAllCategories() called - stub function');
+};
+
+/**
+ * Hide all categories
+ * Called by HTML button: onclick="hideAllCategories()"
+ */
+window.hideAllCategories = function() {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    // TODO: Implement hide all categories in GalaxyView class
+    console.log('hideAllCategories() called - stub function');
+};
+
+// ============================================================================
+// VISUALIZATION MODE CONTROLS - Global functions for HTML dropdowns
+// ============================================================================
+
+/**
+ * Recreate particles (called when visualization modes change)
+ * Called by HTML selects: onchange="recreateParticles()"
+ */
+window.recreateParticles = function() {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+
+    // Read current visualization mode values from dropdowns
+    const colorMode = document.getElementById('galaxyColorMode')?.value;
+    const xAxisMode = document.getElementById('galaxyXAxisMode')?.value;
+    const yAxisMode = document.getElementById('galaxyYAxisMode')?.value;
+    const zAxisMode = document.getElementById('galaxyZAxisMode')?.value;
+
+    // Update config
+    if (colorMode) galaxyViewInstance.config.colorMode = colorMode;
+    if (xAxisMode) galaxyViewInstance.config.xAxisMode = xAxisMode;
+    if (yAxisMode) galaxyViewInstance.config.yAxisMode = yAxisMode;
+    if (zAxisMode) galaxyViewInstance.config.zAxisMode = zAxisMode;
+
+    // Recreate particles with new modes
+    galaxyViewInstance.createParticles();
+    console.log('✅ Particles recreated with new visualization modes');
+};
+
+// ============================================================================
+// OTHER CONTROLS - Global functions for miscellaneous HTML controls
+// ============================================================================
+
+/**
+ * Update stem offset
+ * Called by HTML slider: oninput="updateStemOffset(this.value)"
+ */
+window.updateStemOffset = function(value) {
+    // TODO: Implement stem offset in GalaxyView class
+    const elem = document.getElementById('stemOffsetValue');
+    if (elem) elem.textContent = value;
+    console.log(`updateStemOffset(${value}) called - stub function`);
+};
+
+/**
+ * Update brightness
+ * Called by HTML slider: oninput="updateBrightness()"
+ */
+window.updateBrightness = function() {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    // TODO: Implement brightness update in GalaxyView class
+    console.log('updateBrightness() called - stub function');
+};

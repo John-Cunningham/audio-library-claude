@@ -113,6 +113,35 @@ Successfully achieved **100% feature parity** between the production Galaxy View
 
 ---
 
+### 4. Missing JavaScript Functions (RESOLVED)
+**Problem**: HTML controls added but JavaScript functions not exposed to window
+
+**Error Reported**:
+```
+index.html:1487 Uncaught ReferenceError: updateAudioStrength is not defined
+```
+
+**Solution**: Extracted all control functions from V37 reference and added to production
+
+**21 Functions Added** (`src/views/galaxyViewModule.js`):
+
+| Category | Functions Added |
+|----------|----------------|
+| Audio Reactivity | updateAudioStrength, updateFrequencyMode |
+| Galaxy Dynamics | updateRotationMode, updateRotationAxis, updateParticleSize, updateParticleBrightness, updateVisibility, updateParticleShape, toggleMotion, updateXAxisScale, updateYAxisScale, updateZAxisScale |
+| Sub-Particle Dynamics | updateSubParticleSize, updateMainToSubRatio, updateSubParticleMotion, updateSubParticleSpeed, updateMotionPath, updateSubParticleShape |
+| Visual Gradients | updateSizeGradient, updateDensityGradient |
+| Crosshair Hover | toggleMouseInteraction |
+
+**Result**: All visualization controls now functional, no console errors
+
+**Files Modified**:
+- `src/views/galaxyViewModule.js` (+344 lines)
+
+**Commit**: `2f3ab96`
+
+---
+
 ## Architecture & Implementation
 
 ### Component Structure
@@ -273,21 +302,21 @@ http://localhost:5500/index.html
 
 ## Known Limitations
 
-### Stub Functions
-Some functions are implemented as stubs (log to console only):
+### Stub Functions (MOSTLY RESOLVED)
+✅ **All critical control functions now implemented** (Commit 2f3ab96)
+
+Remaining stub functions (UI toggles only):
 - `toggleCrosshair()`, `toggleTooltips()`, `toggleInfoWindow()`
 - `toggleMoveJoystick()`, `toggleLookJoystick()`, `togglePlayButton()`
 - `toggleGalaxyDbSource()`, `showAllCategories()`, `hideAllCategories()`
-- `updateStemOffset()`, `updateBrightness()`
+- `updateStemOffset()`
 
-**Reason**: Full implementation requires deeper integration with GalaxyView class
-
-**Impact**: Controls exist in UI but don't affect visualization yet
+**Impact**: Visualization controls all working, only UI toggle functions remain as stubs
 
 **Next Steps**:
-- Extract full implementations from V37 reference
-- Add methods to GalaxyView class
-- Wire up stub functions to class methods
+- Extract full implementations for UI toggles from V37 reference
+- Add methods to GalaxyView class for UI elements
+- Wire up remaining stub functions
 
 ### CodeRabbit Analysis
 - CodeRabbit not installed on system
@@ -315,6 +344,8 @@ Some functions are implemented as stubs (log to console only):
 ## Commit History
 
 ```
+2f3ab96 - fix: Add all missing Galaxy View control functions
+546cb33 - docs: Add comprehensive V37 parity completion summary
 f587cf0 - feat: Add all missing Galaxy Options Menu controls from V37
 0381e35 - fix: Match V37 menu slider ranges exactly - critical value corrections
 970d4ee - fix: Implement lazy loading for mini waveforms
@@ -324,7 +355,7 @@ ffbdf46 - feat: Add Galaxy View control methods and expose to window
 d2ac1a3 - feat: Add complete preset system to Galaxy View
 ```
 
-**Total**: 7 commits on `feature-galaxy-preset-controls` branch
+**Total**: 9 commits on `feature-galaxy-preset-controls` branch
 
 ---
 

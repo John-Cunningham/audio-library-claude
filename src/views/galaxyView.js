@@ -96,12 +96,67 @@ export class GalaxyView {
 
         this.audioFiles = audioFiles;
 
+        // Initialize global window properties for controls
+        this.initializeGlobalControls();
+
         this.initScene();
         this.detectFrequentTags();
         this.createParticles();
         this.setupEventListeners();
 
         console.log('✅ Galaxy View: Initialization complete');
+    }
+
+    /**
+     * Initialize global window properties for galaxy controls
+     */
+    initializeGlobalControls() {
+        // Motion controls
+        window.orbitSpeed = this.config.orbitSpeed;
+        window.orbitRadius = this.config.orbitRadius;
+        window.motionEnabled = true;
+
+        // Rotation controls
+        window.rotationMode = 'static'; // static, collective, spiral, individual
+        window.rotationAxis = 'all'; // x, y, z, all
+
+        // Particle appearance
+        window.particleSize = this.config.particleSize;
+        window.particleBrightness = 0.8;
+        window.particleShape = 'circle'; // circle, square, triangle, star
+
+        // Visibility
+        window.visibilityDistance = this.config.visibilityDistance;
+
+        // Axis scaling
+        window.xAxisScale = 1.0;
+        window.yAxisScale = 1.0;
+        window.zAxisScale = 1.0;
+
+        // Sub-particle controls
+        window.subParticleScale = 0.3;
+        window.mainToSubSizeRatio = 2.0;
+        window.subParticleMotionSpeed = 3.6;
+        window.subParticleAnimationSpeed = 0.5;
+        window.subParticleMotionPath = 'natural'; // static, circular, spiral, random, natural
+        window.subParticleShape = 'sphere'; // sphere, cube, plane
+
+        // Visual gradients
+        window.sizeGradient = 0;
+        window.densityGradient = 0;
+
+        // Audio reactivity
+        window.audioReactivityEnabled = this.config.audioReactivity;
+        window.audioReactivityStrength = 40;
+        window.globalAudioReactivity = this.config.globalAudioReactivity;
+        window.audioFrequencyMode = 'all'; // all, bass, mids, highs
+
+        // Crosshair hover
+        window.mouseInteractionEnabled = false;
+        window.hoverSlowdown = this.config.hoverSlowdown;
+        window.hoverScale = this.config.hoverScale;
+
+        console.log('✅ Global galaxy controls initialized');
     }
 
     /**
@@ -200,41 +255,30 @@ export class GalaxyView {
      */
     addStarsBackground() {
         const starsGeometry = new THREE.BufferGeometry();
-        const starsVertices = [];
-        const starsSizes = [];
-        const starsColors = [];
-        const starsCount = 2000;
+        const starCount = 5000;
+        const positions = new Float32Array(starCount * 3);
 
-        for (let i = 0; i < starsCount; i++) {
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos((Math.random() * 2) - 1);
-            const radius = this.config.visibilityDistance * 0.9;
-
-            const x = radius * Math.sin(phi) * Math.cos(theta);
-            const y = radius * Math.sin(phi) * Math.sin(theta);
-            const z = radius * Math.cos(phi);
-
-            starsVertices.push(x, y, z);
-            starsSizes.push(Math.random() * 2 + 0.5);
-
-            const brightness = 0.7 + Math.random() * 0.3;
-            starsColors.push(brightness, brightness, brightness + 0.1);
+        // Create stars in a cube around the scene
+        for (let i = 0; i < starCount * 3; i += 3) {
+            positions[i] = (Math.random() - 0.5) * 2000;     // X
+            positions[i + 1] = (Math.random() - 0.5) * 2000; // Y
+            positions[i + 2] = (Math.random() - 0.5) * 2000; // Z
         }
 
-        starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
-        starsGeometry.setAttribute('size', new THREE.Float32BufferAttribute(starsSizes, 1));
-        starsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(starsColors, 3));
+        starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
         const starsMaterial = new THREE.PointsMaterial({
-            size: 0.5,
-            vertexColors: true,
+            color: 0xffffff,
+            size: 0.7,
             transparent: true,
             opacity: 0.8,
             sizeAttenuation: true
         });
 
-        const stars = new THREE.Points(starsGeometry, starsMaterial);
-        this.scene.add(stars);
+        const starField = new THREE.Points(starsGeometry, starsMaterial);
+        this.scene.add(starField);
+
+        console.log('✨ Added', starCount, 'stars to background');
     }
 
     /**

@@ -1100,8 +1100,10 @@ export class GalaxyView {
      */
     updateMotionSpeed(value) {
         this.config.orbitSpeed = parseFloat(value);
-        const elem = document.getElementById('speedValue');
-        if (elem) elem.textContent = (value * 100).toFixed(1);
+        const textElem = document.getElementById('speedValue');
+        const inputElem = document.getElementById('speedInput');
+        if (textElem) textElem.textContent = (value * 100).toFixed(1);
+        if (inputElem) inputElem.value = value;
     }
 
     /**

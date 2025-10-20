@@ -1252,15 +1252,18 @@
                 <h3 onclick="toggleSection(this)" class="collapsed" style="margin: 8px 0 4px; padding: 6px 0; cursor: pointer; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">Galaxy Dynamics</h3>
                 <div class="collapsible-content collapsed" style="display: none; margin-bottom: 8px;">
                     <div class="mode-section" style="margin-bottom: 8px;">
-                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Orbit Speed: <span id="speedValue">0.010</span></label>
-                        <input type="range" id="speedSlider" min="0" max="2.0" step="0.001" value="0.0015"
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Speed: <span id="speedValue">0.150</span></label>
+                        <input type="range" id="speedSlider" min="0" max="0.01" step="0.0001" value="0.0015"
                                oninput="updateMotionSpeed(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                        <input type="number" id="speedInput" min="0" max="0.01" step="0.0001" value="0.0015"
+                               oninput="updateMotionSpeedDirect(this.value)"
+                               style="width: 100%; margin-top: 5px; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
                     </div>
 
                     <div class="mode-section" style="margin-bottom: 8px;">
-                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Orbit Radius: <span id="radiusValue">20</span></label>
-                        <input type="range" id="radiusSlider" min="0" max="5000" step="50" value="80"
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Amplitude: <span id="radiusValue">80</span></label>
+                        <input type="range" id="radiusSlider" min="0" max="1000" step="1" value="80"
                                oninput="updateMotionRadius(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>
@@ -1270,15 +1273,15 @@
                 <h3 onclick="toggleSection(this)" class="collapsed" style="margin: 8px 0 4px; padding: 6px 0; cursor: pointer; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">Sub-Particle Dynamics</h3>
                 <div class="collapsible-content collapsed" style="display: none; margin-bottom: 8px;">
                     <div class="mode-section" style="margin-bottom: 8px;">
-                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Cluster Spread: <span id="clusterSpreadValue">2.0</span></label>
-                        <input type="range" id="clusterSpreadSlider" min="0.1" max="20" step="0.1" value="10.0"
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Cluster Spread: <span id="clusterSpreadValue">10.0</span></label>
+                        <input type="range" id="clusterSpreadSlider" min="0.1" max="1000" step="0.5" value="10.0"
                                oninput="updateClusterSpread(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>
 
                     <div class="mode-section" style="margin-bottom: 8px;">
-                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Particles Per Cluster: <span id="subParticleCountValue">15</span></label>
-                        <input type="range" id="subParticleCountSlider" min="3" max="50" step="1" value="48"
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Particles Per Cluster: <span id="subParticleCountValue">48</span></label>
+                        <input type="range" id="subParticleCountSlider" min="3" max="150" step="1" value="48"
                                oninput="updateSubParticleCount(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>

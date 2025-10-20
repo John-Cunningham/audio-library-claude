@@ -324,6 +324,25 @@ window.updateMotionSpeed = function(value) {
 };
 
 /**
+ * Update motion speed directly from number input
+ * Called by HTML number input: oninput="updateMotionSpeedDirect(this.value)"
+ */
+window.updateMotionSpeedDirect = function(value) {
+    if (!galaxyViewInstance) {
+        console.warn('⚠️ Galaxy View not initialized');
+        return;
+    }
+    const numValue = parseFloat(value);
+    galaxyViewInstance.config.orbitSpeed = numValue;
+
+    // Update both UI elements
+    const textElem = document.getElementById('speedValue');
+    const sliderElem = document.getElementById('speedSlider');
+    if (textElem) textElem.textContent = (numValue * 100).toFixed(1);
+    if (sliderElem) sliderElem.value = numValue;
+};
+
+/**
  * Update motion radius (orbit radius)
  * Called by HTML slider: oninput="updateMotionRadius(this.value)"
  */

@@ -1267,6 +1267,87 @@
                                oninput="updateMotionRadius(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>
+
+                    <div class="mode-section">
+                        <label>Rotation Mode:</label>
+                        <select id="rotationMode" onchange="updateRotationMode(this.value)"
+                                style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                            <option value="collective">Collective (Sphere)</option>
+                            <option value="spiral">Spiral Galaxy</option>
+                            <option value="individual">Individual Orbits</option>
+                        </select>
+                    </div>
+
+                    <div class="mode-section">
+                        <label>Rotation Axis:</label>
+                        <select id="rotationAxis" onchange="updateRotationAxis(this.value)"
+                                style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                            <option value="y">Y-Axis (Vertical)</option>
+                            <option value="x">X-Axis (Horizontal)</option>
+                            <option value="z">Z-Axis (Depth)</option>
+                            <option value="all">All Axes</option>
+                        </select>
+                    </div>
+
+                    <div class="mode-section">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Particle Size: <span id="sizeValue">17.5</span></label>
+                        <input type="range" id="sizeSlider" min="0.5" max="100" step="0.5" value="17.5"
+                               oninput="updateParticleSize(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Particle Brightness: <span id="brightnessValue">0.8</span></label>
+                        <input type="range" id="brightnessSlider" min="0.1" max="10.0" step="0.1" value="0.8"
+                               oninput="updateParticleBrightness(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Visibility Distance: <span id="visibilityValue">900</span></label>
+                        <input type="range" id="visibilitySlider" min="100" max="2000" step="50" value="900"
+                               oninput="updateVisibility(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section">
+                        <label>Particle Shape:</label>
+                        <select onchange="updateParticleShape(this.value)"
+                                style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                            <option value="circle">Circle</option>
+                            <option value="square">Square</option>
+                            <option value="disc">Disc</option>
+                            <option value="ring">Ring</option>
+                        </select>
+                    </div>
+
+                    <div class="mode-section">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">X-Axis Scale: <span id="xAxisScaleValue">1.0</span></label>
+                        <input type="range" id="xAxisScaleSlider" min="0.1" max="3.0" step="0.1" value="1.0"
+                               oninput="updateXAxisScale(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Y-Axis Scale: <span id="yAxisScaleValue">1.0</span></label>
+                        <input type="range" id="yAxisScaleSlider" min="0.1" max="3.0" step="0.1" value="1.0"
+                               oninput="updateYAxisScale(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Z-Axis Scale: <span id="zAxisScaleValue">1.0</span></label>
+                        <input type="range" id="zAxisScaleSlider" min="0.1" max="3.0" step="0.1" value="1.0"
+                               oninput="updateZAxisScale(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section">
+                        <button class="toggle-btn" id="motionToggle" onclick="toggleMotion()"
+                                style="width: 100%; padding: 6px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #667eea; cursor: pointer; font-size: 11px;">
+                            Motion: ON
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Sub-Particle Dynamics Section -->
@@ -1285,11 +1366,78 @@
                                oninput="updateSubParticleCount(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                     </div>
+
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Sub-Particle Size: <span id="subParticleSizeValue">0.3</span></label>
+                        <input type="range" id="subParticleSizeSlider" min="0.05" max="1.0" step="0.05" value="0.3"
+                               oninput="updateSubParticleSize(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Main/Sub Size Ratio: <span id="mainToSubRatioValue">2.0</span></label>
+                        <input type="range" id="mainToSubRatioSlider" min="1.0" max="10.0" step="0.5" value="2.0"
+                               oninput="updateMainToSubRatio(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Sub-Particle Distance: <span id="subParticleMotionValue">3.6</span></label>
+                        <input type="range" id="subParticleMotionSlider" min="0" max="50" step="0.5" value="3.6"
+                               oninput="updateSubParticleMotion(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Sub-Particle Speed: <span id="subParticleSpeedValue">0.5</span></label>
+                        <input type="range" id="subParticleSpeedSlider" min="0.1" max="25.0" step="0.5" value="0.5"
+                               oninput="updateSubParticleSpeed(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Motion Path:</label>
+                        <select id="motionPathSelect" onchange="updateMotionPath(this.value)"
+                                style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                            <option value="natural">Natural (Simple Orbit)</option>
+                            <option value="ring">Ring (2D Orbit)</option>
+                            <option value="sphere">Sphere (3D Orbit)</option>
+                            <option value="figure8">Figure Eight</option>
+                            <option value="random">Random (Chaotic Orbits)</option>
+                            <option value="static">Static (No Motion)</option>
+                        </select>
+                    </div>
+
+                    <div class="mode-section">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Cluster Shape:</label>
+                        <select id="subParticleShapeSelect" onchange="updateSubParticleShape(this.value)"
+                                style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                            <option value="default">Default</option>
+                            <option value="sphere">Sphere</option>
+                            <option value="spiked">Spiked</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Visual Gradients Section -->
                 <h3 onclick="toggleSection(this)" class="collapsed" style="margin: 8px 0 4px; padding: 6px 0; cursor: pointer; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">Visual Gradients</h3>
                 <div class="collapsible-content collapsed" style="display: none; margin-bottom: 8px;">
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Size Gradient: <span id="sizeGradientValue">0.0</span></label>
+                        <input type="range" id="sizeGradientSlider" min="0" max="2" step="0.1" value="0"
+                               oninput="updateSizeGradient(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                        <div style="font-size: 9px; color: rgba(255,255,255,0.5); margin-top: 3px;">0 = uniform, 2 = extreme gradient (large center, tiny outer)</div>
+                    </div>
+
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Density Gradient: <span id="densityGradientValue">0.0</span></label>
+                        <input type="range" id="densityGradientSlider" min="0" max="1" step="0.1" value="0"
+                               oninput="updateDensityGradient(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                        <div style="font-size: 9px; color: rgba(255,255,255,0.5); margin-top: 3px;">0 = uniform, 1 = dense center, sparse outer</div>
+                    </div>
+
                     <div class="mode-section">
                         <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Bloom/Glow: <span id="bloomStrengthValue">0.0</span></label>
                         <input type="range" id="bloomStrengthSlider" min="0" max="10" step="0.5" value="0"
@@ -1302,6 +1450,43 @@
                 <!-- Audio Reactivity Section -->
                 <h3 onclick="toggleSection(this)" class="collapsed" style="margin: 8px 0 4px; padding: 6px 0; cursor: pointer; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">Audio Reactivity</h3>
                 <div class="collapsible-content collapsed" style="display: none; margin-bottom: 8px;">
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Current Amplitude: <span id="audioAmplitudeDisplay" style="color: #667eea;">0.00</span></label>
+                    </div>
+
+                    <div class="mode-section" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px; margin-bottom: 8px;">
+                        <div style="text-align: center;">
+                            <div style="color: rgba(255,255,255,0.5);">Bass</div>
+                            <div id="bassAmplitudeDisplay" style="color: #f87171;">0.00</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="color: rgba(255,255,255,0.5);">Mids</div>
+                            <div id="midsAmplitudeDisplay" style="color: #fbbf24;">0.00</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="color: rgba(255,255,255,0.5);">Highs</div>
+                            <div id="highsAmplitudeDisplay" style="color: #60a5fa;">0.00</div>
+                        </div>
+                    </div>
+
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Frequency Range:</label>
+                        <select id="frequencyModeSelect" onchange="updateFrequencyMode(this.value)"
+                                style="width: 100%; padding: 4px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px;">
+                            <option value="all">All Frequencies</option>
+                            <option value="bass">Bass (20-250 Hz)</option>
+                            <option value="mids">Mids (250-2000 Hz)</option>
+                            <option value="highs">Highs (2000+ Hz)</option>
+                        </select>
+                    </div>
+
+                    <div class="mode-section" style="margin-bottom: 8px;">
+                        <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Pulse Strength (Playing): <span id="audioStrengthValue">40</span></label>
+                        <input type="range" id="audioStrengthSlider" min="0" max="100" step="1" value="40"
+                               oninput="updateAudioStrength(this.value)"
+                               style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
+                    </div>
+
                     <div class="mode-section" style="margin-bottom: 8px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Global Reactivity (All): <span id="globalReactivityValue">0.5</span></label>
                         <input type="range" id="globalReactivitySlider" min="0" max="10" step="0.1" value="4.4"
@@ -1327,12 +1512,19 @@
                         <div style="font-size: 9px; color: rgba(255,255,255,0.5); margin-top: 3px;">Speed % when hovered (10% = very slow)</div>
                     </div>
 
-                    <div class="mode-section">
+                    <div class="mode-section" style="margin-bottom: 8px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Hover Scale: <span id="hoverScaleValue">1.0</span>x</label>
                         <input type="range" id="hoverScaleSlider" min="1" max="5" step="0.1" value="1.0"
                                oninput="updateHoverScale(this.value)"
                                style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; cursor: pointer;">
                         <div style="font-size: 9px; color: rgba(255,255,255,0.5); margin-top: 3px;">Size multiplier when hovered (1.0 = no change)</div>
+                    </div>
+
+                    <div class="mode-section">
+                        <button class="toggle-btn" id="mouseInteractionToggle" onclick="toggleMouseInteraction()"
+                                style="width: 100%; padding: 6px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #667eea; cursor: pointer; font-size: 11px;">
+                            Crosshair Hover: ON
+                        </button>
                     </div>
                 </div>
 
@@ -1344,20 +1536,51 @@
                         <input type="text" id="presetNameInput" placeholder="My Preset"
                                onkeydown="if(event.key==='Enter'){event.preventDefault();savePreset();this.blur();}"
                                style="width: 100%; padding: 5px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px; margin-bottom: 6px;">
+                        <div style="margin-bottom: 6px;">
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer;">
+                                <input type="checkbox" id="saveCameraCheckbox" checked style="cursor: pointer;">
+                                <span>Save Camera Position</span>
+                            </label>
+                        </div>
                         <button onclick="savePreset()" style="width: 100%; padding: 6px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #667eea; cursor: pointer; margin-bottom: 6px; font-size: 11px;">
                             Save Preset
                         </button>
                     </div>
 
-                    <div class="mode-section">
+                    <div class="mode-section" style="margin-bottom: 10px;">
                         <label style="display: block; margin-bottom: 4px; font-size: 11px; color: #999;">Load Preset:</label>
                         <select id="presetSelect" onchange="loadPreset(this.value)"
                                 style="width: 100%; padding: 5px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; font-size: 11px; margin-bottom: 6px;">
                             <option value="">-- Select Preset --</option>
                         </select>
-                        <button onclick="deletePreset()" style="width: 100%; padding: 6px; background: rgba(255,50,50,0.3); border: 1px solid #ff3333; border-radius: 4px; color: #ff6666; cursor: pointer; font-size: 11px;">
+                        <button onclick="deletePreset()" style="width: 100%; padding: 6px; background: rgba(255,50,50,0.3); border: 1px solid #ff3333; border-radius: 4px; color: #ff6666; cursor: pointer; margin-bottom: 6px; font-size: 11px;">
                             Delete Selected Preset
                         </button>
+                        <button onclick="setDefaultPreset()" style="width: 100%; padding: 6px; background: rgba(102,200,50,0.3); border: 1px solid #66cc33; border-radius: 4px; color: #88ee66; cursor: pointer; font-size: 11px;">
+                            Set as Default Preset
+                        </button>
+                    </div>
+
+                    <div class="mode-section" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 8px;">
+                        <label style="font-size: 10px; color: rgba(255,255,255,0.6); margin-bottom: 6px; display: block;">Import/Export Presets:</label>
+                        <button onclick="exportPresetsAsJSON()" style="width: 100%; padding: 6px; background: rgba(66,153,225,0.3); border: 1px solid #4299e1; border-radius: 4px; color: #63b3ed; cursor: pointer; margin-bottom: 6px; font-size: 10px;">
+                            Export All to JSON
+                        </button>
+                        <input type="file" id="presetImportFile" accept=".json" style="display: none;" onchange="importPresetsFromJSON(event)">
+                        <button onclick="document.getElementById('presetImportFile').click()" style="width: 100%; padding: 6px; background: rgba(66,153,225,0.3); border: 1px solid #4299e1; border-radius: 4px; color: #63b3ed; cursor: pointer; font-size: 10px;">
+                            Import from JSON
+                        </button>
+                    </div>
+
+                    <div class="mode-section" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 8px;">
+                        <label style="font-size: 10px; color: rgba(255,255,255,0.6); margin-bottom: 6px; display: block;">Cloud Sync (Supabase):</label>
+                        <button onclick="syncPresetsToCloud()" style="width: 100%; padding: 6px; background: rgba(102,126,234,0.3); border: 1px solid #667eea; border-radius: 4px; color: #667eea; cursor: pointer; margin-bottom: 6px; font-size: 10px;">
+                            Upload Presets to Cloud
+                        </button>
+                        <button onclick="loadPresetsFromCloud()" style="width: 100%; padding: 6px; background: rgba(102,200,234,0.3); border: 1px solid #66c8ea; border-radius: 4px; color: #66c8ea; cursor: pointer; font-size: 10px;">
+                            Download Presets from Cloud
+                        </button>
+                        <div id="cloudSyncStatus" style="font-size: 9px; color: #888; margin-top: 6px; text-align: center;"></div>
                     </div>
                 </div>
 

@@ -90,33 +90,76 @@ function startAudioAnalysis() {
     let logCounter = 0;
     const LOG_INTERVAL = 300; // Log every 300 frames (~5 seconds at 60fps)
 
+    // Create Web Audio analyser for frequency data
+    let audioContext = null;
+    let analyser = null;
+    let dataArray = null;
+    let sourceNode = null;
+    let isAudioConnected = false;
+
+    const setupAudioAnalyser = () => {
+        const wavesurfer = window.wavesurfer;
+        if (!wavesurfer || isAudioConnected) return;
+
+        try {
+            // WaveSurfer v7 uses Web Audio API internally
+            // Get the media element (audio tag)
+            const mediaElement = wavesurfer.media;
+
+            if (!mediaElement || !(mediaElement instanceof HTMLMediaElement)) {
+                return;
+            }
+
+            // Create audio context
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            // Create analyser
+            if (!analyser) {
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.8;
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+            }
+
+            // Create source from media element
+            if (!sourceNode) {
+                sourceNode = audioContext.createMediaElementSource(mediaElement);
+                sourceNode.connect(analyser);
+                analyser.connect(audioContext.destination);
+                isAudioConnected = true;
+                console.log('🎵 ✅ Audio analyser connected successfully!');
+            }
+        } catch (error) {
+            // Silently handle - might fail if already connected
+            if (error.name !== 'InvalidStateError') {
+                console.warn('🎵 Audio analyser setup warning:', error.message);
+            }
+        }
+    };
+
     const analysisLoop = () => {
         const wavesurfer = window.wavesurfer;
 
-        // Only analyze if wavesurfer exists and galaxy view is active
-        if (wavesurfer && wavesurfer.backend && wavesurfer.backend.analyser && galaxyViewInstance && galaxyViewInstance.isActive) {
-            const analyser = wavesurfer.backend.analyser;
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(dataArray);
+        // Try to set up audio connection if not connected
+        if (!isAudioConnected && wavesurfer) {
+            setupAudioAnalyser();
+        }
 
+        // Only analyze if analyser exists and audio is playing
+        if (isAudioConnected && analyser && dataArray && galaxyViewInstance && galaxyViewInstance.isActive) {
+            analyser.getByteFrequencyData(dataArray);
             galaxyViewInstance.updateAudioData(dataArray);
 
             // Periodic logging for debugging
             if (logCounter % LOG_INTERVAL === 0) {
                 const sum = dataArray.reduce((a, b) => a + b, 0);
                 const avg = sum / dataArray.length;
-                console.log(`🎵 Audio reactivity active - Avg frequency: ${avg.toFixed(2)}, Playing: ${wavesurfer.isPlaying?.() || false}`);
-            }
-        } else {
-            // Log why analysis isn't working (only every LOG_INTERVAL frames to avoid spam)
-            if (logCounter % LOG_INTERVAL === 0) {
-                console.log('⚠️ Audio analysis paused -', {
-                    wavesurfer: !!wavesurfer,
-                    backend: !!(wavesurfer?.backend),
-                    analyser: !!(wavesurfer?.backend?.analyser),
-                    galaxyView: !!galaxyViewInstance,
-                    isActive: galaxyViewInstance?.isActive
-                });
+                const isPlaying = wavesurfer?.isPlaying?.() || false;
+                if (avg > 0 || isPlaying) {
+                    console.log(`🎵 Audio reactivity active - Avg frequency: ${avg.toFixed(2)}, Playing: ${isPlaying}`);
+                }
             }
         }
 

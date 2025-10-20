@@ -770,26 +770,7 @@ class GalaxyView {
      */
     updateParticles() {
         if (!window.particles || !window.particleSystem) {
-            // Only log once to avoid spam
-            if (!this._particleUpdateWarningLogged) {
-                console.warn('⚠️ updateParticles: particles or particleSystem not found', {
-                    particles: !!window.particles,
-                    particleSystem: !!window.particleSystem
-                });
-                this._particleUpdateWarningLogged = true;
-            }
             return;
-        }
-
-        // DEBUG: Check if critical window variables are set (only log once)
-        if (!this._windowVarsChecked) {
-            console.log('🔍 Window variables check:', {
-                particleSize: window.particleSize,
-                subParticleScale: window.subParticleScale,
-                mainToSubSizeRatio: window.mainToSubSizeRatio,
-                clusterRadius: window.clusterRadius
-            });
-            this._windowVarsChecked = true;
         }
 
         const dummy = new THREE.Object3D();
@@ -1145,19 +1126,6 @@ class GalaxyView {
                 // Apply position (animated center + offset)
                 dummy.position.copy(animatedCenter).add(animatedOffset);
 
-                // DEBUG: Detect NaN in position (only log first occurrence)
-                if ((isNaN(dummy.position.x) || isNaN(dummy.position.y) || isNaN(dummy.position.z)) && !this._nanPositionLogged) {
-                    console.error('❌ NaN position detected!', {
-                        animatedCenter: {x: animatedCenter.x, y: animatedCenter.y, z: animatedCenter.z},
-                        animatedOffset: {x: animatedOffset.x, y: animatedOffset.y, z: animatedOffset.z},
-                        finalPosition: {x: dummy.position.x, y: dummy.position.y, z: dummy.position.z},
-                        basePosition: {x: cluster.centerPosition.x, y: cluster.centerPosition.y, z: cluster.centerPosition.z},
-                        rotationMode: window.rotationMode,
-                        motionEnabled: window.motionEnabled
-                    });
-                    this._nanPositionLogged = true;
-                }
-
                 // Store world position for click detection and hover
                 subParticle.worldPosition = dummy.position.clone();
 
@@ -1180,27 +1148,12 @@ class GalaxyView {
                 }
 
                 const scale = baseScale * cluster.audioScale * (1 + cluster.hoverEffect) * (cluster.sizeMultiplier || 1.0);
-
-                // DEBUG: Detect NaN in scale calculation (only log first occurrence)
-                if (isNaN(scale) && !this._nanScaleLogged) {
-                    console.error('❌ NaN scale detected!', {
-                        baseScale,
-                        audioScale: cluster.audioScale,
-                        hoverEffect: cluster.hoverEffect,
-                        sizeMultiplier: cluster.sizeMultiplier,
-                        finalScale: scale,
-                        position: dummy.position
-                    });
-                    this._nanScaleLogged = true;
-                }
-
                 dummy.scale.set(scale, scale, 1);
 
                 // Make particle face camera (billboard effect)
-                // TEMP DISABLED: Testing if lookAt causes NaN
-                // if (this.camera && this.camera.position) {
-                //     dummy.lookAt(this.camera.position);
-                // }
+                if (this.camera && this.camera.position) {
+                    dummy.lookAt(this.camera.position);
+                }
 
                 // Update matrix
                 dummy.updateMatrix();

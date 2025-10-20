@@ -160,28 +160,16 @@ export class GalaxyParticleSystem {
         const material = new THREE.MeshBasicMaterial({
             map: particleTexture,
             transparent: true,
-            opacity: 1.0,  // TEMP: Full opacity to debug visibility
-            blending: THREE.NormalBlending,  // TEMP: Normal blending (NOT additive) to debug
+            opacity: this.particleBrightness,
+            blending: THREE.AdditiveBlending,
             side: THREE.DoubleSide,
             depthWrite: false
         });
 
-        console.log('🎨 DEBUG: Using textured material with NORMAL blending (not additive) for visibility test');
-        console.log('🎨 Texture:', particleTexture);
-        console.log('🎨 Material:', material);
-
         // Create instanced mesh
         this.particleSystem = new THREE.InstancedMesh(geometry, material, totalParticles);
         this.particleSystem.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-        this.particleSystem.frustumCulled = false;  // Disable frustum culling to debug
-
-        console.log('🔍 InstancedMesh created:', {
-            count: this.particleSystem.count,
-            visible: this.particleSystem.visible,
-            frustumCulled: this.particleSystem.frustumCulled,
-            geometry: this.particleSystem.geometry,
-            material: this.particleSystem.material
-        });
+        this.particleSystem.frustumCulled = false;
 
         const dummy = new THREE.Object3D();
         const color = new THREE.Color();
@@ -191,15 +179,6 @@ export class GalaxyParticleSystem {
         audioFiles.forEach((file, fileIndex) => {
             const position = this.calculateFilePosition(file, fileIndex);
             const fileColor = this.getColorForFile(file);
-
-            // Debug first 3 particles
-            if (fileIndex < 3) {
-                console.log(`Particle ${fileIndex}:`, {
-                    position: `(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`,
-                    color: fileColor,
-                    file: { bpm: file.bpm, key: file.key, duration: file.duration, tags: file.tags }
-                });
-            }
 
             const cluster = {
                 file: file,
@@ -244,10 +223,7 @@ export class GalaxyParticleSystem {
 
                 // Set initial transform
                 dummy.position.copy(cluster.centerPosition).add(offset);
-                // TEMPORARY: Make particles MUCH larger so they're visible from camera (0, 50, 200)
-                // Original was this.particleSize (17.5), now using 50 like test squares
-                const baseSize = 50;  // Instead of this.particleSize
-                const scale = isCenterParticle ? baseSize : baseSize * this.subParticleScale;
+                const scale = isCenterParticle ? this.particleSize : this.particleSize * this.subParticleScale;
                 dummy.scale.set(scale, scale, 1);
                 dummy.updateMatrix();
 
@@ -267,58 +243,10 @@ export class GalaxyParticleSystem {
 
         this.scene.add(this.particleSystem);
         console.log(`✅ Created ${this.particles.length} particle clusters (${instanceIndex} total particles)`);
-        console.log(`✅ Particle system added to scene with textured material`);
-
-        // DEBUG: Add a simple test mesh at origin with same material
-        const testGeo = new THREE.PlaneGeometry(50, 50);
-        const testMesh = new THREE.Mesh(testGeo, material.clone());
-        testMesh.position.set(0, 0, 0);
-        this.scene.add(testMesh);
-        console.log('🧪 TEST: Added test mesh at origin (0,0,0) with same material');
-
-        // DEBUG: Create a tiny InstancedMesh with just 1 instance at origin
-        const testInstanceGeo = new THREE.PlaneGeometry(50, 50);
-        const testInstanceMat = material.clone();
-        const testInstancedMesh = new THREE.InstancedMesh(testInstanceGeo, testInstanceMat, 1);
-        testInstancedMesh.frustumCulled = false;
-
-        const testDummy = new THREE.Object3D();
-        testDummy.position.set(0, 30, 0);  // Slightly above center
-        testDummy.scale.set(1, 1, 1);
-        testDummy.updateMatrix();
-        testInstancedMesh.setMatrixAt(0, testDummy.matrix);
-        testInstancedMesh.instanceMatrix.needsUpdate = true;
-
-        this.scene.add(testInstancedMesh);
-        console.log('🧪 TEST: Added single-instance InstancedMesh at (0, 30, 0)');
-
-        // DEBUG: Create InstancedMesh with 10 instances like our real particles
-        const test10Geo = new THREE.PlaneGeometry(1, 1);  // Same as real particles
-        const test10Mat = material.clone();
-        const test10InstancedMesh = new THREE.InstancedMesh(test10Geo, test10Mat, 10);
-        test10InstancedMesh.frustumCulled = false;
-
-        const test10Dummy = new THREE.Object3D();
-        const test10Color = new THREE.Color();
-
-        // Create 10 particles in a line
-        for (let i = 0; i < 10; i++) {
-            test10Dummy.position.set(-45 + i * 10, 60, 0);  // Line from (-45, 60, 0) to (45, 60, 0)
-            test10Dummy.scale.set(50, 50, 1);  // Same scale as real particles
-            test10Dummy.updateMatrix();
-            test10InstancedMesh.setMatrixAt(i, test10Dummy.matrix);
-            test10InstancedMesh.setColorAt(i, test10Color.setHex(0xFF0000));  // Red
-        }
-        test10InstancedMesh.instanceMatrix.needsUpdate = true;
-        test10InstancedMesh.instanceColor.needsUpdate = true;
-
-        this.scene.add(test10InstancedMesh);
-        console.log('🧪 TEST: Added 10-instance InstancedMesh in a line (RED), using same geo/scale as real particles');
 
         // Expose to window for controls
         window.particles = this.particles;
         window.particleSystem = this.particleSystem;
-        window.testMaterialMesh = testMesh;
     }
 
     /**

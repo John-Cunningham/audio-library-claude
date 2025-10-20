@@ -22,6 +22,12 @@ let miniWaveforms = {};
 let loadAudioCallback = null;
 let getWavesurferCallback = null;
 
+// Lazy loading queue
+let loadQueue = [];
+let isLoadingInProgress = false;
+const LOAD_DELAY_MS = 300; // 300ms between each waveform load
+const TOTAL_LOAD_TIME_MS = 45000; // Spread over 45 seconds
+
 /**
  * Initialize mini waveform system with callbacks
  * @param {Object} callbacks - Callback functions
@@ -35,7 +41,7 @@ export function init(callbacks) {
 }
 
 /**
- * Render mini waveforms for multiple files
+ * Render mini waveforms for multiple files (lazy loaded)
  * @param {Array} files - Array of file objects to render waveforms for
  */
 export function renderAll(files) {
@@ -44,7 +50,10 @@ export function renderAll(files) {
         return;
     }
 
-    files.forEach(file => {
+    // Calculate delay to spread loading over TOTAL_LOAD_TIME_MS
+    const delayPerFile = files.length > 0 ? Math.min(TOTAL_LOAD_TIME_MS / files.length, LOAD_DELAY_MS) : LOAD_DELAY_MS;
+
+    files.forEach((file, index) => {
         const container = document.getElementById(`miniwave-${file.id}`);
         if (!container) return;
 
@@ -62,7 +71,7 @@ export function renderAll(files) {
             }
         }
 
-        // Create mini wavesurfer instance
+        // Create mini wavesurfer instance immediately (but don't load audio yet)
         const miniWave = WaveSurfer.create({
             container: container,
             waveColor: '#444',
@@ -84,12 +93,6 @@ export function renderAll(files) {
             console.error('[MiniWaveform] Error:', err);
         });
 
-        miniWave.load(file.file_url).catch(err => {
-            // Silently ignore AbortError - these are expected during rapid re-renders
-            if (err.name === 'AbortError') return;
-            console.error('[MiniWaveform] Failed to load:', err);
-        });
-
         // Make it interactive - click to play from that position
         miniWave.on('click', (relativeX) => {
             console.log(`[MiniWaveform] Clicked at position: ${(relativeX * 100).toFixed(1)}%`);
@@ -106,7 +109,21 @@ export function renderAll(files) {
 
         // Store the instance
         miniWaveforms[file.id] = miniWave;
+
+        // Queue the waveform loading with delay (lazy load)
+        const loadDelay = index * delayPerFile;
+        setTimeout(() => {
+            if (miniWaveforms[file.id]) { // Check if it still exists
+                miniWave.load(file.file_url).catch(err => {
+                    // Silently ignore AbortError - these are expected during rapid re-renders
+                    if (err.name === 'AbortError') return;
+                    console.error('[MiniWaveform] Failed to load:', err);
+                });
+            }
+        }, loadDelay);
     });
+
+    console.log(`[MiniWaveform] Queued ${files.length} waveforms for lazy loading (spread over ${(files.length * delayPerFile / 1000).toFixed(1)}s)`);
 }
 
 /**

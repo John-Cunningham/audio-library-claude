@@ -150,11 +150,22 @@ export class GalaxyView {
         window.audioReactivityStrength = 40;
         window.globalAudioReactivity = this.config.globalAudioReactivity;
         window.audioFrequencyMode = 'all'; // all, bass, mids, highs
+        window.clusterSpreadOnAudio = 3.0; // How much clusters spread when audio plays
 
         // Crosshair hover
         window.mouseInteractionEnabled = false;
         window.hoverSlowdown = this.config.hoverSlowdown;
         window.hoverScale = this.config.hoverScale;
+        window.hoveredCluster = null; // Currently hovered cluster
+
+        // Galaxy center for spiral mode
+        window.galaxyCenterX = 0;
+        window.galaxyCenterZ = 0;
+
+        // Visibility filtering
+        window.hiddenCategories = new Set(); // Categories to hide
+        window.searchFilteredFileIds = new Set(); // Files shown by search
+        window.tagFilteredFileIds = new Set(); // Files shown by tag filter
 
         console.log('✅ Global galaxy controls initialized');
     }
@@ -506,11 +517,29 @@ export class GalaxyView {
 
                 const orbitPhase = Math.random() * Math.PI * 2;
 
+                // Calculate distance from center for size gradient
+                const distanceFromCenter = Math.sqrt(
+                    offset.x * offset.x +
+                    offset.y * offset.y +
+                    offset.z * offset.z
+                ) / this.config.clusterRadius; // Normalized 0-1
+
+                // Random orbit properties for 'random' motion path
+                const randomOrbitSpeed = 0.5 + Math.random() * 1.5;
+                const randomOrbitAxis = new THREE.Vector3(
+                    Math.random() - 0.5,
+                    Math.random() - 0.5,
+                    Math.random() - 0.5
+                ).normalize();
+
                 cluster.subParticles.push({
                     instanceIndex,
                     offset,
                     orbitPhase,
-                    isCenterParticle: i === 0
+                    isCenterParticle: i === 0,
+                    distanceFromCenter,
+                    randomOrbitSpeed,
+                    randomOrbitAxis
                 });
 
                 // Set initial position
@@ -711,82 +740,243 @@ export class GalaxyView {
     }
 
     /**
-     * Update particles animation
+     * Update particles animation (V37 complete logic)
      */
     updateParticles() {
-        if (!this.particleSystem) return;
+        if (!this.particleSystem || !window.motionEnabled) return;
 
         const dummy = new THREE.Object3D();
 
-        this.particles.forEach((cluster) => {
+        this.particles.forEach((cluster, clusterIndex) => {
+            // Check if this cluster is hovered (via crosshair)
+            const isHovered = (window.hoveredCluster === cluster);
+
+            // Calculate per-cluster time
+            let clusterAnimationTime;
+            const deltaTime = cluster.lastRealTime !== null ? (this.animationTime - cluster.lastRealTime) : 0;
+            cluster.lastRealTime = this.animationTime;
+
             // Initialize custom time if needed
             if (cluster.customTime === null) {
                 cluster.customTime = this.animationTime;
             }
 
-            const deltaTime = cluster.lastRealTime !== null ? (this.animationTime - cluster.lastRealTime) : 0;
-            cluster.lastRealTime = this.animationTime;
-            cluster.customTime += deltaTime;
+            // Advance custom time based on hover state
+            if (isHovered && window.mouseInteractionEnabled) {
+                cluster.customTime += deltaTime * window.hoverSlowdown;
+            } else {
+                cluster.customTime += deltaTime;
+            }
 
-            const clusterAnimationTime = cluster.customTime;
+            clusterAnimationTime = cluster.customTime;
+
+            // Calculate audio-reactive spread factor per cluster
+            let spreadFactor = 1.0;
 
             // Check if this is the currently playing file
             const currentFileId = this.playerStateManager?.getCurrentFile?.();
-            const isPlaying = (cluster.file.id === currentFileId);
+            const isPlayingCluster = (cluster.file.id === currentFileId);
 
-            // Audio-reactive spread
-            let spreadFactor = 1.0;
-            if (this.config.audioReactivity && this.currentAudioAmplitude > 0) {
-                if (isPlaying) {
-                    spreadFactor = 1.0 + this.currentAudioAmplitude * 0.3;
-                } else {
-                    spreadFactor = 1.0 + this.currentAudioAmplitude * 0.05;
+            if (window.audioReactivityEnabled && this.currentAudioAmplitude > 0) {
+                if (isPlayingCluster) {
+                    spreadFactor = 1.0 + this.currentAudioAmplitude * window.clusterSpreadOnAudio * 0.1;
+                } else if (window.globalAudioReactivity > 0) {
+                    spreadFactor = 1.0 + this.currentAudioAmplitude * (window.globalAudioReactivity * 0.1);
                 }
             }
 
             const basePos = cluster.centerPosition;
+            let centerX = basePos.x;
+            let centerY = basePos.y;
+            let centerZ = basePos.z;
 
-            // Update sub-particles
+            // Apply galaxy motion to cluster center based on rotation mode
+            if (window.rotationMode === 'collective') {
+                // COLLECTIVE: All clusters rotate together
+                const angle = clusterAnimationTime * 1000;
+                const amplitudeScale = window.orbitRadius * 0.1;
+
+                if (window.rotationAxis === 'y' || window.rotationAxis === 'all') {
+                    const cosY = Math.cos(angle);
+                    const sinY = Math.sin(angle);
+                    const tempX = (basePos.x * amplitudeScale) * cosY - (basePos.z * amplitudeScale) * sinY;
+                    const tempZ = (basePos.x * amplitudeScale) * sinY + (basePos.z * amplitudeScale) * cosY;
+                    centerX = tempX;
+                    centerZ = tempZ;
+                }
+
+                if (window.rotationAxis === 'x' || window.rotationAxis === 'all') {
+                    const cosX = Math.cos(angle * 0.7);
+                    const sinX = Math.sin(angle * 0.7);
+                    const tempY = (centerY * amplitudeScale) * cosX - centerZ * sinX;
+                    const tempZ = (centerY * amplitudeScale) * sinX + centerZ * cosX;
+                    centerY = tempY;
+                    centerZ = tempZ;
+                }
+
+                if (window.rotationAxis === 'z' || window.rotationAxis === 'all') {
+                    const cosZ = Math.cos(angle * 0.5);
+                    const sinZ = Math.sin(angle * 0.5);
+                    const tempX = centerX * cosZ - (centerY * amplitudeScale) * sinZ;
+                    const tempY = centerX * sinZ + (centerY * amplitudeScale) * cosZ;
+                    centerX = tempX;
+                    centerY = tempY;
+                }
+
+            } else if (window.rotationMode === 'spiral') {
+                // SPIRAL: Galaxy arm rotation
+                const dx = basePos.x - window.galaxyCenterX;
+                const dz = basePos.z - window.galaxyCenterZ;
+                const distanceFromCenter = Math.sqrt(dx * dx + dz * dz);
+                const angle = Math.atan2(dz, dx);
+                const rotationAngle = angle + (clusterAnimationTime * 1000 * (1 + distanceFromCenter * 0.01));
+
+                const spiralX = Math.cos(rotationAngle) * distanceFromCenter;
+                const spiralZ = Math.sin(rotationAngle) * distanceFromCenter;
+                const driftX = (spiralX - dx) * (window.orbitRadius * 0.01);
+                const driftZ = (spiralZ - dz) * (window.orbitRadius * 0.01);
+
+                centerX = basePos.x + driftX;
+                centerZ = basePos.z + driftZ;
+
+            } else if (window.rotationMode === 'individual') {
+                // INDIVIDUAL: Each cluster orbits around its own position
+                const offset = clusterIndex * 0.1;
+                centerX = basePos.x + Math.sin(clusterAnimationTime * 1000 + offset) * window.orbitRadius;
+                centerZ = basePos.z + Math.cos(clusterAnimationTime * 1000 + offset) * window.orbitRadius;
+                centerY = basePos.y + Math.sin(clusterAnimationTime * 800 + offset * 0.7) * (window.orbitRadius * 0.3);
+            }
+
+            // Now update all sub-particles in this cluster
             cluster.subParticles.forEach(subParticle => {
                 let finalX, finalY, finalZ;
 
+                // Center particles stay at cluster center
                 if (subParticle.isCenterParticle) {
-                    // Center particle stays at cluster center
-                    finalX = basePos.x;
-                    finalY = basePos.y;
-                    finalZ = basePos.z;
+                    finalX = centerX;
+                    finalY = centerY;
+                    finalZ = centerZ;
                 } else {
-                    // Orbital motion (V37 pattern: use orbitSpeed as multiplier)
-                    const time = clusterAnimationTime * this.config.orbitSpeed * 1000;
-                    const orbitRadius = this.config.orbitRadius * 0.05;
+                    // Start with base offset position (scaled by spread factor)
+                    const baseX = centerX + subParticle.offset.x * spreadFactor;
+                    const baseY = centerY + subParticle.offset.y * spreadFactor;
+                    const baseZ = centerZ + subParticle.offset.z * spreadFactor;
 
-                    const orbitX = Math.sin(time + subParticle.orbitPhase) * orbitRadius;
-                    const orbitY = Math.sin(time * 0.8 + subParticle.orbitPhase * 0.7) * (orbitRadius * 0.3);
-                    const orbitZ = Math.cos(time + subParticle.orbitPhase) * orbitRadius;
+                    // Add individual orbital motion based on motion path
+                    if (window.subParticleMotionPath === 'static' || window.subParticleMotionSpeed === 0) {
+                        // Static - no motion
+                        finalX = baseX;
+                        finalY = baseY;
+                        finalZ = baseZ;
+                    } else if (window.subParticleMotionPath === 'natural') {
+                        // Natural - simple rotation around cluster center
+                        const time = clusterAnimationTime * window.subParticleAnimationSpeed * 0.5;
+                        const rotationAngle = time + subParticle.orbitPhase;
+                        const radiusScale = window.subParticleMotionSpeed > 0 ? window.subParticleMotionSpeed * 0.5 : 1.0;
 
-                    finalX = basePos.x + subParticle.offset.x * spreadFactor + orbitX;
-                    finalY = basePos.y + subParticle.offset.y * spreadFactor + orbitY;
-                    finalZ = basePos.z + subParticle.offset.z * spreadFactor + orbitZ;
+                        const dx = subParticle.offset.x * radiusScale;
+                        const dy = subParticle.offset.y * radiusScale;
+                        const dz = subParticle.offset.z * radiusScale;
+
+                        const rotatedX = dx * Math.cos(rotationAngle) - dz * Math.sin(rotationAngle);
+                        const rotatedZ = dx * Math.sin(rotationAngle) + dz * Math.cos(rotationAngle);
+
+                        finalX = centerX + rotatedX * spreadFactor;
+                        finalY = centerY + dy * spreadFactor;
+                        finalZ = centerZ + rotatedZ * spreadFactor;
+                    } else {
+                        // Other motion paths: sphere, figure8, random, ring
+                        const time = clusterAnimationTime * 1000 * window.subParticleAnimationSpeed;
+                        const orbitPhase = subParticle.orbitPhase;
+                        const orbitRadius = window.subParticleMotionSpeed * 2.0;
+
+                        let orbitX, orbitY, orbitZ;
+
+                        if (window.subParticleMotionPath === 'sphere') {
+                            // 3D spherical orbit
+                            const theta = time + orbitPhase;
+                            const phi = time * 0.7 + orbitPhase * 1.3;
+                            orbitX = Math.sin(phi) * Math.cos(theta) * orbitRadius;
+                            orbitY = Math.sin(phi) * Math.sin(theta) * orbitRadius;
+                            orbitZ = Math.cos(phi) * orbitRadius;
+                        } else if (window.subParticleMotionPath === 'figure8') {
+                            // Figure-eight pattern
+                            const t = time + orbitPhase;
+                            const scale = orbitRadius * 1.5;
+                            orbitX = (Math.sin(t) * scale) / (1 + Math.cos(t) * Math.cos(t));
+                            orbitY = (Math.sin(t) * Math.cos(t) * scale) / (1 + Math.cos(t) * Math.cos(t));
+                            orbitZ = 0;
+                        } else if (window.subParticleMotionPath === 'random') {
+                            // Random - each particle has unique rotation axis
+                            const angle = time * subParticle.randomOrbitSpeed + orbitPhase;
+                            const axis = subParticle.randomOrbitAxis;
+
+                            const dx = subParticle.offset.x;
+                            const dy = subParticle.offset.y;
+                            const dz = subParticle.offset.z;
+
+                            const cosA = Math.cos(angle);
+                            const sinA = Math.sin(angle);
+                            const dot = axis.x * dx + axis.y * dy + axis.z * dz;
+
+                            orbitX = dx * cosA + (axis.y * dz - axis.z * dy) * sinA + axis.x * dot * (1 - cosA);
+                            orbitY = dy * cosA + (axis.z * dx - axis.x * dz) * sinA + axis.y * dot * (1 - cosA);
+                            orbitZ = dz * cosA + (axis.x * dy - axis.y * dx) * sinA + axis.z * dot * (1 - cosA);
+
+                            orbitX *= orbitRadius * 0.5;
+                            orbitY *= orbitRadius * 0.5;
+                            orbitZ *= orbitRadius * 0.5;
+                        } else {
+                            // Ring (2D orbit) - default
+                            orbitX = Math.sin(time + orbitPhase) * orbitRadius;
+                            orbitZ = Math.cos(time + orbitPhase) * orbitRadius;
+                            orbitY = Math.sin(time * 0.8 + orbitPhase * 0.7) * (orbitRadius * 0.3);
+                        }
+
+                        finalX = baseX + orbitX;
+                        finalY = baseY + orbitY;
+                        finalZ = baseZ + orbitZ;
+                    }
                 }
 
                 // Update instance matrix
                 dummy.position.set(finalX, finalY, finalZ);
 
-                // Audio-reactive particle size
-                let sizeMultiplier = 1.0;
-                if (isPlaying) {
-                    // Playing file gets base 1.2x + audio reactive scaling
-                    if (this.config.audioReactivity && this.currentAudioAmplitude > 0) {
-                        sizeMultiplier = 1.2 + (this.currentAudioAmplitude * 0.4); // More pronounced pulsing
-                    } else {
-                        sizeMultiplier = 1.2;
-                    }
-                } else if (this.config.audioReactivity && this.currentAudioAmplitude > 0) {
-                    // Non-playing files get subtle pulsing
-                    sizeMultiplier = 1.0 + (this.currentAudioAmplitude * 0.1);
+                // Check visibility (hidden categories, search, tag filter)
+                const fileCategory = this.extractCategoryFromFile(cluster.file);
+                const isHiddenByCategory = window.hiddenCategories && window.hiddenCategories.has(fileCategory);
+                const isHiddenBySearch = window.searchFilteredFileIds && window.searchFilteredFileIds.size > 0 && !window.searchFilteredFileIds.has(cluster.file.id);
+                const isHiddenByTagFilter = window.tagFilteredFileIds && window.tagFilteredFileIds.size > 0 && !window.tagFilteredFileIds.has(cluster.file.id);
+                const isHidden = isHiddenByCategory || isHiddenBySearch || isHiddenByTagFilter;
+
+                // Calculate scale with size gradient
+                let scale = isHidden ? 0 : window.particleSize * window.subParticleScale;
+                if (!isHidden && subParticle.isCenterParticle) {
+                    scale *= window.mainToSubSizeRatio;
                 }
 
-                dummy.scale.setScalar(this.config.particleSize * sizeMultiplier);
+                // Apply size gradient
+                if (!isHidden && window.sizeGradient > 0 && !subParticle.isCenterParticle) {
+                    const gradientFactor = Math.max(0.05, 1.0 - (subParticle.distanceFromCenter * window.sizeGradient * 0.8));
+                    scale *= gradientFactor;
+                }
+
+                // Audio reactivity for particle pulsing
+                if (!isHidden && window.audioReactivityEnabled && this.currentAudioAmplitude > 0) {
+                    if (isPlayingCluster) {
+                        scale *= (1.0 + this.currentAudioAmplitude * (window.audioReactivityStrength * 0.1));
+                    } else if (window.globalAudioReactivity > 0) {
+                        scale *= (1.0 + this.currentAudioAmplitude * (window.globalAudioReactivity * 0.05));
+                    }
+                }
+
+                // Apply hover scale effect
+                if (!isHidden && isHovered && window.mouseInteractionEnabled && window.hoverScale > 1.0) {
+                    scale *= window.hoverScale;
+                }
+
+                dummy.scale.setScalar(scale);
+                dummy.lookAt(this.camera.position);
                 dummy.updateMatrix();
                 this.particleSystem.setMatrixAt(subParticle.instanceIndex, dummy.matrix);
             });
@@ -843,9 +1033,9 @@ export class GalaxyView {
 
         this.animationId = requestAnimationFrame(() => this.animate());
 
-        // Increment animation time (constant 0.01 per frame, matching V37)
-        // orbitSpeed is used as multiplier in calculations (line 631), not as time increment
-        this.animationTime += 0.01;
+        // Increment animation time using orbitSpeed (V37 pattern)
+        // orbitSpeed directly controls how fast time advances per frame
+        this.animationTime += this.config.orbitSpeed;
 
         // Update camera movement
         this.updateMovement();

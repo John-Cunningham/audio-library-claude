@@ -47,6 +47,87 @@ export class GalaxyParticleSystem {
     }
 
     /**
+     * Create particle sprite texture based on shape (from reference)
+     */
+    createParticleTexture(shape) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d', { alpha: true });
+        const centerX = 64;
+        const centerY = 64;
+
+        // Ensure transparent background
+        ctx.clearRect(0, 0, 128, 128);
+
+        switch(shape) {
+            case 'circle':
+                // Soft circle with gradient - smooth falloff to transparent
+                const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 60);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
+                gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+
+            case 'square':
+                // Soft square with gradient
+                const sqGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 50);
+                sqGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                sqGradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.5)');
+                sqGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = sqGradient;
+                ctx.fillRect(14, 14, 100, 100);
+                break;
+
+            case 'star':
+                // Star shape with gradient
+                ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+                    const x = centerX + Math.cos(angle) * 50;
+                    const y = centerY + Math.sin(angle) * 50;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+
+                // Add glow
+                const starGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 60);
+                starGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+                starGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
+                starGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = starGradient;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+
+            default:
+                // Default to circle
+                const defaultGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 60);
+                defaultGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                defaultGradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
+                defaultGradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
+                defaultGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = defaultGradient;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 60, 0, Math.PI * 2);
+                ctx.fill();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        return texture;
+    }
+
+    /**
      * Create particles from audio files
      */
     createParticles(audioFiles) {
@@ -74,21 +155,33 @@ export class GalaxyParticleSystem {
         // Create geometry and material
         const geometry = new THREE.PlaneGeometry(1, 1);
 
-        // TEMPORARY FIX: Use simple material without texture (like test InstancedMesh)
-        // The texture was causing particles to not render
+        // Create particle texture and material (from reference)
+        const particleTexture = this.createParticleTexture(this.particleShape);
         const material = new THREE.MeshBasicMaterial({
-            color: 0xffffff,  // White base color (will be tinted by setColorAt)
+            map: particleTexture,
             transparent: true,
-            opacity: 1.0,  // Full opacity (was this.particleBrightness = 0.8)
-            side: THREE.DoubleSide
-            // Removed: map (texture), blending, depthWrite
+            opacity: 1.0,  // TEMP: Full opacity to debug visibility
+            blending: THREE.NormalBlending,  // TEMP: Normal blending (NOT additive) to debug
+            side: THREE.DoubleSide,
+            depthWrite: false
         });
 
-        console.log('🎨 Using simple material (no texture) to fix visibility');
+        console.log('🎨 DEBUG: Using textured material with NORMAL blending (not additive) for visibility test');
+        console.log('🎨 Texture:', particleTexture);
+        console.log('🎨 Material:', material);
 
         // Create instanced mesh
         this.particleSystem = new THREE.InstancedMesh(geometry, material, totalParticles);
         this.particleSystem.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.particleSystem.frustumCulled = false;  // Disable frustum culling to debug
+
+        console.log('🔍 InstancedMesh created:', {
+            count: this.particleSystem.count,
+            visible: this.particleSystem.visible,
+            frustumCulled: this.particleSystem.frustumCulled,
+            geometry: this.particleSystem.geometry,
+            material: this.particleSystem.material
+        });
 
         const dummy = new THREE.Object3D();
         const color = new THREE.Color();
@@ -101,7 +194,11 @@ export class GalaxyParticleSystem {
 
             // Debug first 3 particles
             if (fileIndex < 3) {
-                console.log(`Particle ${fileIndex}: position (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}), color:`, fileColor);
+                console.log(`Particle ${fileIndex}:`, {
+                    position: `(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`,
+                    color: fileColor,
+                    file: { bpm: file.bpm, key: file.key, duration: file.duration, tags: file.tags }
+                });
             }
 
             const cluster = {
@@ -112,7 +209,9 @@ export class GalaxyParticleSystem {
                 hoverEffect: 0,
                 audioScale: 1,
                 sizeMultiplier: 1,
-                opacityMultiplier: 1
+                opacityMultiplier: 1,
+                customTime: 0,  // Initialize to 0 instead of null to prevent NaN
+                lastRealTime: 0  // Initialize to 0 instead of null to prevent NaN
             };
 
             // Create sub-particles for this cluster
@@ -145,7 +244,10 @@ export class GalaxyParticleSystem {
 
                 // Set initial transform
                 dummy.position.copy(cluster.centerPosition).add(offset);
-                const scale = isCenterParticle ? this.particleSize : this.particleSize * this.subParticleScale;
+                // TEMPORARY: Make particles MUCH larger so they're visible from camera (0, 50, 200)
+                // Original was this.particleSize (17.5), now using 50 like test squares
+                const baseSize = 50;  // Instead of this.particleSize
+                const scale = isCenterParticle ? baseSize : baseSize * this.subParticleScale;
                 dummy.scale.set(scale, scale, 1);
                 dummy.updateMatrix();
 
@@ -164,98 +266,59 @@ export class GalaxyParticleSystem {
         }
 
         this.scene.add(this.particleSystem);
-
         console.log(`✅ Created ${this.particles.length} particle clusters (${instanceIndex} total particles)`);
-        console.log(`✅ Particle system added to scene:`, this.particleSystem);
-        console.log(`✅ First particle position:`, this.particles[0]?.centerPosition);
-        console.log(`✅ Particle size:`, this.particleSize);
-        console.log(`✅ Particle brightness:`, this.particleBrightness);
-        console.log(`✅ Camera position:`, window.camera?.position);
+        console.log(`✅ Particle system added to scene with textured material`);
 
-        // Add TEST particles at specific positions to debug visibility
-        const testPositions = [
-            { pos: [0, 0, 0], color: 0xff0000, label: 'Center (0,0,0) RED' },
-            { pos: [50, 0, 0], color: 0x00ff00, label: 'Right (50,0,0) GREEN' },
-            { pos: [-50, 0, 0], color: 0x0000ff, label: 'Left (-50,0,0) BLUE' },
-            { pos: [0, 50, 0], color: 0xffff00, label: 'Up (0,50,0) YELLOW' },
-            { pos: [0, -50, 0], color: 0xff00ff, label: 'Down (0,-50,0) MAGENTA' },
-            { pos: [0, 0, 50], color: 0x00ffff, label: 'Forward (0,0,50) CYAN' }
-        ];
+        // DEBUG: Add a simple test mesh at origin with same material
+        const testGeo = new THREE.PlaneGeometry(50, 50);
+        const testMesh = new THREE.Mesh(testGeo, material.clone());
+        testMesh.position.set(0, 0, 0);
+        this.scene.add(testMesh);
+        console.log('🧪 TEST: Added test mesh at origin (0,0,0) with same material');
 
-        testPositions.forEach(({pos, color, label}) => {
-            const geo = new THREE.PlaneGeometry(20, 20);
-            const mat = new THREE.MeshBasicMaterial({
-                color: color,
-                transparent: true,
-                opacity: 1.0,
-                side: THREE.DoubleSide
-            });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(pos[0], pos[1], pos[2]);
-            this.scene.add(mesh);
-            console.log(`🎨 TEST: ${label}`);
-        });
-
-        // Also create a simple Mesh version of first particle to test if InstancedMesh is the issue
-        const simpleGeo = new THREE.PlaneGeometry(this.particleSize, this.particleSize);
-        const simpleMat = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 1.0,
-            side: THREE.DoubleSide
-        });
-        const simpleMesh = new THREE.Mesh(simpleGeo, simpleMat);
-        const firstPos = this.particles[0]?.centerPosition;
-        if (firstPos) {
-            simpleMesh.position.copy(firstPos);
-            this.scene.add(simpleMesh);
-            console.log(`⭐ SIMPLE MESH TEST: White particle at first particle position (${firstPos.x.toFixed(1)}, ${firstPos.y.toFixed(1)}, ${firstPos.z.toFixed(1)})`);
-        }
-
-        // TEST: Create a small InstancedMesh with 3 particles using EXACT same material as test squares
-        console.log('🔬 Creating test InstancedMesh with 3 instances...');
-        const testInstancedGeo = new THREE.PlaneGeometry(15, 15);
-        const testInstancedMat = new THREE.MeshBasicMaterial({
-            color: 0xFFFFFF,  // White
-            transparent: true,
-            opacity: 1.0,
-            side: THREE.DoubleSide
-            // NO texture, NO blending - just like the working test squares
-        });
-        const testInstancedMesh = new THREE.InstancedMesh(testInstancedGeo, testInstancedMat, 3);
-        testInstancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        // DEBUG: Create a tiny InstancedMesh with just 1 instance at origin
+        const testInstanceGeo = new THREE.PlaneGeometry(50, 50);
+        const testInstanceMat = material.clone();
+        const testInstancedMesh = new THREE.InstancedMesh(testInstanceGeo, testInstanceMat, 1);
+        testInstancedMesh.frustumCulled = false;
 
         const testDummy = new THREE.Object3D();
-        const testColor = new THREE.Color(0xFFFFFF);
-
-        // Place 3 instances at known positions
-        const testInstancePositions = [
-            [0, 0, -50],   // Behind center
-            [30, 30, 0],   // Upper right
-            [-30, -30, 0]  // Lower left
-        ];
-
-        testInstancePositions.forEach((pos, i) => {
-            testDummy.position.set(pos[0], pos[1], pos[2]);
-            testDummy.scale.set(1, 1, 1);
-            testDummy.updateMatrix();
-            testInstancedMesh.setMatrixAt(i, testDummy.matrix);
-            testInstancedMesh.setColorAt(i, testColor);
-            console.log(`  Instance ${i}: (${pos[0]}, ${pos[1]}, ${pos[2]})`);
-        });
-
+        testDummy.position.set(0, 30, 0);  // Slightly above center
+        testDummy.scale.set(1, 1, 1);
+        testDummy.updateMatrix();
+        testInstancedMesh.setMatrixAt(0, testDummy.matrix);
         testInstancedMesh.instanceMatrix.needsUpdate = true;
-        if (testInstancedMesh.instanceColor) {
-            testInstancedMesh.instanceColor.needsUpdate = true;
-        }
 
         this.scene.add(testInstancedMesh);
-        console.log('✅ Test InstancedMesh added to scene');
-        window.testInstancedMesh = testInstancedMesh;
+        console.log('🧪 TEST: Added single-instance InstancedMesh at (0, 30, 0)');
+
+        // DEBUG: Create InstancedMesh with 10 instances like our real particles
+        const test10Geo = new THREE.PlaneGeometry(1, 1);  // Same as real particles
+        const test10Mat = material.clone();
+        const test10InstancedMesh = new THREE.InstancedMesh(test10Geo, test10Mat, 10);
+        test10InstancedMesh.frustumCulled = false;
+
+        const test10Dummy = new THREE.Object3D();
+        const test10Color = new THREE.Color();
+
+        // Create 10 particles in a line
+        for (let i = 0; i < 10; i++) {
+            test10Dummy.position.set(-45 + i * 10, 60, 0);  // Line from (-45, 60, 0) to (45, 60, 0)
+            test10Dummy.scale.set(50, 50, 1);  // Same scale as real particles
+            test10Dummy.updateMatrix();
+            test10InstancedMesh.setMatrixAt(i, test10Dummy.matrix);
+            test10InstancedMesh.setColorAt(i, test10Color.setHex(0xFF0000));  // Red
+        }
+        test10InstancedMesh.instanceMatrix.needsUpdate = true;
+        test10InstancedMesh.instanceColor.needsUpdate = true;
+
+        this.scene.add(test10InstancedMesh);
+        console.log('🧪 TEST: Added 10-instance InstancedMesh in a line (RED), using same geo/scale as real particles');
 
         // Expose to window for controls
         window.particles = this.particles;
         window.particleSystem = this.particleSystem;
+        window.testMaterialMesh = testMesh;
     }
 
     /**
@@ -300,11 +363,29 @@ export class GalaxyParticleSystem {
             }
         };
 
-        return {
-            x: getAxisValue(this.currentXMode, file, index) * this.xAxisScale,
-            y: getAxisValue(this.currentYMode, file, index) * this.yAxisScale,
-            z: getAxisValue(this.currentZMode, file, index) * this.zAxisScale
+        const xVal = getAxisValue(this.currentXMode, file, index);
+        const yVal = getAxisValue(this.currentYMode, file, index);
+        const zVal = getAxisValue(this.currentZMode, file, index);
+
+        const result = {
+            x: xVal * this.xAxisScale,
+            y: yVal * this.yAxisScale,
+            z: zVal * this.zAxisScale
         };
+
+        // Debug NaN positions
+        if (isNaN(result.x) || isNaN(result.y) || isNaN(result.z)) {
+            console.error(`❌ NaN position for file ${index}:`, {
+                xVal, yVal, zVal,
+                xScale: this.xAxisScale,
+                yScale: this.yAxisScale,
+                zScale: this.zAxisScale,
+                modes: { x: this.currentXMode, y: this.currentYMode, z: this.currentZMode },
+                file: { bpm: file.bpm, key: file.key, tags: file.tags }
+            });
+        }
+
+        return result;
     }
 
     /**

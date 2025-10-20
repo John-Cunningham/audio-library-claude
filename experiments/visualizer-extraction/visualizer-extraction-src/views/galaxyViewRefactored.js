@@ -781,6 +781,17 @@ class GalaxyView {
             return;
         }
 
+        // DEBUG: Check if critical window variables are set (only log once)
+        if (!this._windowVarsChecked) {
+            console.log('🔍 Window variables check:', {
+                particleSize: window.particleSize,
+                subParticleScale: window.subParticleScale,
+                mainToSubSizeRatio: window.mainToSubSizeRatio,
+                clusterRadius: window.clusterRadius
+            });
+            this._windowVarsChecked = true;
+        }
+
         const dummy = new THREE.Object3D();
         const time = this.animationTime;
         const orbitSpeed = window.orbitSpeed !== undefined ? window.orbitSpeed : 0.0015;
@@ -797,12 +808,13 @@ class GalaxyView {
                 this.audioAnalyzer.getByteFrequencyData(this.audioDataArray);
 
                 // Debug: Log first few values once every 60 frames
-                if (Math.floor(this.animationTime * 10) % 60 === 0) {
-                    const firstValues = Array.from(this.audioDataArray.slice(0, 5));
-                    console.log('[AudioReactivity] First 5 frequency values:', firstValues);
-                    console.log('[AudioReactivity] Wavesurfer playing:', window.wavesurfer?.isPlaying());
-                    console.log('[AudioReactivity] Audio connected:', this.audioConnected);
-                }
+                // DISABLED: Too much console spam
+                // if (Math.floor(this.animationTime * 10) % 60 === 0) {
+                //     const firstValues = Array.from(this.audioDataArray.slice(0, 5));
+                //     console.log('[AudioReactivity] First 5 frequency values:', firstValues);
+                //     console.log('[AudioReactivity] Wavesurfer playing:', window.wavesurfer?.isPlaying());
+                //     console.log('[AudioReactivity] Audio connected:', this.audioConnected);
+                // }
 
                 // Calculate frequency band amplitudes
                 const bassEnd = Math.floor(this.audioBufferLength * 0.1); // 0-10% = bass
@@ -1133,6 +1145,19 @@ class GalaxyView {
                 // Apply position (animated center + offset)
                 dummy.position.copy(animatedCenter).add(animatedOffset);
 
+                // DEBUG: Detect NaN in position (only log first occurrence)
+                if ((isNaN(dummy.position.x) || isNaN(dummy.position.y) || isNaN(dummy.position.z)) && !this._nanPositionLogged) {
+                    console.error('❌ NaN position detected!', {
+                        animatedCenter: {x: animatedCenter.x, y: animatedCenter.y, z: animatedCenter.z},
+                        animatedOffset: {x: animatedOffset.x, y: animatedOffset.y, z: animatedOffset.z},
+                        finalPosition: {x: dummy.position.x, y: dummy.position.y, z: dummy.position.z},
+                        basePosition: {x: cluster.centerPosition.x, y: cluster.centerPosition.y, z: cluster.centerPosition.z},
+                        rotationMode: window.rotationMode,
+                        motionEnabled: window.motionEnabled
+                    });
+                    this._nanPositionLogged = true;
+                }
+
                 // Store world position for click detection and hover
                 subParticle.worldPosition = dummy.position.clone();
 
@@ -1155,10 +1180,27 @@ class GalaxyView {
                 }
 
                 const scale = baseScale * cluster.audioScale * (1 + cluster.hoverEffect) * (cluster.sizeMultiplier || 1.0);
+
+                // DEBUG: Detect NaN in scale calculation (only log first occurrence)
+                if (isNaN(scale) && !this._nanScaleLogged) {
+                    console.error('❌ NaN scale detected!', {
+                        baseScale,
+                        audioScale: cluster.audioScale,
+                        hoverEffect: cluster.hoverEffect,
+                        sizeMultiplier: cluster.sizeMultiplier,
+                        finalScale: scale,
+                        position: dummy.position
+                    });
+                    this._nanScaleLogged = true;
+                }
+
                 dummy.scale.set(scale, scale, 1);
 
                 // Make particle face camera (billboard effect)
-                dummy.lookAt(this.camera.position);
+                // TEMP DISABLED: Testing if lookAt causes NaN
+                // if (this.camera && this.camera.position) {
+                //     dummy.lookAt(this.camera.position);
+                // }
 
                 // Update matrix
                 dummy.updateMatrix();

@@ -439,6 +439,345 @@ window.updateHoverScale = function(value) {
 };
 
 // ============================================================================
+// AUDIO REACTIVITY CONTROLS - Global functions for HTML controls
+// ============================================================================
+
+/**
+ * Update audio strength (pulse strength when playing)
+ * Called by HTML slider: oninput="updateAudioStrength(this.value)"
+ */
+window.updateAudioStrength = function(value) {
+    window.audioReactivityStrength = parseFloat(value);
+    const elem = document.getElementById('audioStrengthValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ audioReactivityStrength: window.audioReactivityStrength });
+    }
+};
+
+/**
+ * Update frequency mode (all/bass/mids/highs)
+ * Called by HTML dropdown: onchange="updateFrequencyMode(this.value)"
+ */
+window.updateFrequencyMode = function(value) {
+    window.audioFrequencyMode = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ audioFrequencyMode: value });
+    }
+};
+
+// ============================================================================
+// GALAXY DYNAMICS CONTROLS - Global functions for HTML controls
+// ============================================================================
+
+/**
+ * Update rotation mode (static/collective/spiral/individual)
+ * Called by HTML dropdown: onchange="updateRotationMode(this.value)"
+ */
+window.updateRotationMode = function(value) {
+    window.rotationMode = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ rotationMode: value });
+    }
+};
+
+/**
+ * Update rotation axis (x/y/z/all)
+ * Called by HTML dropdown: onchange="updateRotationAxis(this.value)"
+ */
+window.updateRotationAxis = function(value) {
+    window.rotationAxis = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ rotationAxis: value });
+    }
+};
+
+/**
+ * Update particle size
+ * Called by HTML slider: oninput="updateParticleSize(this.value)"
+ */
+window.updateParticleSize = function(value) {
+    window.particleSize = parseFloat(value);
+    const elem = document.getElementById('sizeValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ particleSize: window.particleSize });
+    }
+};
+
+/**
+ * Update particle brightness
+ * Called by HTML slider: oninput="updateParticleBrightness(this.value)"
+ */
+window.updateParticleBrightness = function(value) {
+    // Handle undefined/null values
+    if (value === undefined || value === null || value === '') {
+        value = window.particleBrightness || 0.8;
+    }
+
+    const parsedValue = parseFloat(value);
+    if (isNaN(parsedValue)) {
+        console.error('❌ Failed to parse brightness value:', value);
+        return;
+    }
+
+    // Clamp to valid range (0.1 to 10.0)
+    const clampedValue = Math.max(0.1, Math.min(10.0, parsedValue));
+    window.particleBrightness = clampedValue;
+
+    // Update UI
+    const elem = document.getElementById('brightnessValue');
+    if (elem) elem.textContent = clampedValue.toFixed(1);
+
+    // Update particle system
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ particleBrightness: window.particleBrightness });
+    }
+};
+
+/**
+ * Update visibility distance (fog distance)
+ * Called by HTML slider: oninput="updateVisibility(this.value)"
+ */
+window.updateVisibility = function(value) {
+    window.visibilityDistance = parseFloat(value);
+    const elem = document.getElementById('visibilityValue');
+    if (elem) elem.textContent = value;
+
+    // Update fog in scene
+    if (window.scene && window.scene.fog) {
+        window.scene.fog.far = window.visibilityDistance;
+    }
+
+    // Update camera far plane
+    if (window.camera) {
+        window.camera.far = window.visibilityDistance * 2;
+        window.camera.updateProjectionMatrix();
+    }
+};
+
+/**
+ * Update particle shape (circle/square/triangle/star)
+ * Called by HTML dropdown: onchange="updateParticleShape(this.value)"
+ */
+window.updateParticleShape = function(value) {
+    window.particleShape = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ particleShape: value });
+    }
+};
+
+/**
+ * Toggle motion on/off
+ * Called by HTML button: onclick="toggleMotion()"
+ */
+window.toggleMotion = function() {
+    window.motionEnabled = !window.motionEnabled;
+    const btn = document.getElementById('motionToggle');
+
+    if (btn) {
+        btn.textContent = `Motion: ${window.motionEnabled ? 'ON' : 'OFF'}`;
+        btn.style.background = window.motionEnabled ? 'rgba(102,126,234,0.3)' : 'rgba(255,255,255,0.1)';
+    }
+};
+
+/**
+ * Update X-axis scale
+ * Called by HTML slider: oninput="updateXAxisScale(this.value)"
+ */
+window.updateXAxisScale = function(value) {
+    window.xAxisScale = parseFloat(value);
+    const elem = document.getElementById('xAxisScaleValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ xAxisScale: window.xAxisScale });
+    }
+};
+
+/**
+ * Update Y-axis scale
+ * Called by HTML slider: oninput="updateYAxisScale(this.value)"
+ */
+window.updateYAxisScale = function(value) {
+    window.yAxisScale = parseFloat(value);
+    const elem = document.getElementById('yAxisScaleValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ yAxisScale: window.yAxisScale });
+    }
+};
+
+/**
+ * Update Z-axis scale
+ * Called by HTML slider: oninput="updateZAxisScale(this.value)"
+ */
+window.updateZAxisScale = function(value) {
+    window.zAxisScale = parseFloat(value);
+    const elem = document.getElementById('zAxisScaleValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ zAxisScale: window.zAxisScale });
+    }
+};
+
+// ============================================================================
+// SUB-PARTICLE DYNAMICS CONTROLS - Global functions for HTML controls
+// ============================================================================
+
+/**
+ * Update sub-particle size
+ * Called by HTML slider: oninput="updateSubParticleSize(this.value)"
+ */
+window.updateSubParticleSize = function(value) {
+    window.subParticleScale = parseFloat(value);
+    const elem = document.getElementById('subParticleSizeValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ subParticleScale: window.subParticleScale });
+    }
+};
+
+/**
+ * Update main/sub particle size ratio
+ * Called by HTML slider: oninput="updateMainToSubRatio(this.value)"
+ */
+window.updateMainToSubRatio = function(value) {
+    window.mainToSubSizeRatio = parseFloat(value);
+    const elem = document.getElementById('mainToSubRatioValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ mainToSubSizeRatio: window.mainToSubSizeRatio });
+    }
+};
+
+/**
+ * Update sub-particle motion speed
+ * Called by HTML slider: oninput="updateSubParticleMotion(this.value)"
+ */
+window.updateSubParticleMotion = function(value) {
+    window.subParticleMotionSpeed = parseFloat(value);
+    const elem = document.getElementById('subParticleMotionValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ subParticleMotionSpeed: window.subParticleMotionSpeed });
+    }
+};
+
+/**
+ * Update sub-particle animation speed
+ * Called by HTML slider: oninput="updateSubParticleSpeed(this.value)"
+ */
+window.updateSubParticleSpeed = function(value) {
+    window.subParticleAnimationSpeed = parseFloat(value);
+    const elem = document.getElementById('subParticleSpeedValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ subParticleAnimationSpeed: window.subParticleAnimationSpeed });
+    }
+};
+
+/**
+ * Update motion path (static/circular/spiral/orbit)
+ * Called by HTML dropdown: onchange="updateMotionPath(this.value)"
+ */
+window.updateMotionPath = function(value) {
+    window.subParticleMotionPath = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ subParticleMotionPath: value });
+    }
+};
+
+/**
+ * Update sub-particle shape (sphere/cube/plane)
+ * Called by HTML dropdown: onchange="updateSubParticleShape(this.value)"
+ */
+window.updateSubParticleShape = function(value) {
+    window.subParticleShape = value;
+
+    // Recreate particles with new shape
+    if (galaxyViewInstance && galaxyViewInstance.createParticles) {
+        galaxyViewInstance.createParticles();
+    }
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ subParticleShape: value });
+    }
+};
+
+// ============================================================================
+// VISUAL GRADIENTS CONTROLS - Global functions for HTML controls
+// ============================================================================
+
+/**
+ * Update size gradient
+ * Called by HTML slider: oninput="updateSizeGradient(this.value)"
+ */
+window.updateSizeGradient = function(value) {
+    window.sizeGradient = parseFloat(value);
+    const elem = document.getElementById('sizeGradientValue');
+    if (elem) elem.textContent = value;
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ sizeGradient: window.sizeGradient });
+    }
+};
+
+/**
+ * Update density gradient
+ * Called by HTML slider: oninput="updateDensityGradient(this.value)"
+ */
+window.updateDensityGradient = function(value) {
+    window.densityGradient = parseFloat(value);
+    const elem = document.getElementById('densityGradientValue');
+    if (elem) elem.textContent = value;
+
+    // Recreate particles to apply density gradient
+    if (galaxyViewInstance && galaxyViewInstance.createParticles) {
+        galaxyViewInstance.createParticles();
+    }
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ densityGradient: window.densityGradient });
+    }
+};
+
+// ============================================================================
+// CROSSHAIR HOVER CONTROLS - Global functions for HTML controls
+// ============================================================================
+
+/**
+ * Toggle mouse interaction (crosshair hover effect)
+ * Called by HTML button: onclick="toggleMouseInteraction()"
+ */
+window.toggleMouseInteraction = function() {
+    window.mouseInteractionEnabled = !window.mouseInteractionEnabled;
+    const btn = document.getElementById('mouseInteractionToggle');
+
+    if (btn) {
+        btn.textContent = `Crosshair Hover: ${window.mouseInteractionEnabled ? 'ON' : 'OFF'}`;
+        btn.style.background = window.mouseInteractionEnabled ? 'rgba(102,126,234,0.3)' : 'rgba(255,255,255,0.1)';
+    }
+
+    if (galaxyViewInstance && galaxyViewInstance.updateParticleSettings) {
+        galaxyViewInstance.updateParticleSettings({ mouseInteractionEnabled: window.mouseInteractionEnabled });
+    }
+};
+
+// ============================================================================
 // TOGGLE CONTROLS - Global functions for HTML toggle buttons
 // ============================================================================
 
@@ -600,14 +939,10 @@ window.updateStemOffset = function(value) {
 };
 
 /**
- * Update brightness
- * Called by HTML slider: oninput="updateBrightness()"
+ * Update brightness (alias for updateParticleBrightness)
+ * Called by HTML slider: oninput="updateBrightness(this.value)"
  */
-window.updateBrightness = function() {
-    if (!galaxyViewInstance) {
-        console.warn('⚠️ Galaxy View not initialized');
-        return;
-    }
-    // TODO: Implement brightness update in GalaxyView class
-    console.log('updateBrightness() called - stub function');
+window.updateBrightness = function(value) {
+    // Alias to updateParticleBrightness
+    window.updateParticleBrightness(value);
 };
